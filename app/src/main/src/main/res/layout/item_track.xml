@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/trackItemContainer"
+    android:layout_width="match_parent"
+    android:layout_height="64dp"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="12dp">
+
+    <!-- Artwork thumbnail -->
+    <FrameLayout
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:background="@drawable/bg_aimp_card">
+
+        <ImageView
+            android:id="@+id/ivTrackArtwork"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_music_note"
+            app:tint="@color/aimp_orange" />
+
+        <!-- Playing indicator dot/icon -->
+        <ImageView
+            android:id="@+id/ivPlayingIndicator"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="2dp"
+            android:src="@drawable/ic_equalizer"
+            android:visibility="gone"
+            app:tint="@color/aimp_orange" />
+    </FrameLayout>
+
+    <!-- Info Column -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvTrackTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:text="Track Title"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Format Badge (FLAC, MP3, etc.) -->
+            <TextView
+                android:id="@+id/tvTrackFormat"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="#2E2E2E"
+                android:paddingHorizontal="4dp"
+                android:paddingVertical="1dp"
+                android:text="FLAC"
+                android:textColor="@color/aimp_orange"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+
+            <!-- Bitrate Badge -->
+            <TextView
+                android:id="@+id/tvTrackBitrate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:background="#222222"
+                android:paddingHorizontal="4dp"
+                android:paddingVertical="1dp"
+                android:text="320k"
+                android:textColor="@color/text_secondary"
+                android:textSize="9sp" />
+
+            <!-- Artist -->
+            <TextView
+                android:id="@+id/tvTrackArtist"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Artist Name"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Duration -->
+    <TextView
+        android:id="@+id/tvTrackDuration"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:fontFamily="sans-serif"
+        android:text="3:45"
+        android:textColor="@color/text_muted"
+        android:textSize="12sp" />
+
+    <!-- Favorite Heart -->
+    <ImageButton
+        android:id="@+id/ivFavorite"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Favorite"
+        android:src="@drawable/ic_heart_outline"
+        app:tint="@color/text_muted" />
+
+</LinearLayout>

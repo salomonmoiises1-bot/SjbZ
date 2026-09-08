@@ -1,7 +1,0 @@
-res/
-  drawable/
-  layout/
-  mipmap/  <- NUEVA
-    ic_launcher.png
-    ic_launcher_round.png
-  values/

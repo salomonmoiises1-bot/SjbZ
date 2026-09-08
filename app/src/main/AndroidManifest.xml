@@ -43,15 +43,16 @@
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.SjbZ" />
 
-        <!-- Media3 Playback Service -->
+        <!-- Media3 Playback Service - PARCHE FONDO REAL + ANR -->
         <service
             android:name=".service.PlaybackService"
+            android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
-    </application>
 
+    </application>
 </manifest>

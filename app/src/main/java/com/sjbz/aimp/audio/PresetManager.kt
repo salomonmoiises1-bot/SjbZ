@@ -29,6 +29,11 @@ class PresetManager(private val context: Context) {
         "Flat",
         "Bass Boost",
         "Rock",
+        "Pop",
+        "Dance",
+        "Hip-Hop",
+        "Jazz",
+        "Harman",
         "Vocal Clear"
     )
 

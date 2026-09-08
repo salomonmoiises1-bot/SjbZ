@@ -1,44 +1,59 @@
 package com.sjbz.aimp
 
 import android.os.Bundle
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.Spinner
+import android.widget.AdapterView
 import androidx.appcompat.app.AppCompatActivity
-import com.sjbz.aimp.databinding.ActivityEqBinding
+import androidx.appcompat.widget.SwitchCompat
 import com.sjbz.aimp.service.PlaybackService
 
 class EqActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityEqBinding
+    private val presets = arrayOf("Flat", "Rock", "Pop", "Dance", "Hip-Hop", "Jazz", "Harman", "Bass Boost")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityEqBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(R.layout.activity_eq)
 
         val service = PlaybackService.instance
         val audioChain = service?.audioChain
-        val atsEngine = service?.atsEngine
 
-        if (audioChain == null) {
+        val spinner = findViewById<Spinner>(R.id.spinnerPresets)
+        val switchEq = findViewById<SwitchCompat>(R.id.switchEqEnabled)
+
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, presets)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinner.adapter = adapter
+
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                if (audioChain == null) return
+                when (presets[position]) {
+                    "Flat" -> audioChain.setFlat()
+                    "Harman" -> {
+                        try {
+                            audioChain.applyHarmanTargetIfAvailable()
+                        } catch (e: Exception) {
+                            try { audioChain.applyPreset("harman") } catch (_: Exception) {}
+                        }
+                    }
+                    else -> {
+                        try { audioChain.applyPreset(presets[position].lowercase()) } catch (_: Exception) {}
+                    }
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        switchEq?.setOnCheckedChangeListener { _, isChecked ->
+            audioChain?.setEnabled(isChecked)
+        }
+
+        // Botón atrás de la toolbar
+        findViewById<androidx.appcompat.widget.Toolbar>(R.id.eqToolbar)?.setNavigationOnClickListener {
             finish()
-            return
         }
-
-        // Configurar los 32 sliders del ecualizador
-        binding.eqRecycler.adapter = EqAdapter(audioChain)
-
-        // Boton Flat / Reset
-        binding.btnFlat.setOnClickListener {
-            audioChain.setFlat()
-            binding.eqRecycler.adapter?.notifyDataSetChanged()
-        }
-
-        // Boton Atrás
-        binding.btnBack.setOnClickListener { finish() }
-
-        // Si tenías un boton Harman, lo dejamos deshabilitado para que no rompa el build
-        // El target Harman lo aplicamos directo desde el AudioChain si existe
-        try {
-            audioChain.applyHarmanTargetIfAvailable()
-        } catch (e: Exception) { }
     }
 }

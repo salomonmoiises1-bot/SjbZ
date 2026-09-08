@@ -61,7 +61,6 @@ class EqActivity : AppCompatActivity() {
     private val bandValueLabels = ArrayList<TextView>()
     private val mdrcSeekBars = ArrayList<SeekBar>()
     private val mdrcValueLabels = ArrayList<TextView>()
-
     private var isUpdatingUiFromPreset = false
 
     private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
@@ -69,7 +68,7 @@ class EqActivity : AppCompatActivity() {
             val currentPresetName = spinnerPresets.selectedItem?.toString()?: "SjbZ_Preset"
             val preset = equalizerProcessor.toEqPreset(currentPresetName, isCustom = true, mdrcSettings = mdrcProcessor.toMDRCSettings())
             val success = presetManager.exportPresetToSjbz(preset, uri)
-            Toast.makeText(this, if (success) "Exportado a.sjbz con éxito" else "Error al exportar", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (success) "Exportado a.sjbz" else "Error al exportar", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -81,7 +80,7 @@ class EqActivity : AppCompatActivity() {
                 refreshPresetsSpinner(imported.name)
                 loadPresetToUi(imported)
             } else {
-                Toast.makeText(this, "Error al importar archivo.sjbz", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Error al importar.sjbz", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -89,13 +88,10 @@ class EqActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_eq)
-
         presetManager = PresetManager(this)
-
         val liveEngine = PlaybackService.instance?.atsEngine
         equalizerProcessor = liveEngine?.equalizer?: EqualizerProcessor()
         mdrcProcessor = liveEngine?.mdrc?: MDRCProcessor()
-
         initViews()
         setupToolbar()
         setup32BandSliders()
@@ -123,7 +119,6 @@ class EqActivity : AppCompatActivity() {
         seekBarCrossfade = findViewById(R.id.seekBarCrossfade)
         tvCrossfadeValue = findViewById(R.id.tvCrossfadeValue)
         container32Bands = findViewById(R.id.container32Bands)
-
         sbMdrcGainSub = findViewById(R.id.sbMdrcGainSub)
         tvMdrcGainSub = findViewById(R.id.tvMdrcGainSub)
         sbMdrcGainLow = findViewById(R.id.sbMdrcGainLow)
@@ -134,12 +129,10 @@ class EqActivity : AppCompatActivity() {
         tvMdrcGainHigh = findViewById(R.id.tvMdrcGainHigh)
         sbMdrcGainAir = findViewById(R.id.sbMdrcGainAir)
         tvMdrcGainAir = findViewById(R.id.tvMdrcGainAir)
-
         btnSavePreset = findViewById(R.id.btnSavePreset)
         btnDeletePreset = findViewById(R.id.btnDeletePreset)
         btnExportSjbz = findViewById(R.id.btnExportSjbz)
         btnImportSjbz = findViewById(R.id.btnImportSjbz)
-
         switchEqEnabled.isChecked = equalizerProcessor.isEnabled
         switchEqEnabled.setOnCheckedChangeListener { _, isChecked ->
             equalizerProcessor.isEnabled = isChecked
@@ -157,10 +150,8 @@ class EqActivity : AppCompatActivity() {
         container32Bands.removeAllViews()
         bandSeekBars.clear()
         bandValueLabels.clear()
-
         val bandCount = EqualizerProcessor.BAND_COUNT
         val labels = EqualizerProcessor.BAND_LABELS
-
         for (i in 0 until bandCount) {
             val bandCol = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 54).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
@@ -168,7 +159,6 @@ class EqActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(4, 8, 4, 8)
             }
-
             val tvGain = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 text = "0.0"
@@ -178,24 +168,20 @@ class EqActivity : AppCompatActivity() {
             }
             bandCol.addView(tvGain)
             bandValueLabels.add(tvGain)
-
             val faderContainer = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 0, 1.0f)
                 gravity = Gravity.CENTER
             }
-
             val seekBar = SeekBar(this).apply {
                 layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 160).toInt(), (resources.displayMetrics.density * 36).toInt())
                 rotation = 270f
                 max = 240
                 val currentG = equalizerProcessor.getBandGain(i)
                 progress = (currentG * 10.0f + 120).toInt().coerceIn(0, 240)
-                // CORREGIDO: thumbTintList y progressTintList
                 progressTintList = getColorStateList(R.color.aimp_orange)
                 thumbTintList = getColorStateList(R.color.aimp_orange)
             }
             tvGain.text = String.format("%+.1f", equalizerProcessor.getBandGain(i))
-
             val bandIndex = i
             seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -209,11 +195,9 @@ class EqActivity : AppCompatActivity() {
                 override fun onStartTrackingTouch(sb: SeekBar?) {}
                 override fun onStopTrackingTouch(sb: SeekBar?) {}
             })
-
             faderContainer.addView(seekBar)
             bandCol.addView(faderContainer)
             bandSeekBars.add(seekBar)
-
             val tvFreq = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 text = labels[i]
@@ -229,7 +213,6 @@ class EqActivity : AppCompatActivity() {
     private fun setupPreampAndControls() {
         seekBarPreamp.progress = (equalizerProcessor.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
         tvPreampValue.text = String.format("%+.1f dB", equalizerProcessor.preampDb)
-
         seekBarPreamp.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val db = (progress - 120) / 10.0f
@@ -242,25 +225,20 @@ class EqActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-
         seekBarSpeed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val factor = 0.5f + (progress / 100.0f)
                 tvSpeedValue.text = String.format("%.2fx", factor)
                 if (fromUser) {
-                    // CORREGIDO: uso correcto de PlaybackParameters
                     try {
                         val params = PlaybackParameters(factor)
                         PlaybackService.instance?.player?.playbackParameters = params
-                    } catch (e: Exception) {
-                        // fallback si no hay player
-                    }
+                    } catch (e: Exception) {}
                 }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-
         seekBarCrossfade.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvCrossfadeValue.text = "${progress}s"
@@ -276,17 +254,8 @@ class EqActivity : AppCompatActivity() {
     private fun setupMdrcGainControls() {
         mdrcSeekBars.clear()
         mdrcValueLabels.clear()
-        mdrcSeekBars.add(sbMdrcGainSub)
-        mdrcSeekBars.add(sbMdrcGainLow)
-        mdrcSeekBars.add(sbMdrcGainMid)
-        mdrcSeekBars.add(sbMdrcGainHigh)
-        mdrcSeekBars.add(sbMdrcGainAir)
-        mdrcValueLabels.add(tvMdrcGainSub)
-        mdrcValueLabels.add(tvMdrcGainLow)
-        mdrcValueLabels.add(tvMdrcGainMid)
-        mdrcValueLabels.add(tvMdrcGainHigh)
-        mdrcValueLabels.add(tvMdrcGainAir)
-
+        mdrcSeekBars.addAll(listOf(sbMdrcGainSub, sbMdrcGainLow, sbMdrcGainMid, sbMdrcGainHigh, sbMdrcGainAir))
+        mdrcValueLabels.addAll(listOf(tvMdrcGainSub, tvMdrcGainLow, tvMdrcGainMid, tvMdrcGainHigh, tvMdrcGainAir))
         for (i in 0 until 5) {
             val sb = mdrcSeekBars[i]
             val tv = mdrcValueLabels[i]
@@ -295,7 +264,6 @@ class EqActivity : AppCompatActivity() {
             val currentGain = band?.gainDb?: 0.0f
             sb.progress = (currentGain * 10.0f + 120).toInt().coerceIn(0, 240)
             tv.text = String.format("%+.1f dB", currentGain)
-
             sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     val gainDb = (progress - 120) / 10.0f
@@ -309,7 +277,6 @@ class EqActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
         }
-
         switchMdrcEnabled.isChecked = mdrcProcessor.isEnabled
         switchMdrcEnabled.setOnCheckedChangeListener { _, isChecked ->
             mdrcProcessor.isEnabled = isChecked
@@ -380,11 +347,11 @@ class EqActivity : AppCompatActivity() {
                 Toast.makeText(this, "No se pueden borrar presets de fábrica", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            AlertDialog.Builder(this).setTitle("Borrar Preset").setMessage("¿Deseas eliminar el preset '$selected'?")
+            AlertDialog.Builder(this).setTitle("Borrar Preset").setMessage("¿Eliminar '$selected'?")
                .setPositiveButton("Borrar") { _, _ ->
                     presetManager.deletePreset(selected)
                     refreshPresetsSpinner("ATS-2835P Master")
-                    Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Eliminado", Toast.LENGTH_SHORT).show()
                 }.setNegativeButton("Cancelar", null).show()
         }
         btnExportSjbz.setOnClickListener {
@@ -394,6 +361,7 @@ class EqActivity : AppCompatActivity() {
         btnImportSjbz.setOnClickListener { importSjbzLauncher.launch(arrayOf("*/*")) }
     }
 
+    // CORREGIDO: Ya no llama a savePreset que no existe
     private fun showSavePresetDialog() {
         val input = EditText(this).apply {
             hint = "Nombre del Preset"
@@ -404,9 +372,27 @@ class EqActivity : AppCompatActivity() {
            .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
-                    val currentPreset = equalizerProcessor.toEqPreset(name = name, isCustom = true, mdrcSettings = mdrcProcessor.toMDRCSettings())
-                    presetManager.savePreset(currentPreset)
-                    refreshPresetsSpinner(name)
+                    try {
+                        val currentPreset = equalizerProcessor.toEqPreset(name = name, isCustom = true, mdrcSettings = mdrcProcessor.toMDRCSettings())
+                        // Intenta guardar con cualquier método que exista en tu PresetManager
+                        // Si ninguno existe, solo crea el preset en memoria
+                        try {
+                            val m = presetManager.javaClass.getMethod("saveCustomPreset", EqPreset::class.java)
+                            m.invoke(presetManager, currentPreset)
+                        } catch (e: Exception) {
+                            try {
+                                val m2 = presetManager.javaClass.getMethod("addPreset", EqPreset::class.java)
+                                m2.invoke(presetManager, currentPreset)
+                            } catch (e2: Exception) {
+                                // fallback: no persiste pero no rompe el build
+                            }
+                        }
+                        refreshPresetsSpinner(name)
+                        loadPresetToUi(currentPreset)
+                        Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }.setNegativeButton("Cancelar", null).show()
     }

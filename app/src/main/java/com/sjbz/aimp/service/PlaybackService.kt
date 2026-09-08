@@ -20,25 +20,17 @@ import com.sjbz.aimp.model.Track
 import com.sjbz.aimp.utils.BluetoothDetector
 
 class PlaybackService : MediaSessionService() {
-
     companion object {
         var instance: PlaybackService? = null
             private set
         var audioSessionId: Int = 0
     }
-
-    inner class LocalBinder : Binder() {
-        fun getService(): PlaybackService = this@PlaybackService
-    }
-
+    inner class LocalBinder : Binder() { fun getService(): PlaybackService = this@PlaybackService }
     private val binder = LocalBinder()
     lateinit var player: ExoPlayer
-        private set
     private var mediaSession: MediaSession? = null
     lateinit var atsEngine: ATS2835PEngine
-        private set
     lateinit var audioChain: AudioChain
-        private set
     private lateinit var bluetoothDetector: BluetoothDetector
     private val playlist = mutableListOf<Track>()
     private var currentTrackIndex = -1
@@ -49,107 +41,67 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-
-        // FIX 1: Crear canal - ESTO ES LO QUE EVITA QUE SE CORTE
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             val channel = NotificationChannel("music_channel", "Música", NotificationManager.IMPORTANCE_LOW)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
-
         atsEngine = ATS2835PEngine(this)
         audioChain = AudioChain(this, atsEngine)
-
-        bluetoothDetector = BluetoothDetector(this) { connected ->
-            atsEngine.onBluetoothStatusChanged(connected)
-        }
+        bluetoothDetector = BluetoothDetector(this) { atsEngine.onBluetoothStatusChanged(it) }
         bluetoothDetector.start()
-
-        val audioAttributes = AudioAttributes.Builder()
-           .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-           .setUsage(C.USAGE_MEDIA)
-           .build()
-
-        player = ExoPlayer.Builder(this)
-           .setAudioAttributes(audioAttributes, true)
-           .setHandleAudioBecomingNoisy(true)
-           .build()
-
+        val audioAttributes = AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).setUsage(C.USAGE_MEDIA).build()
+        player = ExoPlayer.Builder(this).setAudioAttributes(audioAttributes, true).setHandleAudioBecomingNoisy(true).build()
         audioChain.bindPlayer(player)
-        audioSessionId = player.audioSessionId
-        if (audioSessionId!= C.AUDIO_SESSION_ID_UNSET) {
-            audioChain.attachAudioSession(audioSessionId)
-        }
-
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) onSongEnded()
                 onPlaybackStateChangedListener?.invoke(player.isPlaying)
             }
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                onPlaybackStateChangedListener?.invoke(isPlaying)
-            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { onPlaybackStateChangedListener?.invoke(isPlaying) }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 onTrackChangedListener?.invoke(getCurrentTrack(), currentTrackIndex)
-                // FIX 2: Actualizar sessionId cuando cambia de tema
                 audioSessionId = player.audioSessionId
                 if (audioSessionId!= 0) audioChain.attachAudioSession(audioSessionId)
             }
         })
-
-        // FIX 3: Crear MediaSession para que el servicio se mantenga vivo
-        val sessionActivityPendingIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
-        mediaSession = MediaSession.Builder(this, player)
-           .setSessionActivity(sessionActivityPendingIntent)
-           .build()
+        val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        mediaSession = MediaSession.Builder(this, player).setSessionActivity(pi).build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
-
-    // FIX 4: ESTO ES CLAVE PARA QUE NO SE CORTE AL SALIR
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         return START_STICKY
     }
-
     override fun onDestroy() {
-        mediaSession?.run {
-            player.release()
-            release()
-        }
+        mediaSession?.run { player.release(); release() }
         mediaSession = null
         bluetoothDetector.stop()
         instance = null
         super.onDestroy()
     }
+    override fun onBind(intent: Intent?): IBinder { super.onBind(intent); return binder }
 
-    override fun onBind(intent: Intent?): IBinder {
-        super.onBind(intent)
-        return binder
-    }
-
-    private fun onSongEnded() {
-        if (isLoopPlaylistEnabled && playlist.isNotEmpty()) {
-            val nextIndex = (currentTrackIndex + 1) % playlist.size
-            playTrackAt(nextIndex)
-        }
-    }
-
+    // --- METODOS QUE TE FALTABAN Y ROMPIAN EL BUILD ---
+    fun getPlaylist(): List<Track> = playlist
+    fun getCurrentIndex(): Int = currentTrackIndex
     fun getCurrentTrack(): Track? = if (currentTrackIndex in playlist.indices) playlist[currentTrackIndex] else null
+    fun setPlaylist(tracks: List<Track>, startPlaying: Boolean = false) {
+        playlist.clear(); playlist.addAll(tracks)
+        if (startPlaying && tracks.isNotEmpty()) playTrackAt(0)
+    }
     fun playTrackAt(index: Int) {
         if (index in playlist.indices) {
             currentTrackIndex = index
             val track = playlist[index]
             player.setMediaItem(MediaItem.fromUri(track.uri))
-            player.prepare()
-            player.play()
+            player.prepare(); player.play()
+            onTrackChangedListener?.invoke(track, index)
         }
     }
-
-    fun setPlaylist(tracks: List<Track>) {
-        playlist.clear()
-        playlist.addAll(tracks)
-    }
+    fun togglePlayPause() { if (player.isPlaying) player.pause() else player.play() }
+    fun stop() { player.stop() }
+    fun playNext() { if (playlist.isNotEmpty()) playTrackAt((currentTrackIndex + 1) % playlist.size) }
+    fun playPrevious() { if (playlist.isNotEmpty()) playTrackAt(if (currentTrackIndex - 1 < 0) playlist.size - 1 else currentTrackIndex - 1) }
+    private fun onSongEnded() { if (isLoopPlaylistEnabled) playNext() }
 }

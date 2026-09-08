@@ -85,42 +85,28 @@ class EqualizerProcessor {
                 )
                 System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
             }
-            "Vocal Clear" -> {
-                preampDb = -0.5f
-                val curve = floatArrayOf(
-                    -2.0f, -2.0f, -1.5f, -1.0f, -0.5f, 0.0f, 0.5f, 1.0f,
-                    1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f, 4.5f, 4.5f,
-                    4.0f, 3.5f, 3.0f, 2.5f, 2.0f, 1.5f, 1.0f, 0.5f,
-                    0.0f, 0.0f, 0.5f, 0.8f, 0.5f, 0.0f, -0.5f, -1.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
-            }
-            "ATS-2835P Master" -> {
-                // Actions Semiconductor ATS-2835P calibrated acoustic curve
+            "Pop" -> {
                 preampDb = -0.8f
                 val curve = floatArrayOf(
-                    5.5f, 5.0f, 4.5f, 4.0f, 3.5f, 2.5f, 1.5f, 0.5f,
-                    -0.5f, -1.0f, -1.2f, -1.0f, -0.5f, 0.0f, 0.5f, 0.8f,
-                    1.0f, 1.2f, 1.5f, 1.8f, 2.0f, 2.2f, 2.5f, 2.8f,
-                    3.0f, 3.2f, 3.5f, 3.8f, 3.5f, 3.0f, 2.0f, 1.0f
+                    2.0f, 2.0f, 1.5f, 1.0f, 0.5f, 0.0f, -0.5f, 0.0f,
+                    0.5f, 1.0f, 1.5f, 2.0f, 2.2f, 2.0f, 1.5f, 1.0f,
+                    0.5f, 0.0f, 0.5f, 1.0f, 1.5f, 1.2f, 0.8f, 0.5f,
+                    0.0f, -0.2f, 0.0f, 0.5f, 1.0f, 1.2f, 1.0f, 0.5f
                 )
                 System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
             }
-        }
-    }
-
-    fun toEqPreset(name: String, isCustom: Boolean = true, mdrcSettings: com.sjbz.aimp.model.MDRCSettings = com.sjbz.aimp.model.MDRCSettings()): EqPreset {
-        return EqPreset(
-            name = name,
-            preampDb = preampDb,
-            bandGains = bandGains.toList(),
-            isCustom = isCustom,
-            mdrcSettings = mdrcSettings
-        )
-    }
-
-    fun loadFromPreset(preset: EqPreset) {
-        preampDb = preset.preampDb
-        setAllBands(preset.bandGains)
-    }
-}
+            "Dance" -> {
+                preampDb = -1.2f
+                val curve = floatArrayOf(
+                    5.0f, 4.5f, 4.0f, 3.5f, 3.0f, 2.0f, 1.0f, 0.0f,
+                    -0.5f, 0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 2.5f, 2.0f,
+                    1.5f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 3.0f,
+                    2.5f, 2.0f, 1.5f, 1.0f, 0.8f, 0.5f, 0.5f, 0.8f
+                )
+                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+            }
+            "Hip-Hop" -> {
+                preampDb = -1.5f
+                val curve = floatArrayOf(
+                    5.5f, 5.2f, 5.0f, 4.5f, 4.0f, 3.0f, 2.0f, 1.0f,
+                    0.0f, -0.5f, 0.0f, 0.5f, 1.0f, 1.2

@@ -29,8 +29,10 @@ jobs:
 
       - name: Assemble Debug APK
         run: ./gradlew assembleDebug --stacktrace
-      - name: Upload APK
+
+      - name: Upload SjbZ Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SjbZ-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: SjbZ-Audio-Player-Debug-APK
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14

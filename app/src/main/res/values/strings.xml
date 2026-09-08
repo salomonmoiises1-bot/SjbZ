@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SjbZ</string>
+    <string name="title_equalizer">Ecualizador SjbZ 32 Bandas</string>
+    <string name="hint_search_music">Buscar canciones, artistas...</string>
+    <string name="drawer_playlists">Playlists</string>
+    <string name="drawer_favorites">Favoritos</string>
+    <string name="drawer_history">Historial</string>
+    <string name="drawer_folders">Carpetas</string>
+    <string name="btn_save">Guardar</string>
+    <string name="btn_load">Cargar</string>
+    <string name="btn_delete">Borrar</string>
+    <string name="btn_export">Exportar .sjbz</string>
+    <string name="btn_import">Importar .sjbz</string>
+    <string name="ats2835p_dsp_label">ATS2835P Hardware DSP</string>
+</resources>

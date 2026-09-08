@@ -1,1 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AIMP Signature Dark & Orange Theme -->
+    <color name="aimp_black">#121212</color>
+    <color name="aimp_black_surface">#1A1A1A</color>
+    <color name="aimp_charcoal">#242424</color>
+    <color name="aimp_charcoal_light">#2E2E2E</color>
+    <color name="aimp_border">#383838</color>
 
+    <!-- AIMP Vibrant Oranges -->
+    <color name="aimp_orange">#FF7700</color>
+    <color name="aimp_orange_light">#FF9900</color>
+    <color name="aimp_orange_dark">#E66700</color>
+    <color name="aimp_orange_alpha">#33FF7700</color>
+
+    <!-- VU Meter & Audio Levels -->
+    <color name="vu_green">#00E676</color>
+    <color name="vu_yellow">#FFD600</color>
+    <color name="vu_red">#FF3D00</color>
+
+    <!-- Text colors -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B0B0B0</color>
+    <color name="text_muted">#707070</color>
+</resources>

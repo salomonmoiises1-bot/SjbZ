@@ -25,16 +25,14 @@ class PresetManager(private val context: Context) {
     private val gson = Gson()
 
     val defaultPresetNames = listOf(
+        "Harman Kardon (Harman Target)",
         "ATS-2835P Master",
-        "Flat",
-        "Bass Boost",
+        "V-Shape (Punchy / EDM)",
+        "Acoustic & Vocal Clarity",
+        "Club / Bass Extreme",
         "Rock",
-        "Pop",
-        "Dance",
-        "Hip-Hop",
-        "Jazz",
-        "Harman",
-        "Vocal Clear"
+        "Bass Boost",
+        "Flat"
     )
 
     fun getActivePresetName(): String {

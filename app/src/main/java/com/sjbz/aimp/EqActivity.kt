@@ -1,38 +1,44 @@
 package com.sjbz.aimp
+
 import android.os.Bundle
-import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import com.sjbz.aimp.databinding.ActivityEqBinding
+import com.sjbz.aimp.service.PlaybackService
 
 class EqActivity : AppCompatActivity() {
-    override fun onCreate(s: Bundle?) {
-        super.onCreate(s)
-        setContentView(R.layout.activity_eq)
 
-        findViewById<Button>(R.id.btnHarman)?.setOnClickListener {
-            Toast.makeText(this, "Harman Kardon aplicado", Toast.LENGTH_SHORT).show()
+    private lateinit var binding: ActivityEqBinding
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityEqBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        val service = PlaybackService.instance
+        val audioChain = service?.audioChain
+        val atsEngine = service?.atsEngine
+
+        if (audioChain == null) {
+            finish()
+            return
         }
 
-        // FIX: MDRC no invertido + sin ANR
-        for(i in 0..4){
-            try{
-                val seekId = resources.getIdentifier("seekMdrc$i","id",packageName)
-                val txtId = resources.getIdentifier("tvMdrc$i","id",packageName)
-                val seek = findViewById<SeekBar>(seekId)
-                val txt = findViewById<TextView>(txtId)
-                if(seek == null) continue
-                seek.max = 240
-                seek.progress = 120
-                seek.setOnSeekBarChangeListener(object: SeekBar.OnSeekBarChangeListener{
-                    override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
-                        val g = -12f + p * 0.1f // corregido
-                        txt?.text = String.format("%+.1f dB", g)
-                    }
-                    override fun onStartTrackingTouch(sb: SeekBar?){}
-                    override fun onStopTrackingTouch(sb: SeekBar?){
-                        // aca aplicas al audio, solo al soltar
-                    }
-                })
-            } catch(e: Exception){}
+        // Configurar los 32 sliders del ecualizador
+        binding.eqRecycler.adapter = EqAdapter(audioChain)
+
+        // Boton Flat / Reset
+        binding.btnFlat.setOnClickListener {
+            audioChain.setFlat()
+            binding.eqRecycler.adapter?.notifyDataSetChanged()
         }
+
+        // Boton Atrás
+        binding.btnBack.setOnClickListener { finish() }
+
+        // Si tenías un boton Harman, lo dejamos deshabilitado para que no rompa el build
+        // El target Harman lo aplicamos directo desde el AudioChain si existe
+        try {
+            audioChain.applyHarmanTargetIfAvailable()
+        } catch (e: Exception) { }
     }
 }

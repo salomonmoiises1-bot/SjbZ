@@ -28,9 +28,12 @@ class PlaybackService : MediaSessionService() {
     inner class LocalBinder : Binder() { fun getService(): PlaybackService = this@PlaybackService }
     private val binder = LocalBinder()
     lateinit var player: ExoPlayer
+        private set
     private var mediaSession: MediaSession? = null
     lateinit var atsEngine: ATS2835PEngine
+        private set
     lateinit var audioChain: AudioChain
+        private set
     private lateinit var bluetoothDetector: BluetoothDetector
     private val playlist = mutableListOf<Track>()
     private var currentTrackIndex = -1
@@ -53,55 +56,29 @@ class PlaybackService : MediaSessionService() {
         player = ExoPlayer.Builder(this).setAudioAttributes(audioAttributes, true).setHandleAudioBecomingNoisy(true).build()
         audioChain.bindPlayer(player)
         player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) onSongEnded()
-                onPlaybackStateChangedListener?.invoke(player.isPlaying)
-            }
+            override fun onPlaybackStateChanged(s: Int) { if(s==Player.STATE_ENDED) playNext(); onPlaybackStateChangedListener?.invoke(player.isPlaying) }
             override fun onIsPlayingChanged(isPlaying: Boolean) { onPlaybackStateChangedListener?.invoke(isPlaying) }
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                onTrackChangedListener?.invoke(getCurrentTrack(), currentTrackIndex)
-                audioSessionId = player.audioSessionId
-                if (audioSessionId!= 0) audioChain.attachAudioSession(audioSessionId)
-            }
+            override fun onMediaItemTransition(m: MediaItem?, r: Int) { audioSessionId=player.audioSessionId; if(audioSessionId!=0) audioChain.attachAudioSession(audioSessionId); onTrackChangedListener?.invoke(getCurrentTrack(), currentTrackIndex) }
         })
         val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         mediaSession = MediaSession.Builder(this, player).setSessionActivity(pi).build()
     }
-
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        super.onStartCommand(intent, flags, startId)
-        return START_STICKY
-    }
-    override fun onDestroy() {
-        mediaSession?.run { player.release(); release() }
-        mediaSession = null
-        bluetoothDetector.stop()
-        instance = null
-        super.onDestroy()
-    }
+    override fun onGetSession(c: MediaSession.ControllerInfo): MediaSession? = mediaSession
+    override fun onStartCommand(i: Intent?, f: Int, s: Int): Int { super.onStartCommand(i,f,s); return START_STICKY }
+    override fun onDestroy() { mediaSession?.run { player.release(); release() }; mediaSession=null; bluetoothDetector.stop(); instance=null; super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder { super.onBind(intent); return binder }
 
-    // --- METODOS QUE TE FALTABAN Y ROMPIAN EL BUILD ---
     fun getPlaylist(): List<Track> = playlist
     fun getCurrentIndex(): Int = currentTrackIndex
     fun getCurrentTrack(): Track? = if (currentTrackIndex in playlist.indices) playlist[currentTrackIndex] else null
-    fun setPlaylist(tracks: List<Track>, startPlaying: Boolean = false) {
-        playlist.clear(); playlist.addAll(tracks)
-        if (startPlaying && tracks.isNotEmpty()) playTrackAt(0)
-    }
-    fun playTrackAt(index: Int) {
-        if (index in playlist.indices) {
-            currentTrackIndex = index
-            val track = playlist[index]
-            player.setMediaItem(MediaItem.fromUri(track.uri))
-            player.prepare(); player.play()
-            onTrackChangedListener?.invoke(track, index)
-        }
-    }
-    fun togglePlayPause() { if (player.isPlaying) player.pause() else player.play() }
+
+    // Los 2 metodos para que MainActivity no falle
+    fun setPlaylist(tracks: List<Track>) { playlist.clear(); playlist.addAll(tracks) }
+    fun setPlaylist(tracks: List<Track>, startPlaying: Boolean) { playlist.clear(); playlist.addAll(tracks); if(startPlaying && tracks.isNotEmpty()) playTrackAt(0) }
+
+    fun playTrackAt(index: Int) { if(index in playlist.indices){ currentTrackIndex=index; player.setMediaItem(MediaItem.fromUri(playlist[index].uri)); player.prepare(); player.play(); onTrackChangedListener?.invoke(playlist[index], index) } }
+    fun togglePlayPause() { if(player.isPlaying) player.pause() else player.play() }
     fun stop() { player.stop() }
-    fun playNext() { if (playlist.isNotEmpty()) playTrackAt((currentTrackIndex + 1) % playlist.size) }
-    fun playPrevious() { if (playlist.isNotEmpty()) playTrackAt(if (currentTrackIndex - 1 < 0) playlist.size - 1 else currentTrackIndex - 1) }
-    private fun onSongEnded() { if (isLoopPlaylistEnabled) playNext() }
+    fun playNext() { if(playlist.isNotEmpty()) playTrackAt((currentTrackIndex+1)%playlist.size) }
+    fun playPrevious() { if(playlist.isNotEmpty()) playTrackAt(if(currentTrackIndex-1<0) playlist.size-1 else currentTrackIndex-1) }
 }

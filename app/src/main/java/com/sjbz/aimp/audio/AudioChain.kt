@@ -8,10 +8,16 @@ class AudioChain(val context: Context, val engine: ATS2835PEngine) {
     private var exoPlayer: ExoPlayer? = null
     var vuMeterLeft = 0f; private set
     var vuMeterRight = 0f; private set
+
     fun bindPlayer(p: ExoPlayer) { exoPlayer = p }
     fun attachAudioSession(id: Int) = engine.attachAudioSession(id)
-    fun setBands(b: FloatArray) = engine.setBands(b)
-    fun applyBands(b: FloatArray) = engine.setBands(b)
+
+    fun setBands(b: FloatArray) {
+        engine.equalizer.setAllBands(b.toList())
+        engine.updateEqualizer()
+    }
+    fun applyBands(b: FloatArray) = setBands(b)
+
     fun applyPlaybackParameters() {}
     fun applyStereoBalance(b: Float) { engine.balance = b }
     fun startFadeIn(cb: (() -> Unit)? = null) { exoPlayer?.volume=1f; cb?.invoke() }

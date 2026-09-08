@@ -426,7 +426,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun startPlaybackService() {
         val serviceIntent = Intent(this, PlaybackService::class.java)
-        startService(serviceIntent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(this, serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
         bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
 

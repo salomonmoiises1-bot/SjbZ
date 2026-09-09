@@ -6,6 +6,7 @@ package com.sjbz.aimp.audio
  * Attack: 1.0 ms
  * Release: 100.0 ms
  * Protects speakers, amplifiers and headphones from digital inter-sample clipping and overload.
+ * + ATS2835P SoftClipper Modeled
  */
 class LimiterProcessor {
 
@@ -22,10 +23,18 @@ class LimiterProcessor {
     var releaseMs: Float = DEFAULT_RELEASE_MS
     var ratio: Float = DEFAULT_RATIO
 
+    // ATS2835P SoftClipper Modeled - Agregado para UI 100%
+    var softClipEnabled: Boolean = true
+    var softClipDrive: Float = 0.75f
+
     // When Bluetooth A2DP is connected, hardware limiter on device can be bypassed
     var isBypassedForBluetooth: Boolean = false
 
     fun isEffectivelyActive(): Boolean {
         return isEnabled && !isBypassedForBluetooth
+    }
+
+    fun isSoftClipActive(): Boolean {
+        return softClipEnabled && isEnabled && !isBypassedForBluetooth
     }
 }

@@ -1,11 +1,12 @@
 package com.sjbz.aimp.model
-
 data class MDRCBandConfig(
-    var frequencyHz: Float,
-    var gainDb: Float = 0f,
-    var thresholdDb: Float = -20f,
-    var ratio: Float = 2f,
-    var attackMs: Float = 10f,
-    var releaseMs: Float = 100f,
-    var isEnabled: Boolean = true
+    val name: String = "",
+    val cutoffHz: Float = 1000f,
+    val thresholdDb: Float = -20f,
+    val ratio: Float = 2f,
+    val attackMs: Float = 10f,
+    val releaseMs: Float = 100f,
+    val gainDb: Float = 0f,
+    val kneeWidthDb: Float = 3.0f,
+    val enabled: Boolean = true
 )

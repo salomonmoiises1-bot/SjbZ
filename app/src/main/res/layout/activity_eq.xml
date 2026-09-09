@@ -497,6 +497,140 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
+                <!-- ==================== NUEVO BLOQUE 100% ATS2835P QFN68 ==================== -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="14dp"
+                    android:background="#33FFFFFF" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="ATS2835P QFN68 - LIMITER &amp; SOFTCLIPPER"
+                    android:textColor="@color/aimp_orange"
+                    android:textSize="11sp" />
+
+                <!-- Limiter Threshold -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="100dp"
+                        android:layout_height="wrap_content"
+                        android:text="Limiter Thresh"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbLimiterThresh"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="120"
+                        android:progress="117"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvLimiterThresh"
+                        android:layout_width="55dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="-0.3 dBFS"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Limiter 1ms Attack / 100ms Release - Bypass en Bluetooth A2DP"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="9sp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchLimiter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        app:thumbTint="@color/aimp_orange"
+                        app:trackTint="@color/aimp_orange_alpha" />
+                </LinearLayout>
+
+                <!-- SoftClipper Drive -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="100dp"
+                        android:layout_height="wrap_content"
+                        android:text="SoftClip Drive"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbSoftClip"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="100"
+                        android:progress="75"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvSoftClip"
+                        android:layout_width="55dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="75%"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="SoftClipper ATS2835P Modeled - Anti-Clipping Hardware"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="9sp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchSoftClip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        app:thumbTint="@color/aimp_orange"
+                        app:trackTint="@color/aimp_orange_alpha" />
+                </LinearLayout>
+
             </LinearLayout>
 
         </LinearLayout>

@@ -65,6 +65,10 @@ class PresetManager(private val context: Context) {
         return list
     }
 
+    fun savePreset(preset: EqPreset): Boolean {
+        return saveCustomPreset(preset)
+    }
+
     fun saveCustomPreset(preset: EqPreset): Boolean {
         val currentCustom = getCustomPresets().toMutableList()
         currentCustom.removeAll { it.name.equals(preset.name, ignoreCase = true) }

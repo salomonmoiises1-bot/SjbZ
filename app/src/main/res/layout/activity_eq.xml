@@ -318,7 +318,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:fontFamily="sans-serif-mono"
-                    android:text="Controles de Ganancia por Banda (-12 dB a +12 dB) y Compresión Dinámica:\n• Limiter: -0.3 dBFS @ 1ms • SoftClipper: LG XBOOM Modeled"
+                    android:text="Controles de Ganancia por Banda (-12 dB a +12 dB) y Compresión Dinámica:\n• Limiter: -0.3 dBFS @ 1ms • SoftClipper: ATS2835P Modeled"
                     android:textColor="@color/text_secondary"
                     android:textSize="10sp" />
 

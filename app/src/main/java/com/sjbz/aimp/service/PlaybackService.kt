@@ -7,11 +7,13 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Color
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -95,15 +97,15 @@ class PlaybackService : MediaSessionService() {
         bluetoothDetector.start()
 
         val audioAttributes = AudioAttributes.Builder()
-           .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-           .setUsage(C.USAGE_MEDIA)
-           .build()
+          .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+          .setUsage(C.USAGE_MEDIA)
+          .build()
 
         player = ExoPlayer.Builder(this)
-           .setAudioAttributes(audioAttributes, true)
-           .setHandleAudioBecomingNoisy(true)
-           .setWakeMode(C.WAKE_MODE_LOCAL)
-           .build()
+          .setAudioAttributes(audioAttributes, true)
+          .setHandleAudioBecomingNoisy(true)
+          .setWakeMode(C.WAKE_MODE_LOCAL)
+          .build()
 
         audioChain.bindPlayer(player)
 
@@ -144,8 +146,8 @@ class PlaybackService : MediaSessionService() {
         )
 
         mediaSession = MediaSession.Builder(this, player)
-           .setSessionActivity(sessionActivityPendingIntent)
-           .build()
+          .setSessionActivity(sessionActivityPendingIntent)
+          .build()
 
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
@@ -234,25 +236,30 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // FIX: Usar iconos que SI existen para evitar Unresolved reference
         val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
 
+        // FIX PARA QUE SE VEAN LOS BOTONES EN TU CAPTURA
         return NotificationCompat.Builder(this, CHANNEL_ID)
-           .setContentTitle(title)
-           .setContentText(artist)
-           .setSubText(if (atsEngine.isBluetoothConnected) "ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
-           .setSmallIcon(R.mipmap.ic_launcher) // FIX: era ic_launcher_foreground
-           .setContentIntent(openActivityIntent)
-           .setOngoing(isPlaying)
-           .setOnlyAlertOnce(true)
-           .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-           .setPriority(NotificationCompat.PRIORITY_LOW)
-           .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-           .addAction(android.R.drawable.ic_media_previous, "Anterior", prevIntent) // FIX
-           .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-           .addAction(android.R.drawable.ic_media_next, "Siguiente", nextIntent) // FIX
-           .addAction(android.R.drawable.ic_delete, "Detener", stopIntent) // FIX para ic_stop
-           .build()
+          .setContentTitle(title)
+          .setContentText(artist)
+          .setSubText(if (atsEngine.isBluetoothConnected) "SjbZ • ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
+          .setSmallIcon(R.mipmap.ic_launcher)
+          .setContentIntent(openActivityIntent)
+          .setOngoing(isPlaying)
+          .setOnlyAlertOnce(true)
+          .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+          .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+          .setColor(Color.parseColor("#0A1628"))
+          .setColorized(true)
+          .setStyle(MediaStyle()
+              .setMediaSession(mediaSession!!.token)
+              .setShowActionsInCompactView(0, 1, 2)
+           )
+          .addAction(android.R.drawable.ic_media_previous, "Anterior", prevIntent)
+          .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+          .addAction(android.R.drawable.ic_media_next, "Siguiente", nextIntent)
+          .addAction(android.R.drawable.ic_delete, "Detener", stopIntent)
+          .build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -289,9 +296,9 @@ class PlaybackService : MediaSessionService() {
         player.clearMediaItems()
         for (track in playlist) {
             val mediaItem = MediaItem.Builder()
-               .setUri(track.uri)
-               .setMediaId(track.id.toString())
-               .build()
+              .setUri(track.uri)
+              .setMediaId(track.id.toString())
+              .build()
             player.addMediaItem(mediaItem)
         }
         player.prepare()

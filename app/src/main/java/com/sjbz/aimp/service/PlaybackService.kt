@@ -68,10 +68,8 @@ class PlaybackService : MediaSessionService() {
     private var currentTrackIndex = -1
     var isLoopPlaylistEnabled: Boolean = true
 
-    // CPU partial wake lock for zero audio dropouts when phone screen turns off
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // Listener callbacks for UI
     var onTrackChangedListener: ((Track?, Int) -> Unit)? = null
     var onPlaybackStateChangedListener: ((Boolean) -> Unit)? = null
 
@@ -79,7 +77,6 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         instance = this
 
-        // 1. Setup Partial WakeLock for zero-dropout lockscreen playback
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SjbZ:PlaybackWakeLock").apply {
@@ -89,31 +86,27 @@ class PlaybackService : MediaSessionService() {
             e.printStackTrace()
         }
 
-        // 2. Initialize ATS2835P Audio Engine
         atsEngine = ATS2835PEngine(this)
         audioChain = AudioChain(this, atsEngine)
 
-        // 3. Initialize Bluetooth Detector
         bluetoothDetector = BluetoothDetector(this) { connected ->
             atsEngine.onBluetoothStatusChanged(connected)
         }
         bluetoothDetector.start()
 
-        // 4. Configure ExoPlayer with Hi-Res Music AudioAttributes & WAKE_MODE_LOCAL
         val audioAttributes = AudioAttributes.Builder()
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .setUsage(C.USAGE_MEDIA)
-            .build()
+           .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+           .setUsage(C.USAGE_MEDIA)
+           .build()
 
         player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, true) // handles audio focus automatically
-            .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_LOCAL) // keeps CPU awake while playing
-            .build()
+           .setAudioAttributes(audioAttributes, true)
+           .setHandleAudioBecomingNoisy(true)
+           .setWakeMode(C.WAKE_MODE_LOCAL)
+           .build()
 
         audioChain.bindPlayer(player)
 
-        // 5. Attach audio listeners
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
@@ -138,13 +131,11 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
-        // Attach DSP to ExoPlayer audio session
         val sessionId = player.audioSessionId
-        if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+        if (sessionId!= C.AUDIO_SESSION_ID_UNSET) {
             audioChain.attachAudioSession(sessionId)
         }
 
-        // 6. Build MediaSession for background & lockscreen playback
         val sessionActivityPendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -153,10 +144,9 @@ class PlaybackService : MediaSessionService() {
         )
 
         mediaSession = MediaSession.Builder(this, player)
-            .setSessionActivity(sessionActivityPendingIntent)
-            .build()
+           .setSessionActivity(sessionActivityPendingIntent)
+           .build()
 
-        // 7. Notification Channel & Initial Foreground Notification
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
     }
@@ -176,7 +166,6 @@ class PlaybackService : MediaSessionService() {
         try {
             if (isPlaying) {
                 if (wakeLock?.isHeld == false) {
-                    // Safe 2-hour timeout per track to prevent infinite drain
                     wakeLock?.acquire(2 * 60 * 60 * 1000L)
                 }
             } else {
@@ -207,8 +196,8 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildNotification(isPlaying: Boolean): Notification {
         val currentTrack = getCurrentTrack()
-        val title = currentTrack?.title ?: "SjbZ Reproductor Hi-Res"
-        val artist = currentTrack?.artist ?: "ATS-2835P DSP Audio Engine"
+        val title = currentTrack?.title?: "SjbZ Reproductor Hi-Res"
+        val artist = currentTrack?.artist?: "ATS-2835P DSP Audio Engine"
 
         val openActivityIntent = PendingIntent.getActivity(
             this,
@@ -245,24 +234,25 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+        // FIX: Usar iconos que SI existen para evitar Unresolved reference
+        val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(artist)
-            .setSubText(if (atsEngine.isBluetoothConnected) "ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentIntent(openActivityIntent)
-            .setOngoing(isPlaying)
-            .setOnlyAlertOnce(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .addAction(R.drawable.ic_previous, "Anterior", prevIntent)
-            .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-            .addAction(R.drawable.ic_next, "Siguiente", nextIntent)
-            .addAction(R.drawable.ic_stop, "Detener", stopIntent)
-            .build()
+           .setContentTitle(title)
+           .setContentText(artist)
+           .setSubText(if (atsEngine.isBluetoothConnected) "ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
+           .setSmallIcon(R.mipmap.ic_launcher) // FIX: era ic_launcher_foreground
+           .setContentIntent(openActivityIntent)
+           .setOngoing(isPlaying)
+           .setOnlyAlertOnce(true)
+           .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+           .setPriority(NotificationCompat.PRIORITY_LOW)
+           .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+           .addAction(android.R.drawable.ic_media_previous, "Anterior", prevIntent) // FIX
+           .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+           .addAction(android.R.drawable.ic_media_next, "Siguiente", nextIntent) // FIX
+           .addAction(android.R.drawable.ic_delete, "Detener", stopIntent) // FIX para ic_stop
+           .build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -292,9 +282,6 @@ class PlaybackService : MediaSessionService() {
         return binder
     }
 
-    /**
-     * Updates the active playlist queue.
-     */
     fun setPlaylist(tracks: List<Track>, startIndex: Int = 0, startPlaying: Boolean = true) {
         playlist.clear()
         playlist.addAll(tracks)
@@ -302,9 +289,9 @@ class PlaybackService : MediaSessionService() {
         player.clearMediaItems()
         for (track in playlist) {
             val mediaItem = MediaItem.Builder()
-                .setUri(track.uri)
-                .setMediaId(track.id.toString())
-                .build()
+               .setUri(track.uri)
+               .setMediaId(track.id.toString())
+               .build()
             player.addMediaItem(mediaItem)
         }
         player.prepare()
@@ -314,14 +301,13 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    // Compatibility overloads
     fun setPlaylist(tracks: List<Track>) { setPlaylist(tracks, 0, true) }
     fun setPlaylist(tracks: List<Track>, startPlaying: Boolean) { setPlaylist(tracks, 0, startPlaying) }
     fun setPlaylist(tracks: List<Track>, startIndex: Int) { setPlaylist(tracks, startIndex, true) }
     fun setPlaybackSpeed(speed: Float) { player.playbackParameters = PlaybackParameters(speed) }
 
     fun playTrackAtIndex(index: Int, startPlaying: Boolean = true) {
-        if (index !in playlist.indices) return
+        if (index!in playlist.indices) return
         currentTrackIndex = index
 
         player.seekToDefaultPosition(index)
@@ -330,9 +316,8 @@ class PlaybackService : MediaSessionService() {
             audioChain.startFadeIn()
         }
 
-        // Ensure DSP is attached to active session
         val sessionId = player.audioSessionId
-        if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+        if (sessionId!= C.AUDIO_SESSION_ID_UNSET) {
             audioChain.attachAudioSession(sessionId)
         }
 
@@ -348,13 +333,8 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    fun play() {
-        player.play()
-    }
-
-    fun pause() {
-        player.pause()
-    }
+    fun play() { player.play() }
+    fun pause() { player.pause() }
 
     fun stopPlayback() {
         player.stop()
@@ -363,9 +343,7 @@ class PlaybackService : MediaSessionService() {
         updateNotification(false)
     }
 
-    fun stop() {
-        stopPlayback()
-    }
+    fun stop() { stopPlayback() }
 
     fun playNext() {
         if (playlist.isEmpty()) return
@@ -373,7 +351,6 @@ class PlaybackService : MediaSessionService() {
         if (nextIndex < playlist.size) {
             playTrackAtIndex(nextIndex, true)
         } else if (isLoopPlaylistEnabled) {
-            // Auto-loop playlist without pause
             playTrackAtIndex(0, true)
         }
     }
@@ -398,7 +375,6 @@ class PlaybackService : MediaSessionService() {
         if (nextIndex < playlist.size) {
             playTrackAtIndex(nextIndex, true)
         } else if (isLoopPlaylistEnabled) {
-            // Seamless auto-loop to track 0
             playTrackAtIndex(0, true)
         }
     }
@@ -408,11 +384,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun getPlaylist(): List<Track> = playlist
-
     fun getCurrentIndex(): Int = currentTrackIndex
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Keep service alive in foreground when user closes or swipes away the activity
         updateNotification(player.isPlaying)
     }
 

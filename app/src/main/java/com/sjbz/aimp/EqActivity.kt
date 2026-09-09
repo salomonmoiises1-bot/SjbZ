@@ -68,7 +68,7 @@ class EqActivity : AppCompatActivity() {
     private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             val currentPresetName = spinnerPresets.selectedItem?.toString() ?: "SjbZ_Preset"
-            val preset = equalizerProcessor.toEqPreset(currentPresetName, isCustom = true, mdrcProcessor.getSettings())
+            val preset = equalizerProcessor.toEqPreset(currentPresetName, isCustom = true, isAutoPreset = false, mdrcProcessor.getSettings())
             val success = presetManager.exportPresetToSjbz(preset, uri)
             Toast.makeText(this, if (success) "Exportado a .sjbz con éxito" else "Error al exportar", Toast.LENGTH_SHORT).show()
         }
@@ -155,6 +155,7 @@ class EqActivity : AppCompatActivity() {
             sb.isEnabled = enabled
         }
     }
+
     private fun setup32BandsSliders() {
         container32Bands.removeAllViews()
         bandSeekBars.clear()
@@ -264,7 +265,6 @@ class EqActivity : AppCompatActivity() {
                 val factor = progress / 100.0f
                 tvSpeedValue.text = String.format("%.2fx", factor)
                 if (fromUser) {
-                    // Corrección de setPlaybackParameters para Media3 ExoPlayer
                     val p = androidx.media3.common.PlaybackParameters(factor)
                     PlaybackService.instance?.player?.playbackParameters = p
                 }
@@ -284,6 +284,7 @@ class EqActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
     }
+
     private fun setupMdrcGainControls() {
         mdrcSeekBars.clear()
         mdrcValueLabels.clear()
@@ -393,7 +394,7 @@ class EqActivity : AppCompatActivity() {
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
                     val settings = mdrcProcessor.getSettings()
-                    val preset = equalizerProcessor.toEqPreset(name, isCustom = true, settings)
+                    val preset = equalizerProcessor.toEqPreset(name, isCustom = true, isAutoPreset = false, settings)
                     presetManager.savePreset(preset)
                     refreshPresetsSpinner(name)
                 }

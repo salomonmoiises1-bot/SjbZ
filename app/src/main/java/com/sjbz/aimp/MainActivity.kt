@@ -41,18 +41,15 @@ import com.sjbz.aimp.model.Playlist
 import com.sjbz.aimp.model.Track
 import com.sjbz.aimp.service.PlaybackService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStreamWriter
 
 /**
- * Main Activity for SjbZ Audio Player.
- * AIMP Dark Orange and Pitch-Black UI with:
- * - Top Toolbar (Search, SjbZ logo, EQ button)
- * - Navigation Drawer (Playlists, Favorites, History, Folders, M3U8 Export/Import)
- * - Central Playlist RecyclerView (Drag & drop reordering, Swipe to delete)
- * - Bottom AIMP Deck (Stereo VU Meters, Waveform peak, elapsed/remaining time, controls)
- * - Automatic playlist looping and MediaStore scanner for Hi-Res audio.
+ * Main Activity for SjbZ Audio Player - PARCHADO 695 LINEAS ORIGINAL
+ * FIX: no se cuelga al explorar ni al elegir pista
  */
 class MainActivity : AppCompatActivity() {
 
@@ -104,13 +101,14 @@ class MainActivity : AppCompatActivity() {
     private var isRepeatLoopActive = true
     private var isCrossfadeActive = true
     private var isUserTrackingSeekBar = false
+    private var searchJob: Job? = null
 
     // Timer handler for seekbar and VU meters
     private val uiHandler = Handler(Looper.getMainLooper())
     private val uiUpdateRunnable = object : Runnable {
         override fun run() {
             updatePlaybackProgressAndVUMeters()
-            uiHandler.postDelayed(this, 100) // 10 FPS smooth VU meter and seekbar update
+            uiHandler.postDelayed(this, 100)
         }
     }
 
@@ -246,13 +244,24 @@ class MainActivity : AppCompatActivity() {
         playlistAdapter = PlaylistAdapter(
             tracks = currentDisplayList,
             onItemClick = { track, position ->
-                playbackService?.setPlaylist(currentDisplayList, position, startPlaying = true)
+                // FIX NO COLGADO: si ya es la misma lista, solo cambia de index
+                val srv = playbackService
+                if (srv == null) {
+                    Toast.makeText(this, "Servicio aún iniciando...", Toast.LENGTH_SHORT).show()
+                    return@PlaylistAdapter
+                }
+                if (srv.getPlaylist().size == currentDisplayList.size) {
+                    srv.playTrackAtIndex(position, true)
+                } else {
+                    srv.setPlaylist(currentDisplayList, position, true)
+                }
             },
             onFavoriteClick = { track, position ->
                 toggleFavorite(track, position)
             },
             onTrackMoved = { from, to ->
-                playbackService?.setPlaylist(currentDisplayList, playbackService?.getCurrentIndex() ?: 0, startPlaying = false)
+                // FIX NO COLGADO: no recrees playlist al arrastrar
+                playbackService?.updatePlaylistOrder(currentDisplayList)
             },
             onTrackDeleted = { track, position ->
                 lifecycleScope.launch(Dispatchers.IO) {
@@ -264,6 +273,9 @@ class MainActivity : AppCompatActivity() {
 
         rvPlaylist.layoutManager = LinearLayoutManager(this)
         rvPlaylist.adapter = playlistAdapter
+        // FIX rendimiento lista grande
+        rvPlaylist.setHasFixedSize(true)
+        rvPlaylist.setItemViewCacheSize(20)
 
         // Attach ItemTouchHelper for drag-and-drop & swipe-to-delete
         playlistAdapter.getItemTouchHelper().attachToRecyclerView(rvPlaylist)
@@ -378,7 +390,11 @@ class MainActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val query = s?.toString()?.trim() ?: ""
-                filterTracksByQuery(query)
+                searchJob?.cancel()
+                searchJob = lifecycleScope.launch {
+                    delay(150)
+                    filterTracksByQuery(query)
+                }
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -402,9 +418,9 @@ class MainActivity : AppCompatActivity() {
     private fun filterTracks(filter: String) {
         lifecycleScope.launch {
             val list = when (filter) {
-                "favorites" -> database.trackDao().getFavoriteTracks()
-                "history" -> database.trackDao().getHistoryTracks()
-                else -> database.trackDao().getAllTracks()
+                "favorites" -> withContext(Dispatchers.IO) { database.trackDao().getFavoriteTracks() }
+                "history" -> withContext(Dispatchers.IO) { database.trackDao().getHistoryTracks() }
+                else -> withContext(Dispatchers.IO) { database.trackDao().getAllTracks() }
             }
             currentDisplayList.clear()
             currentDisplayList.addAll(list)
@@ -454,10 +470,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Scans MediaStore for audio files (FLAC, MP3, WAV, APE, OPUS, OGG, M4A).
-     */
     private fun scanAudioStorage() {
+        btnScanStorage.isEnabled = false
+        btnScanStorage.text = "Escaneando..."
         lifecycleScope.launch {
             val scannedTracks = withContext(Dispatchers.IO) {
                 val tracks = mutableListOf<Track>()
@@ -519,7 +534,6 @@ class MainActivity : AppCompatActivity() {
                     cursor?.close()
                 }
 
-                // If device has no local music files in emulator, seed high-fidelity demo items
                 if (tracks.isEmpty()) {
                     tracks.addAll(createDemoTracks())
                 }
@@ -537,7 +551,12 @@ class MainActivity : AppCompatActivity() {
             playlistAdapter.updateData(currentDisplayList)
             updateTrackCount()
 
-            playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
+            if (playbackService?.getPlaylist()?.isEmpty() != false) {
+                playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
+            }
+
+            btnScanStorage.isEnabled = true
+            btnScanStorage.text = "Escanear Almacenamiento"
         }
     }
 
@@ -647,7 +666,6 @@ class MainActivity : AppCompatActivity() {
             tvRemainingTime.text = "-" + formatTime((duration - position).coerceAtLeast(0L))
         }
 
-        // Update AIMP Stereo VU Meters in real time
         val fraction = if (duration > 0) position.toFloat() / duration else 0f
         srv.audioChain.updateVUMeters(isPlaying, fraction)
 

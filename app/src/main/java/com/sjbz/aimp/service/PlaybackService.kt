@@ -20,7 +20,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.sjbz.aimp.MainActivity
-import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.ATS2835PEngine
 import com.sjbz.aimp.audio.AudioChain
 import com.sjbz.aimp.model.Track
@@ -58,6 +57,10 @@ class PlaybackService : MediaSessionService() {
     private var wakeLock: PowerManager.WakeLock? = null
     var onTrackChangedListener: ((Track?, Int) -> Unit)? = null
     var onPlaybackStateChangedListener: ((Boolean) -> Unit)? = null
+
+    // Propiedad de conveniencia para acceder al contexto global de la aplicación
+    val app: Context
+        get() = applicationContext
 
     override fun onCreate() {
         super.onCreate()
@@ -158,6 +161,7 @@ class PlaybackService : MediaSessionService() {
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
     }
+
     private fun buildNotification(isPlaying: Boolean): Notification {
         val currentTrack = getCurrentTrack()
         val title = currentTrack?.title ?: "SjbZ Reproductor Hi-Res"

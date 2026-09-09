@@ -1,422 +1,680 @@
 package com.sjbz.aimp
 
-import android.app.AlertDialog
-import android.graphics.Color
+import android.Manifest
+import android.content.ComponentName
+import android.content.ContentUris
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
+import android.database.Cursor
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.provider.MediaStore
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.SeekBar
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
-import androidx.appcompat.widget.Toolbar
-import com.sjbz.aimp.audio.EqualizerProcessor
-import com.sjbz.aimp.audio.MDRCProcessor
-import com.sjbz.aimp.audio.PresetManager
-import com.sjbz.aimp.model.EqPreset
+import androidx.core.content.ContextCompat
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.sjbz.aimp.adapter.PlaylistAdapter
+import com.sjbz.aimp.database.AppDatabase
+import com.sjbz.aimp.model.Playlist
+import com.sjbz.aimp.model.Track
 import com.sjbz.aimp.service.PlaybackService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.OutputStreamWriter
 
-class EqActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity() {
 
-    private lateinit var presetManager: PresetManager
-    private lateinit var equalizerProcessor: EqualizerProcessor
-    private lateinit var mdrcProcessor: MDRCProcessor
+    private lateinit var database: AppDatabase
+    private var playbackService: PlaybackService? = null
+    private var isServiceBound = false
 
-    private lateinit var switchEqEnabled: SwitchCompat
-    private lateinit var switchMdrcEnabled: SwitchCompat
-    private lateinit var spinnerPresets: Spinner
-    private lateinit var seekBarPreamp: SeekBar
-    private lateinit var tvPreampValue: TextView
-    private lateinit var seekBarSpeed: SeekBar
-    private lateinit var tvSpeedValue: TextView
-    private lateinit var seekBarCrossfade: SeekBar
-    private lateinit var tvCrossfadeValue: TextView
-    private lateinit var container32Bands: LinearLayout
+    // Views
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var rvPlaylist: RecyclerView
+    private lateinit var playlistAdapter: PlaylistAdapter
+    private lateinit var emptyView: View
+    private lateinit var btnScanStorage: Button
 
-    private lateinit var sbMdrcGainSub: SeekBar
-    private lateinit var tvMdrcGainSub: TextView
-    private lateinit var sbMdrcGainLow: SeekBar
-    private lateinit var tvMdrcGainLow: TextView
-    private lateinit var sbMdrcGainMid: SeekBar
-    private lateinit var tvMdrcGainMid: TextView
-    private lateinit var sbMdrcGainHigh: SeekBar
-    private lateinit var tvMdrcGainHigh: TextView
-    private lateinit var sbMdrcGainAir: SeekBar
-    private lateinit var tvMdrcGainAir: TextView
+    // Toolbar views
+    private lateinit var btnMenuDrawer: ImageButton
+    private lateinit var etSearchTracks: EditText
+    private lateinit var btnOpenEqualizer: ImageButton
+    private lateinit var tvPlaylistTrackCount: TextView
 
-    private lateinit var btnSavePreset: Button
-    private lateinit var btnDeletePreset: Button
-    private lateinit var btnExportSjbz: Button
-    private lateinit var btnImportSjbz: Button
+    // Bottom Player views
+    private lateinit var ivPlayerArtwork: ImageView
+    private lateinit var tvPlayerTitle: TextView
+    private lateinit var tvPlayerArtist: TextView
+    private lateinit var tvPlayerTechSpecs: TextView
+    private lateinit var tvElapsedTime: TextView
+    private lateinit var tvRemainingTime: TextView
+    private lateinit var playerSeekBar: SeekBar
 
-    private val bandSeekBars = ArrayList<SeekBar>()
-    private val bandValueLabels = ArrayList<TextView>()
-    private val mdrcSeekBars = ArrayList<SeekBar>()
-    private val mdrcValueLabels = ArrayList<TextView>()
+    // Control buttons
+    private lateinit var btnShuffle: ImageButton
+    private lateinit var btnPrevious: ImageButton
+    private lateinit var btnStop: ImageButton
+    private lateinit var btnPlayPause: ImageButton
+    private lateinit var btnNext: ImageButton
+    private lateinit var btnRepeat: ImageButton
+    private lateinit var btnCrossfade: ImageButton
 
-    private var isUpdatingFromPreset = false
+    // VU Meters
+    private lateinit var vuMeterLeftBar: ProgressBar
+    private lateinit var vuMeterRightBar: ProgressBar
+    private lateinit var tvVuPeakText: TextView
 
-    private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) {
-            val currentPresetName = spinnerPresets.selectedItem?.toString() ?: "SjbZ_Preset"
-            val preset = equalizerProcessor.toEqPreset(currentPresetName, isCustom = true, isAutoPreset = false, mdrcProcessor.getSettings())
-            val success = presetManager.exportPresetToSjbz(preset, uri)
-            Toast.makeText(this, if (success) "Exportado a .sjbz con éxito" else "Error al exportar", Toast.LENGTH_SHORT).show()
+    // Data lists
+    private val allTracksList = mutableListOf<Track>()
+    private val currentDisplayList = mutableListOf<Track>()
+
+    private var isShuffleActive = false
+    private var isRepeatLoopActive = true
+    private var isCrossfadeActive = true
+    private var isUserTrackingSeekBar = false
+
+    // Timer handler for seekbar and VU meters
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private val uiUpdateRunnable = object : Runnable {
+        override fun run() {
+            updatePlaybackProgressAndVUMeters()
+            uiHandler.postDelayed(this, 100)
         }
     }
 
-    private val importSjbzLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+    // Permission launcher
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val audioGranted = permissions[Manifest.permission.READ_MEDIA_AUDIO] ?: false
+        val storageGranted = permissions[Manifest.permission.READ_EXTERNAL_STORAGE] ?: false
+        if (audioGranted || storageGranted) {
+            scanAudioStorage()
+        } else {
+            Toast.makeText(this, "Permiso de almacenamiento requerido para reproducir audio", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // Export M3U8 launcher
+    private val exportM3U8Launcher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("audio/x-mpegurl")
+    ) { uri: Uri? ->
         if (uri != null) {
-            val imported = presetManager.importPresetFromSjbz(uri)
-            if (imported != null) {
-                Toast.makeText(this, "Preset \"${imported.name}\" importado", Toast.LENGTH_SHORT).show()
-                refreshPresetsSpinner(imported.name)
-                loadPresetToUI(imported)
-            } else {
-                Toast.makeText(this, "Error al importar archivo .sjbz", Toast.LENGTH_SHORT).show()
+            exportCurrentPlaylistToM3U8(uri)
+        }
+    }
+
+    // Service Connection to PlaybackService
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as PlaybackService.LocalBinder
+            playbackService = binder.getService()
+            isServiceBound = true
+
+            playbackService?.let { srv ->
+                srv.isLoopPlaylistEnabled = isRepeatLoopActive
+                srv.onTrackChangedListener = { track, index ->
+                    runOnUiThread {
+                        updatePlayerUi(track, index)
+                    }
+                }
+                srv.onPlaybackStateChangedListener = { isPlaying ->
+                    runOnUiThread {
+                        btnPlayPause.setImageResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
+                    }
+                }
+
+                if (currentDisplayList.isNotEmpty() && srv.getPlaylist().isEmpty()) {
+                    srv.setPlaylist(currentDisplayList, 0, startPlaying = false)
+                }
             }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            playbackService = null
+            isServiceBound = false
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_eq)
+        setContentView(R.layout.activity_main)
 
-        presetManager = PresetManager(this)
-
-        val liveEngine = PlaybackService.instance?.atsEngine
-        equalizerProcessor = liveEngine?.equalizer ?: EqualizerProcessor()
-        mdrcProcessor = liveEngine?.mdrc ?: MDRCProcessor()
+        database = AppDatabase.getDatabase(this)
 
         initViews()
-        setupToolbar()
-        setup32BandsSliders()
-        setupPreampAndControls()
-        setupMdrcGainControls()
-        setupPresetsSpinner()
-        setupButtons()
+        setupPlaylistRecyclerView()
+        setupPlayerControls()
+        setupDrawer()
+        setupSearch()
+        startPlaybackService()
+        checkPermissionsAndScan()
     }
 
-    private fun setupToolbar() {
-        val toolbar: Toolbar = findViewById(R.id.eqToolbar)
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
+    override fun onResume() {
+        super.onResume()
+        uiHandler.post(uiUpdateRunnable)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        uiHandler.removeCallbacks(uiUpdateRunnable)
     }
 
     private fun initViews() {
-        switchEqEnabled = findViewById(R.id.switchEqEnabled)
-        switchMdrcEnabled = findViewById(R.id.switchMdrcEnabled)
-        spinnerPresets = findViewById(R.id.spinnerPresets)
-        seekBarPreamp = findViewById(R.id.seekBarPreamp)
-        tvPreampValue = findViewById(R.id.tvPreampValue)
-        seekBarSpeed = findViewById(R.id.seekBarSpeed)
-        tvSpeedValue = findViewById(R.id.tvSpeedValue)
-        seekBarCrossfade = findViewById(R.id.seekBarCrossfade)
-        tvCrossfadeValue = findViewById(R.id.tvCrossfadeValue)
-        container32Bands = findViewById(R.id.container32Bands)
+        drawerLayout = findViewById(R.id.drawerLayout)
+        rvPlaylist = findViewById(R.id.rvPlaylist)
+        emptyView = findViewById(R.id.emptyView)
+        btnScanStorage = findViewById(R.id.btnScanStorage)
 
-        sbMdrcGainSub = findViewById(R.id.sbMdrcGainSub)
-        tvMdrcGainSub = findViewById(R.id.tvMdrcGainSub)
-        sbMdrcGainLow = findViewById(R.id.sbMdrcGainLow)
-        tvMdrcGainLow = findViewById(R.id.tvMdrcGainLow)
-        sbMdrcGainMid = findViewById(R.id.sbMdrcGainMid)
-        tvMdrcGainMid = findViewById(R.id.tvMdrcGainMid)
-        sbMdrcGainHigh = findViewById(R.id.sbMdrcGainHigh)
-        tvMdrcGainHigh = findViewById(R.id.tvMdrcGainHigh)
-        sbMdrcGainAir = findViewById(R.id.sbMdrcGainAir)
-        tvMdrcGainAir = findViewById(R.id.tvMdrcGainAir)
+        btnMenuDrawer = findViewById(R.id.btnMenuDrawer)
+        etSearchTracks = findViewById(R.id.etSearchTracks)
+        btnOpenEqualizer = findViewById(R.id.btnOpenEqualizer)
+        tvPlaylistTrackCount = findViewById(R.id.tvPlaylistTrackCount)
 
-        btnSavePreset = findViewById(R.id.btnSavePreset)
-        btnDeletePreset = findViewById(R.id.btnDeletePreset)
-        btnExportSjbz = findViewById(R.id.btnExportSjbz)
-        btnImportSjbz = findViewById(R.id.btnImportSjbz)
+        ivPlayerArtwork = findViewById(R.id.ivPlayerArtwork)
+        tvPlayerTitle = findViewById(R.id.tvPlayerTitle)
+        tvPlayerArtist = findViewById(R.id.tvPlayerArtist)
+        tvPlayerTechSpecs = findViewById(R.id.tvPlayerTechSpecs)
+        tvElapsedTime = findViewById(R.id.tvElapsedTime)
+        tvRemainingTime = findViewById(R.id.tvRemainingTime)
+        playerSeekBar = findViewById(R.id.playerSeekBar)
 
-        switchEqEnabled.isChecked = equalizerProcessor.isEnabled
-        switchEqEnabled.setOnCheckedChangeListener { _, isChecked ->
-            equalizerProcessor.isEnabled = isChecked
-            PlaybackService.instance?.atsEngine?.updateEqualizer()
-            updateSlidersEnabled(isChecked)
+        btnShuffle = findViewById(R.id.btnShuffle)
+        btnPrevious = findViewById(R.id.btnPrevious)
+        btnStop = findViewById(R.id.btnStop)
+        btnPlayPause = findViewById(R.id.btnPlayPause)
+        btnNext = findViewById(R.id.btnNext)
+        btnRepeat = findViewById(R.id.btnRepeat)
+        btnCrossfade = findViewById(R.id.btnCrossfade)
+
+        vuMeterLeftBar = findViewById(R.id.vuMeterLeftBar)
+        vuMeterRightBar = findViewById(R.id.vuMeterRightBar)
+        tvVuPeakText = findViewById(R.id.tvVuPeakText)
+
+        btnScanStorage.setOnClickListener {
+            checkPermissionsAndScan()
+        }
+
+        btnOpenEqualizer.setOnClickListener {
+            val intent = Intent(this, EqActivity::class.java)
+            startActivity(intent)
+        }
+
+        btnMenuDrawer.setOnClickListener {
+            if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                drawerLayout.closeDrawer(GravityCompat.START)
+            } else {
+                drawerLayout.openDrawer(GravityCompat.START)
+            }
         }
     }
 
-    private fun updateSlidersEnabled(enabled: Boolean) {
-        seekBarPreamp.isEnabled = enabled
-        for (sb in bandSeekBars) {
-            sb.isEnabled = enabled
-        }
+    private fun setupPlaylistRecyclerView() {
+        playlistAdapter = PlaylistAdapter(
+            tracks = currentDisplayList,
+            onItemClick = { track, position ->
+                playbackService?.setPlaylist(currentDisplayList, position, startPlaying = true)
+            },
+            onFavoriteClick = { track, position ->
+                toggleFavorite(track, position)
+            },
+            onTrackMoved = { from, to ->
+                playbackService?.setPlaylist(currentDisplayList, playbackService?.getCurrentTrackIndex() ?: 0, startPlaying = false)
+            },
+            onTrackDeleted = { track, position ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    database.trackDao().deleteTrack(track)
+                }
+                updateTrackCount()
+            }
+        )
+
+        rvPlaylist.layoutManager = LinearLayoutManager(this)
+        rvPlaylist.adapter = playlistAdapter
+
+        playlistAdapter.getItemTouchHelper().attachToRecyclerView(rvPlaylist)
     }
 
-    private fun setup32BandsSliders() {
-        container32Bands.removeAllViews()
-        bandSeekBars.clear()
-        bandValueLabels.clear()
+    private fun setupPlayerControls() {
+        btnPlayPause.setOnClickListener {
+            playbackService?.togglePlayPause()
+        }
 
-        val bandCount = EqualizerProcessor.BAND_COUNT
-        val labels = EqualizerProcessor.BAND_LABELS
+        btnStop.setOnClickListener {
+            playbackService?.stop()
+            btnPlayPause.setImageResource(R.drawable.ic_play)
+        }
 
-        for (i in 0 until bandCount) {
-            val bandCol = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    (resources.displayMetrics.density * 54).toInt(),
-                    LinearLayout.LayoutParams.MATCH_PARENT
-                )
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(4, 4, 4, 4)
+        btnNext.setOnClickListener {
+            playbackService?.playNext()
+        }
+
+        btnPrevious.setOnClickListener {
+            playbackService?.playPrevious()
+        }
+
+        btnShuffle.setOnClickListener {
+            isShuffleActive = !isShuffleActive
+            btnShuffle.setColorFilter(if (isShuffleActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
+            if (isShuffleActive) {
+                currentDisplayList.shuffle()
+                playlistAdapter.updateData(currentDisplayList)
+                playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
+            } else {
+                currentDisplayList.clear()
+                currentDisplayList.addAll(allTracksList)
+                playlistAdapter.updateData(currentDisplayList)
             }
+        }
 
-            val tvGain = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                text = "0.0"
-                textSize = 10f
-                setTextColor(Color.parseColor("#FFF7700"))
-                gravity = Gravity.CENTER
-            }
-            bandCol.addView(tvGain)
-            bandValueLabels.add(tvGain)
+        btnRepeat.setOnClickListener {
+            isRepeatLoopActive = !isRepeatLoopActive
+            playbackService?.isLoopPlaylistEnabled = isRepeatLoopActive
+            btnRepeat.setColorFilter(if (isRepeatLoopActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
+            Toast.makeText(this, if (isRepeatLoopActive) "Bucle de Playlist Activado" else "Bucle Desactivado", Toast.LENGTH_SHORT).show()
+        }
 
-            val faderContainer = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    0,
-                    1.0f
-                )
-                gravity = Gravity.CENTER
-            }
+        btnCrossfade.setOnClickListener {
+            isCrossfadeActive = !isCrossfadeActive
+            btnCrossfade.setColorFilter(if (isCrossfadeActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
+            playbackService?.atsEngine?.crossfadeSeconds = if (isCrossfadeActive) 3 else 0
+            Toast.makeText(this, if (isCrossfadeActive) "Crossfade 3s Activo" else "Crossfade 0s", Toast.LENGTH_SHORT).show()
+        }
 
-            val seekBar = SeekBar(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    (resources.displayMetrics.density * 160).toInt(),
-                    (resources.displayMetrics.density * 36).toInt()
-                )
-                rotation = 270f
-                max = 240 
-                val currentG = equalizerProcessor.getBandGain(i)
-                progress = ((currentG * 10.0f) + 120.0f).toInt().coerceIn(0, 240)
-            }
-            faderContainer.addView(seekBar)
-            bandCol.addView(faderContainer)
-            bandSeekBars.add(seekBar)
-
-            tvGain.text = String.format("%.1f dB", equalizerProcessor.getBandGain(i))
-
-            val bandIndex = i
-            seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val gainDb = (progress - 120) / 10.0f
-                    tvGain.text = String.format("%.1f dB", gainDb)
-                    if (fromUser && !isUpdatingFromPreset) {
-                        equalizerProcessor.setBandGain(bandIndex, gainDb)
-                        PlaybackService.instance?.atsEngine?.updateEqualizer()
+        playerSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    val duration = playbackService?.player?.duration ?: 0L
+                    if (duration > 0) {
+                        val seekPos = (progress / 1000.0f * duration).toLong()
+                        tvElapsedTime.text = formatTime(seekPos)
                     }
                 }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
+            }
 
-            val tvFreq = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                isUserTrackingSeekBar = true
+            }
+
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                isUserTrackingSeekBar = false
+                val duration = playbackService?.player?.duration ?: 0L
+                if (duration > 0 && sb != null) {
+                    val targetPos = (sb.progress / 1000.0f * duration).toLong()
+                    playbackService?.player?.seekTo(targetPos)
+                }
+            }
+        })
+    }
+
+    private fun setupDrawer() {
+        findViewById<View>(R.id.drawerItemPlaylists).setOnClickListener {
+            filterTracks("all")
+            drawerLayout.closeDrawers()
+        }
+
+        findViewById<View>(R.id.drawerItemFavorites).setOnClickListener {
+            filterTracks("favorites")
+            drawerLayout.closeDrawers()
+        }
+
+        findViewById<View>(R.id.drawerItemHistory).setOnClickListener {
+            filterTracks("history")
+            drawerLayout.closeDrawers()
+        }
+
+        findViewById<View>(R.id.drawerItemFolders).setOnClickListener {
+            Toast.makeText(this, "Explorador de carpetas activo", Toast.LENGTH_SHORT).show()
+            drawerLayout.closeDrawers()
+        }
+
+        findViewById<View>(R.id.drawerExportM3U8).setOnClickListener {
+            exportM3U8Launcher.launch("SjbZ_Playlist_${System.currentTimeMillis()}.m3u8")
+            drawerLayout.closeDrawers()
+        }
+
+        findViewById<View>(R.id.drawerImportM3U8).setOnClickListener {
+            Toast.makeText(this, "Importador M3U8 listo para abrir listas", Toast.LENGTH_SHORT).show()
+            drawerLayout.closeDrawers()
+        }
+    }
+
+    private fun setupSearch() {
+        etSearchTracks.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString()?.trim() ?: ""
+                filterTracksByQuery(query)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+
+    private fun filterTracksByQuery(query: String) {
+        if (query.isEmpty()) {
+            currentDisplayList.clear()
+            currentDisplayList.addAll(allTracksList)
+        } else {
+            val filtered = allTracksList.filter {
+                it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true)
+            }
+            currentDisplayList.clear()
+            currentDisplayList.addAll(filtered)
+        }
+        playlistAdapter.updateData(currentDisplayList)
+        updateTrackCount()
+    }
+
+    private fun filterTracks(filter: String) {
+        lifecycleScope.launch {
+            val list = when (filter) {
+                "favorites" -> database.trackDao().getFavoriteTracks()
+                "history" -> database.trackDao().getHistoryTracks()
+                else -> database.trackDao().getAllTracks()
+            }
+            currentDisplayList.clear()
+            currentDisplayList.addAll(list)
+            playlistAdapter.updateData(currentDisplayList)
+            updateTrackCount()
+        }
+    }
+
+    private fun toggleFavorite(track: Track, position: Int) {
+        val newFav = !track.isFavorite
+        val updated = track.copy(isFavorite = newFav)
+        currentDisplayList[position] = updated
+        playlistAdapter.notifyItemChanged(position)
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            database.trackDao().setFavorite(track.id, newFav)
+        }
+    }
+
+    private fun startPlaybackService() {
+        val serviceIntent = Intent(this, PlaybackService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(this, serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+        bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun checkPermissionsAndScan() {
+        val permissions = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+        val needed = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (needed.isEmpty()) {
+            scanAudioStorage()
+        } else {
+            storagePermissionLauncher.launch(needed.toTypedArray())
+        }
+    }
+
+    private fun scanAudioStorage() {
+        lifecycleScope.launch {
+            val scannedTracks = withContext(Dispatchers.IO) {
+                val tracks = mutableListOf<Track>()
+                val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                val projection = arrayOf(
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.ALBUM,
+                    MediaStore.Audio.Media.DURATION,
+                    MediaStore.Audio.Media.DATA
                 )
-                text = labels[i]
-                textSize = 9.5f
-                setTextColor(Color.parseColor("#CCCCCC"))
-                gravity = Gravity.CENTER
-            }
-            bandCol.addView(tvFreq)
-            container32Bands.addView(bandCol)
-        }
-    }
+                val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
 
-    private fun setupPreampAndControls() {
-        val preampDb = equalizerProcessor.preampDb
-        seekBarPreamp.progress = ((preampDb * 10.0f) + 120.0f).toInt().coerceIn(0, 240)
-        tvPreampValue.text = String.format("%.1f dB", preampDb)
+                var cursor: Cursor? = null
+                try {
+                    cursor = contentResolver.query(uri, projection, selection, null, "${MediaStore.Audio.Media.TITLE} ASC")
+                    cursor?.let { c ->
+                        val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                        val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                        val artistCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                        val albumCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                        val durationCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                        val dataCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
 
-        seekBarPreamp.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val db = (progress - 120) / 10.0f
-                tvPreampValue.text = String.format("%.1f dB", db)
-                if (fromUser) {
-                    equalizerProcessor.preampDb = db
-                    PlaybackService.instance?.atsEngine?.updateEqualizer()
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
-        })
+                        var order = 0
+                        while (c.moveToNext()) {
+                            val id = c.getLong(idCol)
+                            val title = c.getString(titleCol) ?: "Audio Track"
+                            val artist = c.getString(artistCol) ?: "Unknown Artist"
+                            val album = c.getString(albumCol) ?: "Unknown Album"
+                            val duration = c.getLong(durationCol)
+                            val path = c.getString(dataCol) ?: ""
 
-        seekBarSpeed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val factor = progress / 100.0f
-                tvSpeedValue.text = String.format("%.2fx", factor)
-                if (fromUser) {
-                    val p = androidx.media3.common.PlaybackParameters(factor)
-                    PlaybackService.instance?.player?.playbackParameters = p
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
-        })
+                            val contentUri = ContentUris.withAppendedId(uri, id).toString()
+                            val format = detectFormat(path)
 
-        seekBarCrossfade.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                tvCrossfadeValue.text = "$progress s"
-                if (fromUser) {
-                    PlaybackService.instance?.audioChain?.startFadeIn()
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
-        })
-    }
-
-    private fun setupMdrcGainControls() {
-        mdrcSeekBars.clear()
-        mdrcValueLabels.clear()
-
-        mdrcSeekBars.add(sbMdrcGainSub)
-        mdrcSeekBars.add(sbMdrcGainLow)
-        mdrcSeekBars.add(sbMdrcGainMid)
-        mdrcSeekBars.add(sbMdrcGainHigh)
-        mdrcSeekBars.add(sbMdrcGainAir)
-
-        mdrcValueLabels.add(tvMdrcGainSub)
-        mdrcValueLabels.add(tvMdrcGainLow)
-        mdrcValueLabels.add(tvMdrcGainMid)
-        mdrcValueLabels.add(tvMdrcGainHigh)
-        mdrcValueLabels.add(tvMdrcGainAir)
-
-        for (i in 0 until 5) {
-            val sb = mdrcSeekBars[i]
-            val tv = mdrcValueLabels[i]
-            val bandIndex = i
-            val currentGain = mdrcProcessor.getBandGain(bandIndex)
-            sb.progress = ((currentGain * 10.0f) + 120.0f).toInt().coerceIn(0, 240)
-            tv.text = String.format("%.1f dB", currentGain)
-
-            sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val gainDb = (progress - 120) / 10.0f
-                    tv.text = String.format("%.1f dB", gainDb)
-                    if (fromUser && !isUpdatingFromPreset) {
-                        mdrcProcessor.setBandGain(bandIndex, gainDb)
-                        PlaybackService.instance?.atsEngine?.updateMDRC()
+                            tracks.add(
+                                Track(
+                                    id = id,
+                                    title = title,
+                                    artist = artist,
+                                    album = album,
+                                    duration = duration,
+                                    uri = contentUri,
+                                    path = path,
+                                    format = format,
+                                    bitrate = if (format == "FLAC" || format == "WAV") 1411 else 320,
+                                    sampleRate = if (format == "FLAC") 96000 else 44100,
+                                    bitDepth = if (format == "FLAC") 24 else 16,
+                                    orderIndex = order++
+                                )
+                            )
+                        }
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    cursor?.close()
                 }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
-        }
 
-        switchMdrcEnabled.isChecked = mdrcProcessor.isEnabled
-        switchMdrcEnabled.setOnCheckedChangeListener { _, isChecked ->
-            mdrcProcessor.isEnabled = isChecked
-            PlaybackService.instance?.atsEngine?.updateMDRC()
-            for (sb in mdrcSeekBars) {
-                sb.isEnabled = isChecked
-            }
-        }
-    }
-
-    private fun setupPresetsSpinner() {
-        refreshPresetsSpinner(presetManager.getActivePresetName())
-        spinnerPresets.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val selectedName = spinnerPresets.selectedItem.toString()
-                if (selectedName == presetManager.getActivePresetName()) return
-                val allPresets = presetManager.getAllPresets()
-                val targetPreset = allPresets.find { it.name.equals(selectedName, ignoreCase = true) }
-                if (targetPreset != null) {
-                    loadPresetToUI(targetPreset)
+                if (tracks.isEmpty()) {
+                    tracks.addAll(createDemoTracks())
                 }
+
+                database.trackDao().clearTracks()
+                database.trackDao().insertTracks(tracks)
+                tracks
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+
+            allTracksList.clear()
+            allTracksList.addAll(scannedTracks)
+            currentDisplayList.clear()
+            currentDisplayList.addAll(allTracksList)
+
+            playlistAdapter.updateData(currentDisplayList)
+            updateTrackCount()
+
+            playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
         }
     }
 
-    private fun refreshPresetsSpinner(selectPresetName: String? = null) {
-        val allPresets = presetManager.getAllPresets()
-        val names = allPresets.map { it.name }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, names)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        spinnerPresets.adapter = adapter
-
-        val target = selectPresetName ?: presetManager.getActivePresetName()
-        val idx = names.indexOf(target)
-        if (idx >= 0) {
-            spinnerPresets.setSelection(idx)
+    private fun detectFormat(path: String): String {
+        val lower = path.lowercase()
+        return when {
+            lower.endsWith(".flac") -> "FLAC"
+            lower.endsWith(".wav") -> "WAV"
+            lower.endsWith(".ape") -> "APE"
+            lower.endsWith(".opus") -> "OPUS"
+            lower.endsWith(".ogg") -> "OGG"
+            lower.endsWith(".m4a") -> "M4A"
+            lower.endsWith(".aac") -> "AAC"
+            else -> "MP3"
         }
     }
 
-    private fun loadPresetToUI(preset: EqPreset) {
-        isUpdatingFromPreset = true
+    private fun createDemoTracks(): List<Track> {
+        return listOf(
+            Track(
+                id = 1,
+                title = "AIMP SjbZ Bass Master Reference",
+                artist = "ATS2835P Hi-Res Studio",
+                album = "Audiophile Acoustic Tests 2026",
+                duration = 248000L,
+                uri = "asset:///demo_track_1.mp3",
+                format = "FLAC",
+                bitrate = 1411,
+                sampleRate = 96000,
+                bitDepth = 24,
+                orderIndex = 0
+            ),
+            Track(
+                id = 2,
+                title = "Cybernetic Pulse - MDRC Dynamic Test",
+                artist = "Actions Semiconductor DSP Labs",
+                album = "Hardware Reference Curves",
+                duration = 195000L,
+                uri = "asset:///demo_track_2.mp3",
+                format = "FLAC",
+                bitrate = 9216,
+                sampleRate = 192000,
+                bitDepth = 24,
+                orderIndex = 1
+            ),
+            Track(
+                id = 3,
+                title = "Vocal Clarity & Acoustic Resonance",
+                artist = "SjbZ Master Engineers",
+                album = "Hi-Fi Stereo Demonstrations",
+                duration = 212000L,
+                uri = "asset:///demo_track_3.mp3",
+                format = "WAV",
+                bitrate = 2304,
+                sampleRate = 48000,
+                bitDepth = 24,
+                orderIndex = 2
+            ),
+            Track(
+                id = 4,
+                title = "Sub-Bass 20Hz - 120Hz Excursion Sweep",
+                artist = "Frequency Sweep Generator",
+                album = "Subwoofer Calibration",
+                duration = 180000L,
+                uri = "asset:///demo_track_4.mp3",
+                format = "FLAC",
+                bitrate = 1411,
+                sampleRate = 96000,
+                bitDepth = 24,
+                orderIndex = 3
+            )
+        )
+    }
+
+    private fun updateTrackCount() {
+        val count = currentDisplayList.size
+        tvPlaylistTrackCount.text = "$count tracks"
+        emptyView.visibility = if (count == 0) View.VISIBLE else View.GONE
+    }
+
+    private fun updatePlayerUi(track: Track?, index: Int) {
+        if (track == null) {
+            tvPlayerTitle.text = "Selecciona una pista"
+            tvPlayerArtist.text = "SjbZ Hi-Res Player"
+            tvPlayerTechSpecs.text = "24-bit • 192kHz • ATS2835P"
+            return
+        }
+
+        tvPlayerTitle.text = track.title
+        tvPlayerArtist.text = track.artist
+        tvPlayerTechSpecs.text = track.getTechInfo()
+        playlistAdapter.setPlayingIndex(index)
+    }
+
+    private fun updatePlaybackProgressAndVUMeters() {
+        val srv = playbackService ?: return
+        val player = srv.player
+
+        val isPlaying = player.isPlaying
+        val duration = player.duration
+        val position = player.currentPosition
+
+        if (!isUserTrackingSeekBar && duration > 0) {
+            val progress = (position.toFloat() / duration * 1000).toInt()
+            playerSeekBar.progress = progress
+            tvElapsedTime.text = formatTime(position)
+            tvRemainingTime.text = "-" + formatTime((duration - position).coerceAtLeast(0L))
+        }
+
+        val fraction = if (duration > 0) position.toFloat() / duration else 0f
+        srv.audioChain.updateVUMeters(isPlaying, fraction)
+
+        val leftLevel = (srv.audioChain.vuMeterLeft * 100).toInt()
+        val rightLevel = (srv.audioChain.vuMeterRight * 100).toInt()
+
+        vuMeterLeftBar.progress = leftLevel
+        vuMeterRightBar.progress = rightLevel
+
+        val peakDb = if (isPlaying) String.format("%.1f dB", -12.0f + (leftLevel / 100.0f) * 11.7f) else "-inf dB"
+        tvVuPeakText.text = peakDb
+    }
+
+    private fun formatTime(millis: Long): String {
+        val totalSeconds = millis / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format("%d:%02d", minutes, seconds)
+    }
+
+    private fun exportCurrentPlaylistToM3U8(uri: Uri) {
         try {
-            equalizerProcessor.loadFromPreset(preset)
-            
-            val preampProgress = ((preset.preampDb * 10.0f) + 120.0f).toInt().coerceIn(0, 240)
-            seekBarPreamp.progress = preampProgress
-            tvPreampValue.text = String.format("%.1f dB", preset.preampDb)
-
-            val gains = preset.bandGains
-            for (i in 0 until minOf(gains.size, bandSeekBars.size)) {
-                val g = gains[i]
-                val p = ((g * 10.0f) + 120.0f).toInt().coerceIn(0, 240)
-                bandSeekBars[i].progress = p
-                bandValueLabels[i].text = String.format("%.1f", g)
+            contentResolver.openOutputStream(uri)?.use { out ->
+                OutputStreamWriter(out).use { writer ->
+                    writer.write("#EXTM3U\n")
+                    for (track in currentDisplayList) {
+                        writer.write("#EXTINF:${track.duration / 1000},${track.artist} - ${track.title}\n")
+                        writer.write("${track.path}\n")
+                    }
+                }
             }
-        } finally {
-            isUpdatingFromPreset = false
+            Toast.makeText(this, "Lista exportada en M3U8 con éxito", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error al exportar M3U8: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun setupButtons() {
-        btnSavePreset.setOnClickListener {
-            val builder = AlertDialog.Builder(this)
-            builder.setTitle("Guardar Preset")
-            val input = EditText(this)
-            builder.setView(input)
-            builder.setPositiveButton("Guardar") { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    val settings = mdrcProcessor.getSettings()
-                    val preset = equalizerProcessor.toEqPreset(name, isCustom = true, isAutoPreset = false, settings)
-                    presetManager.savePreset(preset)
-                    refreshPresetsSpinner(name)
-                }
-            }
-            builder.setNegativeButton("Cancelar", null)
-            builder.show()
+    override fun onDestroy() {
+        if (isServiceBound) {
+            unbindService(serviceConnection)
+            isServiceBound = false
         }
-
-        btnDeletePreset.setOnClickListener {
-            val name = spinnerPresets.selectedItem?.toString()
-            if (name != null) {
-                presetManager.deletePreset(name)
-                refreshPresetsSpinner()
-            }
-        }
-
-        btnExportSjbz.setOnClickListener {
-            exportSjbzLauncher.launch("preset.sjbz")
-        }
-
-        btnImportSjbz.setOnClickListener {
-            importSjbzLauncher.launch(arrayOf("application/json", "application/octet-stream"))
-        }
+        super.onDestroy()
     }
 }

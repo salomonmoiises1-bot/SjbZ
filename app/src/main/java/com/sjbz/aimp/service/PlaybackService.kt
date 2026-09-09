@@ -142,27 +142,24 @@ class PlaybackService : MediaSessionService() {
         val stopIntent = PendingIntent.getService(this, 4, Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
 
-        // FIX: Camino correcto para Media3 - MediaStyle sin setMediaSession() porque token es SessionToken no compatible con MediaSessionCompat.Token
         return NotificationCompat.Builder(this, CHANNEL_ID)
-          .setContentTitle(title)
-          .setContentText(artist)
-          .setSubText(if (atsEngine.isBluetoothConnected) "SjbZ • ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
-          .setSmallIcon(R.mipmap.ic_launcher)
-          .setContentIntent(openActivityIntent)
-          .setOngoing(isPlaying)
-          .setOnlyAlertOnce(true)
-          .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-          .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-          .setColor(Color.parseColor("#0A1628"))
-          .setColorized(true)
-          .addAction(android.R.drawable.ic_media_previous, "Anterior", prevIntent)
-          .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-          .addAction(android.R.drawable.ic_media_next, "Siguiente", nextIntent)
-          .addAction(android.R.drawable.ic_delete, "Detener", stopIntent)
-          .setStyle(MediaStyle()
-              .setShowActionsInCompactView(0, 1, 2)
-            )
-          .build()
+         .setContentTitle(title)
+         .setContentText(artist)
+         .setSubText(if (atsEngine.isBluetoothConnected) "SjbZ • ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
+         .setSmallIcon(R.mipmap.ic_launcher)
+         .setContentIntent(openActivityIntent)
+         .setOngoing(isPlaying)
+         .setOnlyAlertOnce(true)
+         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+         .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+         .setColor(Color.parseColor("#0A1628"))
+         .setColorized(true)
+         .addAction(android.R.drawable.ic_media_previous, "Anterior", prevIntent)
+         .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+         .addAction(android.R.drawable.ic_media_next, "Siguiente", nextIntent)
+         .addAction(android.R.drawable.ic_delete, "Detener", stopIntent)
+         .setStyle(MediaStyle().setShowActionsInCompactView(0, 1, 2))
+         .build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -182,30 +179,45 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
     override fun onBind(intent: Intent?): IBinder { super.onBind(intent); return binder }
 
+    // --- PARCHE NO COLGADO ---
     fun setPlaylist(tracks: List<Track>, startIndex: Int = 0, startPlaying: Boolean = true) {
-        playlist.clear(); playlist.addAll(tracks)
-        player.clearMediaItems()
-        for (track in playlist) {
-            val mediaItem = MediaItem.Builder().setUri(track.uri).setMediaId(track.id.toString()).build()
-            player.addMediaItem(mediaItem)
-        }
-        player.prepare()
-        if (startIndex in playlist.indices) playTrackAtIndex(startIndex, startPlaying)
+        if (tracks.isEmpty()) return
+        playlist.clear()
+        playlist.addAll(tracks)
+        playTrackAtIndex(startIndex.coerceIn(tracks.indices), startPlaying)
     }
     fun setPlaylist(tracks: List<Track>) { setPlaylist(tracks, 0, true) }
     fun setPlaylist(tracks: List<Track>, startPlaying: Boolean) { setPlaylist(tracks, 0, startPlaying) }
     fun setPlaylist(tracks: List<Track>, startIndex: Int) { setPlaylist(tracks, startIndex, true) }
+
     fun setPlaybackSpeed(speed: Float) { player.playbackParameters = PlaybackParameters(speed) }
 
     fun playTrackAtIndex(index: Int, startPlaying: Boolean = true) {
         if (index!in playlist.indices) return
         currentTrackIndex = index
-        player.seekToDefaultPosition(index)
-        if (startPlaying) { player.play(); audioChain.startFadeIn() }
-        val sessionId = player.audioSessionId
-        if (sessionId!= C.AUDIO_SESSION_ID_UNSET) audioChain.attachAudioSession(sessionId)
+        val track = playlist[index]
+        try {
+            val mediaItem = MediaItem.Builder().setUri(track.uri).setMediaId(track.id.toString()).build()
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            if (startPlaying) {
+                player.play()
+                audioChain.startFadeIn()
+            }
+            val sessionId = player.audioSessionId
+            if (sessionId!= C.AUDIO_SESSION_ID_UNSET) audioChain.attachAudioSession(sessionId)
+        } catch (e: Exception) { e.printStackTrace() }
         updateNotification(startPlaying)
         onTrackChangedListener?.invoke(getCurrentTrack(), currentTrackIndex)
+    }
+
+    fun updatePlaylistOrder(newOrder: List<Track>) {
+        val currentTrack = getCurrentTrack()
+        playlist.clear()
+        playlist.addAll(newOrder)
+        if (currentTrack!= null) {
+            currentTrackIndex = playlist.indexOfFirst { it.id == currentTrack.id }.coerceAtLeast(0)
+        }
     }
 
     fun togglePlayPause() { if (player.isPlaying) player.pause() else player.play() }

@@ -27,9 +27,14 @@ class ATS2835PEngine(private val context: Context) {
 
     // DSP Parameters
     var balance: Float = 0.0f // -1.0 (Left) to +1.0 (Right)
-    var pitch: Float = 1.0f   // 0.5x to 2.0x
-    var speed: Float = 1.0f   // 0.5x to 2.0x
+    var pitch: Float = 1.0f  // 0.5x to 2.0x
+    var speed: Float = 1.0f  // 0.5x to 2.0x
     var crossfadeSeconds: Int = 3 // 0 to 10s
+
+    // FIX LIMTER THRESH - agregado respetando lo existente
+    var limiterThresholdDb: Float = -0.3f
+        private set
+    var limiterBypassForBluetooth: Boolean = true
 
     var isBluetoothConnected: Boolean = false
         private set
@@ -37,14 +42,15 @@ class ATS2835PEngine(private val context: Context) {
     fun attachAudioSession(sessionId: Int) {
         if (sessionId <= 0) return
         dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter)
+        updateLimiter()
     }
 
     fun onBluetoothStatusChanged(connected: Boolean) {
         isBluetoothConnected = connected
-        limiter.isBypassedForBluetooth = connected
+        limiter.isBypassedForBluetooth = connected && limiterBypassForBluetooth
         mdrc.isGentleBluetoothMode = connected
 
-        Log.i(TAG, "Bluetooth A2DP state: $connected. Gentle MDRC: $connected. Internal limiter bypassed: $connected")
+        Log.i(TAG, "Bluetooth A2DP state: $connected. Gentle MDRC: $connected. Internal limiter bypassed: ${limiter.isBypassedForBluetooth}")
         dynamicsHelper.applyMDRC(mdrc)
         dynamicsHelper.applyLimiter(limiter)
     }
@@ -58,7 +64,15 @@ class ATS2835PEngine(private val context: Context) {
     }
 
     fun updateLimiter() {
+        try {
+            limiter.thresholdDb = limiterThresholdDb
+        } catch (e: Exception) { }
         dynamicsHelper.applyLimiter(limiter)
+    }
+
+    fun setLimiterThreshold(db: Float) {
+        limiterThresholdDb = db.coerceIn(-12f, 0f)
+        updateLimiter()
     }
 
     fun release() {

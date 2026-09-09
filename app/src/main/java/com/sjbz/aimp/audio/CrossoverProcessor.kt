@@ -4,7 +4,7 @@ import kotlin.math.abs
 import kotlin.math.tanh
 
 /**
- * Crossover filter manager and LG XBOOM style SoftClipper.
+ * Crossover filter manager and ATS2835P Hardware SoftClipper.
  * Uses smooth hyperbolic tangent (tanh) & polynomial curve to eliminate harsh digital squaring
  * and introduce warm musical harmonics when audio peaks exceed headroom.
  */
@@ -18,7 +18,7 @@ class CrossoverProcessor {
     var kneeStart: Float = 0.707f // ~ -3 dBFS knee point
 
     /**
-     * LG XBOOM style analog-modeled soft clipping transfer curve.
+     * ATS2835P hardware-modeled soft clipping transfer curve.
      * Takes an input audio sample normalized [-1.0, 1.0] and returns a smoothly saturated sample.
      */
     fun processSample(inputSample: Float): Float {

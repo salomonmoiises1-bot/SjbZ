@@ -62,10 +62,6 @@ class MDRCProcessor {
         }
     }
 
-    fun getSettings(): MDRCSettings {
-        return toMDRCSettings()
-    }
-
     fun toMDRCSettings(): MDRCSettings {
         val bandConfigs = bands.map {
             MDRCBandConfig(

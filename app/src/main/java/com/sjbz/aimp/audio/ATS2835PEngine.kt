@@ -9,7 +9,7 @@ import android.util.Log
  * - Preamp & 32-Band ISO Equalizer
  * - 5-Band Hardware Multi-band Dynamic Range Compression (MDRC)
  * - ATS2835P QFN68 Anti-clipping Limiter (-0.3dB, 1ms attack, 100ms release)
- * - LG XBOOM modeled SoftClipper
+ * - ATS2835P Hardware SoftClipper
  * - Stereo Balance, Pitch & Speed scaling, Crossfade engine
  * - Bluetooth A2DP auto-adaptation (Gentle MDRC mode, limiter bypass)
  */

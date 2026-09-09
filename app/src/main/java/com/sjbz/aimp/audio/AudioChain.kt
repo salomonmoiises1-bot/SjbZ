@@ -9,7 +9,7 @@ import kotlin.math.sin
 
 /**
  * Coordinates the full audio pipeline:
- * ExoPlayer -> ATS2835P DSP Engine -> Crossfade -> Stereo Balance -> Pitch / Speed -> Stereo VU Meters
+ * ExoPlayer -> ATS2835P DSP Engine -> Crossfade -> Stereo Balance / Pitch / Speed -> Stereo VU Meters
  */
 class AudioChain(private val context: Context, val engine: ATS2835PEngine) {
 
@@ -38,6 +38,12 @@ class AudioChain(private val context: Context, val engine: ATS2835PEngine) {
         player.playbackParameters = PlaybackParameters(speed, pitch)
     }
 
+    fun setPlaybackParameters(speed: Float, pitch: Float = 1.0f) {
+        engine.speed = speed
+        engine.pitch = pitch
+        applyPlaybackParameters()
+    }
+
     fun applyStereoBalance(balance: Float) {
         engine.balance = balance.coerceIn(-1.0f, 1.0f)
         val player = exoPlayer ?: return
@@ -47,9 +53,10 @@ class AudioChain(private val context: Context, val engine: ATS2835PEngine) {
         val leftVol = cos(angle)
         val rightVol = sin(angle)
 
-        // On ExoPlayer, standard volume is scalar
+        // On ExoPlayer, standard volume is scalar; stereo balance is configured on audio track or channel volume
         player.volume = 1.0f
     }
+
     /**
      * Executes crossfade volume fade-in ramp over configured crossfade duration.
      */
@@ -74,18 +81,19 @@ class AudioChain(private val context: Context, val engine: ATS2835PEngine) {
      * Executes crossfade volume fade-out ramp over configured crossfade duration.
      */
     fun startFadeOut(onComplete: () -> Unit) {
-        val player = exoPlayer ?: return
+        val player = exoPlayer ?: run {
+            onComplete()
+            return
+        }
         val durationMs = (engine.crossfadeSeconds * 1000L).coerceIn(500L, 10000L)
 
         crossfadeAnimator?.cancel()
-
         crossfadeAnimator = ValueAnimator.ofFloat(player.volume, 0.0f).apply {
             duration = durationMs
             addUpdateListener { animator ->
                 val vol = animator.animatedValue as Float
                 player.volume = vol
                 if (vol <= 0.01f) {
-                    crossfadeAnimator?.cancel()
                     onComplete()
                 }
             }
@@ -104,11 +112,11 @@ class AudioChain(private val context: Context, val engine: ATS2835PEngine) {
         }
 
         // Dynamic stereo response correlated with playback & preamp
-        val baseLeft = (0.55f + 0.35f * sin(progressFraction * 40f)).coerceIn(0.1f, 0.98f)
+        val baseLeft = (0.55f + 0.35f * sin(progressFraction * 60f)).coerceIn(0.1f, 0.98f)
         val baseRight = (0.52f + 0.38f * cos(progressFraction * 62f)).coerceIn(0.1f, 0.98f)
 
-        val balanceFactorL = (1.0f - engine.balance).coerceIn(0.0f, 2.0f) / 2.0f
-        val balanceFactorR = (1.0f + engine.balance).coerceIn(0.0f, 2.0f) / 2.0f
+        val balanceFactorL = (1.0f - engine.balance).coerceIn(0f, 2f) / 2.0f
+        val balanceFactorR = (1.0f + engine.balance).coerceIn(0f, 2f) / 2.0f
 
         vuMeterLeft = (baseLeft * balanceFactorL).coerceIn(0.0f, 1.0f)
         vuMeterRight = (baseRight * balanceFactorR).coerceIn(0.0f, 1.0f)

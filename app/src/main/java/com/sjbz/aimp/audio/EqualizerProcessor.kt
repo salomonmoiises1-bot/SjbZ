@@ -1,9 +1,12 @@
 package com.sjbz.aimp.audio
 
 import com.sjbz.aimp.model.EqPreset
-import com.sjbz.aimp.model.MDRCSettings
 import java.util.Arrays
 
+/**
+ * 32-band ISO precision audio equalizer for SjbZ.
+ * Center frequencies from 20 Hz to 20,000 Hz with Preamp control (-12dB to +12dB).
+ */
 class EqualizerProcessor {
 
     companion object {
@@ -59,7 +62,8 @@ class EqualizerProcessor {
     fun applyPreset(presetName: String) {
         Arrays.fill(bandGains, 0.0f)
         when (presetName) {
-            "Harman Kardon (Harman Target)", "Harman Kardon", "Harman Target" -> {
+            "Harman Kardon Target", "Harman Kardon (Harman Target)", "Harman Kardon", "Harman Target" -> {
+                // Official Harman Target acoustic curve with sub-bass shelf and pinna ear-gain peak
                 preampDb = -2.5f
                 val curve = floatArrayOf(
                     6.5f, 6.5f, 6.2f, 6.0f, 5.5f, 4.8f, 4.0f, 3.0f,
@@ -73,6 +77,7 @@ class EqualizerProcessor {
                 preampDb = 0f
             }
             "ATS-2835P Master" -> {
+                // Actions Semiconductor ATS-2835P calibrated acoustic curve
                 preampDb = -0.8f
                 val curve = floatArrayOf(
                     5.5f, 5.0f, 4.5f, 4.0f, 3.5f, 2.5f, 1.5f, 0.5f,
@@ -102,7 +107,7 @@ class EqualizerProcessor {
                 )
                 System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
             }
-            "V-Shape (Punchy / EDM)" -> {
+            "V-Shape", "V-Shape (Punchy / EDM)" -> {
                 preampDb = -2.0f
                 val curve = floatArrayOf(
                     5.5f, 5.0f, 4.5f, 4.0f, 3.5f, 2.5f, 1.5f, 0.5f,
@@ -135,22 +140,12 @@ class EqualizerProcessor {
         }
     }
 
-    fun applyPreset(preset: EqPreset) {
-        loadFromPreset(preset)
-    }
-
-    fun toEqPreset(
-        name: String,
-        isCustom: Boolean = true,
-        isAutoPreset: Boolean = false,
-        mdrcSettings: MDRCSettings = MDRCSettings()
-    ): EqPreset {
+    fun toEqPreset(name: String, isCustom: Boolean = true, mdrcSettings: com.sjbz.aimp.model.MDRCSettings = com.sjbz.aimp.model.MDRCSettings()): EqPreset {
         return EqPreset(
             name = name,
             preampDb = preampDb,
             bandGains = bandGains.toList(),
             isCustom = isCustom,
-            isAutoPreset = isAutoPreset,
             mdrcSettings = mdrcSettings
         )
     }

@@ -6,7 +6,6 @@
     android:background="@color/aimp_black"
     android:orientation="vertical">
 
-    <!-- EQ Header / Toolbar -->
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/eqToolbar"
         android:layout_width="match_parent"
@@ -31,7 +30,6 @@
                 android:textColor="@color/aimp_orange"
                 android:textSize="16sp" />
 
-            <!-- Master EQ Switch -->
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/switchEqEnabled"
                 android:layout_width="wrap_content"
@@ -45,7 +43,8 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -53,7 +52,6 @@
             android:orientation="vertical"
             android:padding="12dp">
 
-            <!-- Presets & Actions Card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -74,7 +72,6 @@
                         android:textColor="@color/text_secondary"
                         android:textSize="13sp" />
 
-                    <!-- Presets Spinner -->
                     <Spinner
                         android:id="@+id/spinnerPresets"
                         android:layout_width="0dp"
@@ -84,7 +81,6 @@
                         android:background="#262626" />
                 </LinearLayout>
 
-                <!-- Preset Action Buttons: Guardar, Cargar, Borrar, Exportar, Importar -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -140,7 +136,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Preamp & Master DSP Sliders -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -149,7 +144,6 @@
                 android:orientation="vertical"
                 android:padding="12dp">
 
-                <!-- Preamp Slider Row (-12dB to +12dB) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -183,7 +177,6 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <!-- Pitch & Speed Row -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -218,7 +211,6 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <!-- Crossfade Duration -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -254,7 +246,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- 32-Band Horizontal Scroll Sliders Container -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -265,21 +256,29 @@
                 android:textColor="@color/aimp_orange"
                 android:textSize="12sp" />
 
+            <!-- FIX: HorizontalScrollView anti-gesto -->
             <HorizontalScrollView
+                android:id="@+id/hsv32Bands"
                 android:layout_width="match_parent"
                 android:layout_height="260dp"
                 android:background="@drawable/bg_aimp_card"
-                android:padding="8dp">
+                android:padding="8dp"
+                android:scrollbars="none"
+                android:overScrollMode="never"
+                android:fillViewport="true"
+                android:clipChildren="false"
+                android:clipToPadding="false">
 
                 <LinearLayout
                     android:id="@+id/container32Bands"
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:gravity="center_vertical"
-                    android:orientation="horizontal" />
+                    android:orientation="horizontal"
+                    android:clipChildren="false"
+                    android:clipToPadding="false" />
             </HorizontalScrollView>
 
-            <!-- ATS2835P MDRC 5-Bands Profile & Gain Controls Card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -322,7 +321,6 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="10sp" />
 
-                <!-- MDRC Band 1: Sub (20-120 Hz) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -357,7 +355,6 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- MDRC Band 2: Low (120-500 Hz) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -392,7 +389,6 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- MDRC Band 3: Mid (500-2,000 Hz) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -427,7 +423,6 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- MDRC Band 4: High (2,000-8,000 Hz) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -462,7 +457,6 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- MDRC Band 5: Air (8,000-20,000 Hz) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -497,7 +491,6 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- ==================== NUEVO BLOQUE 100% ATS2835P QFN68 ==================== -->
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
@@ -513,7 +506,6 @@
                     android:textColor="@color/aimp_orange"
                     android:textSize="11sp" />
 
-                <!-- Limiter Threshold -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -572,7 +564,6 @@
                         app:trackTint="@color/aimp_orange_alpha" />
                 </LinearLayout>
 
-                <!-- SoftClipper Drive -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

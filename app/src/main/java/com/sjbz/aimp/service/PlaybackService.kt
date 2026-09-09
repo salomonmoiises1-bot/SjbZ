@@ -15,23 +15,17 @@ import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.sjbz.aimp.MainActivity
-import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.ATS2835PEngine
 import com.sjbz.aimp.audio.AudioChain
 import com.sjbz.aimp.model.Track
 import com.sjbz.aimp.utils.BluetoothDetector
 
-/**
- * Robust Foreground MediaSessionService for SjbZ player.
- * Powered by Media3 ExoPlayer with ATS2835P DSP Audio Chain,
- * CPU WakeLock + C.WAKE_MODE_LOCAL to guarantee seamless playback
- * even when the screen is locked, avoiding OS battery killing & ANR.
- */
 class PlaybackService : MediaSessionService() {
 
     companion object {
@@ -67,10 +61,8 @@ class PlaybackService : MediaSessionService() {
     private var currentTrackIndex = -1
     var isLoopPlaylistEnabled: Boolean = true
 
-    // CPU partial wake lock for zero audio dropouts when phone screen turns off
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // Listener callbacks for UI
     var onTrackChangedListener: ((Track?, Int) -> Unit)? = null
     var onPlaybackStateChangedListener: ((Boolean) -> Unit)? = null
 
@@ -78,7 +70,6 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         instance = this
 
-        // 1. Setup Partial WakeLock for zero-dropout lockscreen playback
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SjbZ:PlaybackWakeLock").apply {
@@ -88,31 +79,27 @@ class PlaybackService : MediaSessionService() {
             e.printStackTrace()
         }
 
-        // 2. Initialize ATS2835P Audio Engine
         atsEngine = ATS2835PEngine(this)
         audioChain = AudioChain(this, atsEngine)
 
-        // 3. Initialize Bluetooth Detector
         bluetoothDetector = BluetoothDetector(this) { connected ->
             atsEngine.onBluetoothStatusChanged(connected)
         }
         bluetoothDetector.start()
 
-        // 4. Configure ExoPlayer with Hi-Res Music AudioAttributes & WAKE_MODE_LOCAL
         val audioAttributes = AudioAttributes.Builder()
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .setUsage(C.USAGE_MEDIA)
-            .build()
+           .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+           .setUsage(C.USAGE_MEDIA)
+           .build()
 
         player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, true) // handles audio focus automatically
-            .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_LOCAL) // keeps CPU awake while playing
-            .build()
+           .setAudioAttributes(audioAttributes, true)
+           .setHandleAudioBecomingNoisy(true)
+           .setWakeMode(C.WAKE_MODE_LOCAL)
+           .build()
 
         audioChain.bindPlayer(player)
 
-        // 5. Attach audio listeners
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
@@ -137,13 +124,11 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
-        // Attach DSP to ExoPlayer audio session
         val sessionId = player.audioSessionId
-        if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+        if (sessionId!= C.AUDIO_SESSION_ID_UNSET) {
             audioChain.attachAudioSession(sessionId)
         }
 
-        // 6. Build MediaSession for background & lockscreen playback
         val sessionActivityPendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -152,10 +137,9 @@ class PlaybackService : MediaSessionService() {
         )
 
         mediaSession = MediaSession.Builder(this, player)
-            .setSessionActivity(sessionActivityPendingIntent)
-            .build()
+           .setSessionActivity(sessionActivityPendingIntent)
+           .build()
 
-        // 7. Notification Channel & Initial Foreground Notification
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
     }
@@ -171,11 +155,17 @@ class PlaybackService : MediaSessionService() {
         return START_STICKY
     }
 
+    // FIX: metodo que llama EqActivity para el speed
+    fun setPlaybackSpeed(factor: Float) {
+        try {
+            player.playbackParameters = PlaybackParameters(factor)
+        } catch (_: Exception) {}
+    }
+
     private fun handleWakeLockState(isPlaying: Boolean) {
         try {
             if (isPlaying) {
                 if (wakeLock?.isHeld == false) {
-                    // Safe 2-hour timeout per track to prevent infinite drain
                     wakeLock?.acquire(2 * 60 * 60 * 1000L)
                 }
             } else {
@@ -195,7 +185,7 @@ class PlaybackService : MediaSessionService() {
                 "SjbZ Reproducción de Audio",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Reproducción continua de música en segundo plano y pantalla bloqueada con DSP ATS2835P"
+                description = "Reproducción continua de música en segundo plano"
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
@@ -206,8 +196,8 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildNotification(isPlaying: Boolean): Notification {
         val currentTrack = getCurrentTrack()
-        val title = currentTrack?.title ?: "SjbZ Reproductor Hi-Res"
-        val artist = currentTrack?.artist ?: "ATS-2835P DSP Audio Engine"
+        val title = currentTrack?.title?: "SjbZ Reproductor Hi-Res"
+        val artist = currentTrack?.artist?: "ATS-2835P DSP Audio Engine"
 
         val openActivityIntent = PendingIntent.getActivity(
             this,
@@ -217,51 +207,48 @@ class PlaybackService : MediaSessionService() {
         )
 
         val prevIntent = PendingIntent.getService(
-            this,
-            1,
+            this, 1,
             Intent(this, PlaybackService::class.java).apply { action = ACTION_PREV },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val toggleIntent = PendingIntent.getService(
-            this,
-            2,
+            this, 2,
             Intent(this, PlaybackService::class.java).apply { action = ACTION_TOGGLE },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val nextIntent = PendingIntent.getService(
-            this,
-            3,
+            this, 3,
             Intent(this, PlaybackService::class.java).apply { action = ACTION_NEXT },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val stopIntent = PendingIntent.getService(
-            this,
-            4,
+            this, 4,
             Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+        // FIX: usar iconos de sistema, no R.drawable inexistentes
+        val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(artist)
-            .setSubText(if (atsEngine.isBluetoothConnected) "ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentIntent(openActivityIntent)
-            .setOngoing(isPlaying)
-            .setOnlyAlertOnce(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .addAction(R.drawable.ic_previous, "Anterior", prevIntent)
-            .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-            .addAction(R.drawable.ic_next, "Siguiente", nextIntent)
-            .addAction(R.drawable.ic_stop, "Detener", stopIntent)
-            .build()
+           .setContentTitle(title)
+           .setContentText(artist)
+           .setSubText(if (atsEngine.isBluetoothConnected) "ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
+           .setSmallIcon(android.R.drawable.sym_def_app_icon)
+           .setContentIntent(openActivityIntent)
+           .setOngoing(isPlaying)
+           .setOnlyAlertOnce(true)
+           .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+           .setPriority(NotificationCompat.PRIORITY_LOW)
+           .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+           .addAction(android.R.drawable.ic_media_previous, "Anterior", prevIntent)
+           .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+           .addAction(android.R.drawable.ic_media_next, "Siguiente", nextIntent)
+           .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Detener", stopIntent)
+           .build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -291,9 +278,6 @@ class PlaybackService : MediaSessionService() {
         return binder
     }
 
-    /**
-     * Updates the active playlist queue.
-     */
     fun setPlaylist(tracks: List<Track>, startIndex: Int = 0, startPlaying: Boolean = true) {
         playlist.clear()
         playlist.addAll(tracks)
@@ -301,9 +285,9 @@ class PlaybackService : MediaSessionService() {
         player.clearMediaItems()
         for (track in playlist) {
             val mediaItem = MediaItem.Builder()
-                .setUri(track.uri)
-                .setMediaId(track.id.toString())
-                .build()
+               .setUri(track.uri)
+               .setMediaId(track.id.toString())
+               .build()
             player.addMediaItem(mediaItem)
         }
         player.prepare()
@@ -314,7 +298,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun playTrackAtIndex(index: Int, startPlaying: Boolean = true) {
-        if (index !in playlist.indices) return
+        if (index!in playlist.indices) return
         currentTrackIndex = index
 
         player.seekToDefaultPosition(index)
@@ -323,9 +307,8 @@ class PlaybackService : MediaSessionService() {
             audioChain.startFadeIn()
         }
 
-        // Ensure DSP is attached to active session
         val sessionId = player.audioSessionId
-        if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+        if (sessionId!= C.AUDIO_SESSION_ID_UNSET) {
             audioChain.attachAudioSession(sessionId)
         }
 
@@ -354,7 +337,6 @@ class PlaybackService : MediaSessionService() {
         if (nextIndex < playlist.size) {
             playTrackAtIndex(nextIndex, true)
         } else if (isLoopPlaylistEnabled) {
-            // Auto-loop playlist without pause
             playTrackAtIndex(0, true)
         }
     }
@@ -379,7 +361,6 @@ class PlaybackService : MediaSessionService() {
         if (nextIndex < playlist.size) {
             playTrackAtIndex(nextIndex, true)
         } else if (isLoopPlaylistEnabled) {
-            // Seamless auto-loop to track 0
             playTrackAtIndex(0, true)
         }
     }
@@ -389,7 +370,6 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun getPlaylist(): List<Track> = playlist
-
     fun getCurrentIndex(): Int = currentTrackIndex
 
     override fun onDestroy() {

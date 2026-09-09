@@ -23,7 +23,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SjbZ"
-        tools:targetApi="34" >
+        tools:targetApi="34">
 
         <!-- Main SjbZ Player Activity -->
         <activity
@@ -47,6 +47,7 @@
         <!-- Media3 Playback Service -->
         <service
             android:name=".service.PlaybackService"
+            android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>

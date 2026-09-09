@@ -345,7 +345,7 @@ class EqActivity : AppCompatActivity() {
                 }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
-        })
+        }
     }
 
     private fun refreshPresetsSpinner(selectPresetName: String? = null) {

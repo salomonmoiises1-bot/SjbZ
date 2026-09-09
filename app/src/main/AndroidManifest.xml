@@ -23,7 +23,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SjbZ"
-        tools:targetApi="34">
+        tools:targetApi="34" >
 
         <!-- Main SjbZ Player Activity -->
         <activity

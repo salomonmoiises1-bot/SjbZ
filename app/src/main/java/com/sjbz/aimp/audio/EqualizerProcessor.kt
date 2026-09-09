@@ -4,10 +4,6 @@ import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.model.MDRCSettings
 import java.util.Arrays
 
-/**
- * 32-band ISO precision audio equalizer for SjbZ.
- * Center frequencies from 20 Hz to 20,000 Hz with Preamp control (-12dB to +12dB).
- */
 class EqualizerProcessor {
 
     companion object {

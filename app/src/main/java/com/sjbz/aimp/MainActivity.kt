@@ -45,6 +45,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStreamWriter
 
+/**
+ * Main Activity for SjbZ Audio Player.
+ * AIMP Dark Orange and Pitch-Black UI with:
+ * - Top Toolbar (Search, SjbZ logo, EQ button)
+ * - Navigation Drawer (Playlists, Favorites, History, Folders, M3U8 Export/Import)
+ * - Central Playlist RecyclerView (Drag & drop reordering, Swipe to delete)
+ * - Bottom AIMP Deck (Stereo VU Meters, Waveform peak, elapsed/remaining time, controls)
+ * - Automatic playlist looping and MediaStore scanner for Hi-Res audio.
+ */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var database: AppDatabase
@@ -101,7 +110,7 @@ class MainActivity : AppCompatActivity() {
     private val uiUpdateRunnable = object : Runnable {
         override fun run() {
             updatePlaybackProgressAndVUMeters()
-            uiHandler.postDelayed(this, 100)
+            uiHandler.postDelayed(this, 100) // 10 FPS smooth VU meter and seekbar update
         }
     }
 
@@ -243,7 +252,7 @@ class MainActivity : AppCompatActivity() {
                 toggleFavorite(track, position)
             },
             onTrackMoved = { from, to ->
-                playbackService?.setPlaylist(currentDisplayList, playbackService?.getCurrentTrackIndex() ?: 0, startPlaying = false)
+                playbackService?.setPlaylist(currentDisplayList, playbackService?.getCurrentIndex() ?: 0, startPlaying = false)
             },
             onTrackDeleted = { track, position ->
                 lifecycleScope.launch(Dispatchers.IO) {
@@ -256,6 +265,7 @@ class MainActivity : AppCompatActivity() {
         rvPlaylist.layoutManager = LinearLayoutManager(this)
         rvPlaylist.adapter = playlistAdapter
 
+        // Attach ItemTouchHelper for drag-and-drop & swipe-to-delete
         playlistAdapter.getItemTouchHelper().attachToRecyclerView(rvPlaylist)
     }
 
@@ -265,7 +275,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnStop.setOnClickListener {
-            playbackService?.stop()
+            playbackService?.stopPlayback()
             btnPlayPause.setImageResource(R.drawable.ic_play)
         }
 
@@ -444,6 +454,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Scans MediaStore for audio files (FLAC, MP3, WAV, APE, OPUS, OGG, M4A).
+     */
     private fun scanAudioStorage() {
         lifecycleScope.launch {
             val scannedTracks = withContext(Dispatchers.IO) {
@@ -506,6 +519,7 @@ class MainActivity : AppCompatActivity() {
                     cursor?.close()
                 }
 
+                // If device has no local music files in emulator, seed high-fidelity demo items
                 if (tracks.isEmpty()) {
                     tracks.addAll(createDemoTracks())
                 }
@@ -633,6 +647,7 @@ class MainActivity : AppCompatActivity() {
             tvRemainingTime.text = "-" + formatTime((duration - position).coerceAtLeast(0L))
         }
 
+        // Update AIMP Stereo VU Meters in real time
         val fraction = if (duration > 0) position.toFloat() / duration else 0f
         srv.audioChain.updateVUMeters(isPlaying, fraction)
 

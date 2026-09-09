@@ -32,6 +32,7 @@ class PlaybackService : Service() {
     lateinit var bluetoothDetector: BluetoothDetector
 
     var isLoopPlaylistEnabled: Boolean = true
+
     private var playlist: List<Track> = emptyList()
     private var currentTrackIndex = 0
 
@@ -50,32 +51,45 @@ class PlaybackService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        // No hacemos stopSelf() - sigue sonando al cerrar ventana
     }
 
     private fun startAsForeground() {
         val channelId = "sjbz_playback"
         val channel = NotificationChannel(channelId, "Reproducción", NotificationManager.IMPORTANCE_LOW)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
+
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("SjbZ")
             .setContentText(getCurrentTrack()?.title ?: "Reproduciendo...")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setOngoing(true)
             .build()
+
         startForeground(1, notification)
     }
 
-    fun initPlayer(exoPlayer: ExoPlayer, chain: AudioChain, ats: ATS2835PEngine, btDetector: BluetoothDetector) {
+    fun initPlayer(
+        exoPlayer: ExoPlayer,
+        chain: AudioChain,
+        ats: ATS2835PEngine,
+        btDetector: BluetoothDetector
+    ) {
         player = exoPlayer
         audioChain = chain
         atsEngine = ats
         bluetoothDetector = btDetector
+
         player.repeatMode = Player.REPEAT_MODE_ALL
         player.shuffleModeEnabled = false
+
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 currentTrackIndex = player.currentMediaItemIndex.coerceAtLeast(0)
-                getCurrentTrack()?.let { onTrackChangedListener?.invoke(it, currentTrackIndex) }
+                getCurrentTrack()?.let { track ->
+                    onTrackChangedListener?.invoke(track, currentTrackIndex)
+                }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 onPlaybackStateChangedListener?.invoke(isPlaying)
@@ -83,24 +97,33 @@ class PlaybackService : Service() {
         })
     }
 
-    // FIX PARA MainActivity:160 y 249
-    fun setPlaylist(tracks: List<Track>) = setPlaylist(tracks, true)
+    // Overloads base
+    fun setPlaylist(tracks: List<Track>) {
+        setPlaylist(tracks, true)
+    }
+
     fun setPlaylist(tracks: List<Track>, startPlaying: Boolean) {
         playlist = tracks
-        player.setMediaItems(tracks.map { MediaItem.fromUri(it.path) })
+        val mediaItems = tracks.map { MediaItem.fromUri(it.path) }
+        player.setMediaItems(mediaItems)
         player.prepare()
         if (startPlaying) player.play()
     }
+
+    // FIX para MainActivity:161, 249, 540 que pasa Int
     fun setPlaylist(tracks: List<Track>, startIndex: Int) {
         playlist = tracks
-        player.setMediaItems(tracks.map { MediaItem.fromUri(it.path) })
+        val mediaItems = tracks.map { MediaItem.fromUri(it.path) }
+        player.setMediaItems(mediaItems)
         player.prepare()
         player.play()
         if (tracks.isNotEmpty()) playTrackAtIndex(startIndex.coerceIn(tracks.indices), true)
     }
+
     fun setPlaylist(tracks: List<Track>, startIndex: Int, startPlaying: Boolean) {
         playlist = tracks
-        player.setMediaItems(tracks.map { MediaItem.fromUri(it.path) })
+        val mediaItems = tracks.map { MediaItem.fromUri(it.path) }
+        player.setMediaItems(mediaItems)
         player.prepare()
         if (startPlaying) player.play()
         if (tracks.isNotEmpty()) playTrackAtIndex(startIndex.coerceIn(tracks.indices), startPlaying)
@@ -110,7 +133,7 @@ class PlaybackService : Service() {
     fun getCurrentIndex(): Int = currentTrackIndex
     fun getCurrentTrack(): Track? = playlist.getOrNull(currentTrackIndex)
 
-    // FIX PARA EqActivity:26
+    // FIX para EqActivity.kt:26
     fun setPlaybackSpeed(speed: Float) {
         player.playbackParameters = PlaybackParameters(speed)
     }
@@ -120,13 +143,33 @@ class PlaybackService : Service() {
         currentTrackIndex = index
         player.seekTo(index, 0)
         if (startPlaying) player.play()
-        getCurrentTrack()?.let { onTrackChangedListener?.invoke(it, index) }
+        getCurrentTrack()?.let { track ->
+            onTrackChangedListener?.invoke(track, index)
+        }
     }
 
-    fun togglePlayPause() { if (player.isPlaying) player.pause() else player.play() }
-    fun playNext() { if (playlist.isNotEmpty()) playTrackAtIndex((currentTrackIndex + 1) % playlist.size, true) }
-    fun playPrevious() { if (playlist.isNotEmpty()) playTrackAtIndex(if (currentTrackIndex - 1 < 0) playlist.size - 1 else currentTrackIndex - 1, true) }
+    fun togglePlayPause() {
+        if (player.isPlaying) player.pause() else player.play()
+    }
 
-    override fun onBind(intent: Intent?): IBinder = binder
-    override fun onDestroy() { super.onDestroy(); instance = null }
+    fun playNext() {
+        if (playlist.isEmpty()) return
+        val next = (currentTrackIndex + 1) % playlist.size
+        playTrackAtIndex(next, true)
+    }
+
+    fun playPrevious() {
+        if (playlist.isEmpty()) return
+        val prev = if (currentTrackIndex - 1 < 0) playlist.size - 1 else currentTrackIndex - 1
+        playTrackAtIndex(prev, true)
+    }
+
+    override fun onBind(intent: Intent?): IBinder {
+        return binder
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        instance = null
+    }
 }

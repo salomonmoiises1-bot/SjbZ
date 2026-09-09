@@ -21,6 +21,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
 import com.sjbz.aimp.audio.EqualizerProcessor
+import com.sjbz.aimp.audio.LimiterProcessor
 import com.sjbz.aimp.audio.MDRCProcessor
 import com.sjbz.aimp.audio.PresetManager
 import com.sjbz.aimp.model.EqPreset
@@ -30,13 +31,14 @@ import com.sjbz.aimp.service.PlaybackService
  * 32-Band Equalizer Activity for SjbZ.
  * Displays 32 precision frequency faders, Preamp (-12dB to +12dB),
  * ATS2835P 5-band MDRC compression gain controls (-12dB to +12dB),
- * and preset management with.sjbz file support.
+ * Limiter -0.3dBFS + SoftClipper ATS2835P
  */
 class EqActivity : AppCompatActivity() {
 
     private lateinit var presetManager: PresetManager
     private lateinit var equalizerProcessor: EqualizerProcessor
     private lateinit var mdrcProcessor: MDRCProcessor
+    private lateinit var limiterProcessor: LimiterProcessor
 
     private lateinit var switchEqEnabled: SwitchCompat
     private lateinit var switchMdrcEnabled: SwitchCompat
@@ -60,6 +62,14 @@ class EqActivity : AppCompatActivity() {
     private lateinit var tvMdrcGainHigh: TextView
     private lateinit var sbMdrcGainAir: SeekBar
     private lateinit var tvMdrcGainAir: TextView
+
+    // ATS2835P LIMITER & SOFTCLIPPER
+    private lateinit var sbLimiterThresh: SeekBar
+    private lateinit var tvLimiterThresh: TextView
+    private lateinit var switchLimiter: SwitchCompat
+    private lateinit var sbSoftClip: SeekBar
+    private lateinit var tvSoftClip: TextView
+    private lateinit var switchSoftClip: SwitchCompat
 
     private lateinit var btnSavePreset: Button
     private lateinit var btnDeletePreset: Button
@@ -106,12 +116,14 @@ class EqActivity : AppCompatActivity() {
         val liveEngine = PlaybackService.instance?.atsEngine
         equalizerProcessor = liveEngine?.equalizer?: EqualizerProcessor()
         mdrcProcessor = liveEngine?.mdrc?: MDRCProcessor()
+        limiterProcessor = liveEngine?.limiter?: LimiterProcessor()
 
         initViews()
         setupToolbar()
         setup32BandSliders()
         setupPreampAndControls()
         setupMdrcGainControls()
+        setupLimiterControls()
         setupPresetsSpinner()
         setupButtons()
     }
@@ -147,6 +159,14 @@ class EqActivity : AppCompatActivity() {
         sbMdrcGainAir = findViewById(R.id.sbMdrcGainAir)
         tvMdrcGainAir = findViewById(R.id.tvMdrcGainAir)
 
+        // Limiter & SoftClipper Views - NUEVO 100% ATS2835P
+        sbLimiterThresh = findViewById(R.id.sbLimiterThresh)
+        tvLimiterThresh = findViewById(R.id.tvLimiterThresh)
+        switchLimiter = findViewById(R.id.switchLimiter)
+        sbSoftClip = findViewById(R.id.sbSoftClip)
+        tvSoftClip = findViewById(R.id.tvSoftClip)
+        switchSoftClip = findViewById(R.id.switchSoftClip)
+
         btnSavePreset = findViewById(R.id.btnSavePreset)
         btnDeletePreset = findViewById(R.id.btnDeletePreset)
         btnExportSjbz = findViewById(R.id.btnExportSjbz)
@@ -167,9 +187,6 @@ class EqActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Builds the 32 vertical ISO frequency sliders dynamically.
-     */
     private fun setup32BandSliders() {
         container32Bands.removeAllViews()
         bandSeekBars.clear()
@@ -189,7 +206,6 @@ class EqActivity : AppCompatActivity() {
                 setPadding(4, 8, 4, 8)
             }
 
-            // Top: Gain value label (e.g. +3.5 dB)
             val tvGain = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -203,7 +219,6 @@ class EqActivity : AppCompatActivity() {
             bandCol.addView(tvGain)
             bandValueLabels.add(tvGain)
 
-            // Middle: Vertical fader (rotated SeekBar container)
             val faderContainer = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -219,7 +234,7 @@ class EqActivity : AppCompatActivity() {
                     (resources.displayMetrics.density * 36).toInt()
                 )
                 rotation = 270f
-                max = 240 // -12.0 dB to +12.0 dB (120 is 0 dB)
+                max = 240
                 val currentG = equalizerProcessor.getBandGain(i)
                 progress = (currentG * 10.0f + 120).toInt().coerceIn(0, 240)
                 progressTintList = ColorStateList.valueOf(Color.parseColor("#FF7700"))
@@ -245,7 +260,6 @@ class EqActivity : AppCompatActivity() {
             bandCol.addView(faderContainer)
             bandSeekBars.add(seekBar)
 
-            // Bottom: Frequency Label (e.g. "31.5", "1k", "20k")
             val tvFreq = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -263,7 +277,6 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun setupPreampAndControls() {
-        // Preamp: -12.0dB to +12.0dB (max 240, progress 120 = 0dB)
         seekBarPreamp.progress = (equalizerProcessor.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
         tvPreampValue.text = String.format("%+.1f dB", equalizerProcessor.preampDb)
 
@@ -280,21 +293,18 @@ class EqActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // Speed / Pitch: 0.5x to 2.0x (max 150, 0 = 0.5x, 50 = 1.0x, 150 = 2.0x)
         seekBarSpeed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val factor = 0.5f + (progress / 100.0f)
                 tvSpeedValue.text = String.format("%.2fx", factor)
                 if (fromUser) {
                     PlaybackService.instance?.setPlaybackSpeed(factor)
-                    PlaybackService.instance?.audioChain?.setPlaybackParameters(factor, factor)
                 }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // Crossfade: 0 to 10 seconds
         seekBarCrossfade.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvCrossfadeValue.text = "${progress}s"
@@ -307,10 +317,6 @@ class EqActivity : AppCompatActivity() {
         })
     }
 
-    /**
-     * Sets up the 5 MDRC compression bands gain controls (-12dB to +12dB).
-     * Bands: Sub, Low, Mid, High, Air.
-     */
     private fun setupMdrcGainControls() {
         mdrcSeekBars.clear()
         mdrcValueLabels.clear()
@@ -360,6 +366,65 @@ class EqActivity : AppCompatActivity() {
         }
     }
 
+    // NUEVO 100% ATS2835P QFN68 - LIMITER & SOFTCLIPPER
+    private fun setupLimiterControls() {
+        // Threshold: -12.0 to 0.0 dBFS (max 120, progress 0 = -12, 120 = 0)
+        // Default -0.3 dBFS = progress 117
+        val threshProgress = ((limiterProcessor.thresholdDb + 12f) * 10).toInt().coerceIn(0, 120)
+        sbLimiterThresh.progress = threshProgress
+        tvLimiterThresh.text = String.format("%.1f dBFS", limiterProcessor.thresholdDb)
+
+        sbLimiterThresh.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                val db = (progress / 10f) - 12f
+                tvLimiterThresh.text = String.format("%.1f dBFS", db)
+                if (fromUser) {
+                    limiterProcessor.thresholdDb = db
+                    PlaybackService.instance?.atsEngine?.updateLimiter()
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        switchLimiter.isChecked = limiterProcessor.isEnabled
+        switchLimiter.setOnCheckedChangeListener { _, isChecked ->
+            limiterProcessor.isEnabled = isChecked
+            sbLimiterThresh.isEnabled = isChecked &&!limiterProcessor.isBypassedForBluetooth
+            PlaybackService.instance?.atsEngine?.updateLimiter()
+        }
+
+        // SoftClip Drive 0% to 100%
+        sbSoftClip.progress = (limiterProcessor.softClipDrive * 100).toInt().coerceIn(0, 100)
+        tvSoftClip.text = "${(limiterProcessor.softClipDrive * 100).toInt()}%"
+
+        sbSoftClip.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                tvSoftClip.text = "$progress%"
+                if (fromUser) {
+                    limiterProcessor.softClipDrive = progress / 100f
+                    PlaybackService.instance?.atsEngine?.updateLimiter()
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        switchSoftClip.isChecked = limiterProcessor.softClipEnabled
+        switchSoftClip.setOnCheckedChangeListener { _, isChecked ->
+            limiterProcessor.softClipEnabled = isChecked
+            sbSoftClip.isEnabled = isChecked
+            PlaybackService.instance?.atsEngine?.updateLimiter()
+        }
+
+        // Handle Bluetooth bypass state
+        if (limiterProcessor.isBypassedForBluetooth) {
+            sbLimiterThresh.isEnabled = false
+            switchLimiter.isEnabled = false
+            tvLimiterThresh.text = "BYPASS BT"
+        }
+    }
+
     private fun setupPresetsSpinner() {
         refreshPresetsSpinner(presetManager.getActivePresetName())
 
@@ -395,12 +460,10 @@ class EqActivity : AppCompatActivity() {
         try {
             equalizerProcessor.loadFromPreset(preset)
 
-            // Update Preamp
             val preampProgress = (preset.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
             seekBarPreamp.progress = preampProgress
             tvPreampValue.text = String.format("%+.1f dB", preset.preampDb)
 
-            // Update 32 Band Sliders
             val gains = preset.bandGains
             for (i in 0 until minOf(gains.size, bandSeekBars.size)) {
                 val g = gains[i]
@@ -409,7 +472,6 @@ class EqActivity : AppCompatActivity() {
                 bandValueLabels[i].text = String.format("%+.1f", g)
             }
 
-            // Update MDRC 5 Bands Gain Controls
             val mdrcSettings = preset.mdrcSettings
             mdrcProcessor.loadFromSettings(mdrcSettings)
             switchMdrcEnabled.isChecked = mdrcSettings.enabled
@@ -421,18 +483,16 @@ class EqActivity : AppCompatActivity() {
                 mdrcValueLabels[i].text = String.format("%+.1f dB", bandCfg.gainDb)
             }
 
-            // Push changes to live audio chain
             PlaybackService.instance?.atsEngine?.updateEqualizer()
             PlaybackService.instance?.atsEngine?.updateMDRC()
+            PlaybackService.instance?.atsEngine?.updateLimiter()
         } finally {
             isUpdatingUiFromPreset = false
         }
     }
 
     private fun setupButtons() {
-        btnSavePreset.setOnClickListener {
-            showSavePresetDialog()
-        }
+        btnSavePreset.setOnClickListener { showSavePresetDialog() }
 
         btnDeletePreset.setOnClickListener {
             val selected = spinnerPresets.selectedItem?.toString()?: return@setOnClickListener
@@ -440,17 +500,16 @@ class EqActivity : AppCompatActivity() {
                 Toast.makeText(this, "No se pueden borrar presets de fábrica", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-
             AlertDialog.Builder(this)
-               .setTitle("Borrar Preset")
-               .setMessage("¿Deseas eliminar el preset '$selected'?")
-               .setPositiveButton("Borrar") { _, _ ->
+              .setTitle("Borrar Preset")
+              .setMessage("¿Deseas eliminar el preset '$selected'?")
+              .setPositiveButton("Borrar") { _, _ ->
                     presetManager.deletePreset(selected)
                     refreshPresetsSpinner("ATS-2835P Master")
                     Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show()
                 }
-               .setNegativeButton("Cancelar", null)
-               .show()
+              .setNegativeButton("Cancelar", null)
+              .show()
         }
 
         btnExportSjbz.setOnClickListener {
@@ -469,11 +528,10 @@ class EqActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
         }
-
         AlertDialog.Builder(this)
-           .setTitle("Guardar Preset")
-           .setView(input)
-           .setPositiveButton("Guardar") { _, _ ->
+          .setTitle("Guardar Preset")
+          .setView(input)
+          .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
                     val currentPreset = equalizerProcessor.toEqPreset(
@@ -486,7 +544,7 @@ class EqActivity : AppCompatActivity() {
                     Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show()
                 }
             }
-           .setNegativeButton("Cancelar", null)
-           .show()
+          .setNegativeButton("Cancelar", null)
+          .show()
     }
 }

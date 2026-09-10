@@ -1,7 +1,6 @@
 package com.sjbz.aimp
 
 import android.content.Context
-import android.media.audiofx.Equalizer
 
 class GlobalAudioSessionManager private constructor(private val context: Context) {
     companion object {
@@ -12,7 +11,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             }
         }
     }
-    fun syncAudioEffects(equalizer: Equalizer?, engine: Any?) {
-        // El sync real lo hace AudioChain.attachAudioSession() en tu PlaybackService original de 322 líneas
+    fun syncAudioEffects(equalizer: Any?, engine: Any?) {
     }
 }

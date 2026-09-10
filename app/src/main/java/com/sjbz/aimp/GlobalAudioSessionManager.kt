@@ -13,6 +13,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         }
     }
     fun syncAudioEffects(equalizer: Equalizer?, engine: Any?) {
-        // El sync real lo hace AudioChain.attachAudioSession() en tu código original
+        // El sync real lo hace AudioChain.attachAudioSession() en tu PlaybackService original de 322 líneas
     }
 }

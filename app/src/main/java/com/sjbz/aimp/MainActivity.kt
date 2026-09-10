@@ -53,6 +53,7 @@ import java.io.OutputStreamWriter
  * - Central Playlist RecyclerView (Drag & drop reordering, Swipe to delete)
  * - Bottom AIMP Deck (Stereo VU Meters, Waveform peak, elapsed/remaining time, controls)
  * - Automatic playlist looping and MediaStore scanner for Hi-Res audio.
+ * FIX 184 - Anti-cuelgue al explorar + fix visual <unknown>
  */
 class MainActivity : AppCompatActivity() {
 
@@ -110,7 +111,7 @@ class MainActivity : AppCompatActivity() {
     private val uiUpdateRunnable = object : Runnable {
         override fun run() {
             updatePlaybackProgressAndVUMeters()
-            uiHandler.postDelayed(this, 100) // 10 FPS smooth VU meter and seekbar update
+            uiHandler.postDelayed(this, 120)
         }
     }
 
@@ -263,6 +264,9 @@ class MainActivity : AppCompatActivity() {
         )
 
         rvPlaylist.layoutManager = LinearLayoutManager(this)
+        // FIX 184 - Mejora rendimiento con 716 tracks
+        rvPlaylist.setHasFixedSize(true)
+        rvPlaylist.setItemViewCacheSize(20)
         rvPlaylist.adapter = playlistAdapter
 
         // Attach ItemTouchHelper for drag-and-drop & swipe-to-delete
@@ -295,9 +299,15 @@ class MainActivity : AppCompatActivity() {
                 playlistAdapter.updateData(currentDisplayList)
                 playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
             } else {
+                // FIX: vuelve en bloques para no colgar
                 currentDisplayList.clear()
-                currentDisplayList.addAll(allTracksList)
+                currentDisplayList.addAll(allTracksList.take(60))
                 playlistAdapter.updateData(currentDisplayList)
+                rvPlaylist.postDelayed({
+                    currentDisplayList.clear()
+                    currentDisplayList.addAll(allTracksList)
+                    playlistAdapter.updateData(currentDisplayList)
+                }, 200)
             }
         }
 
@@ -358,7 +368,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.drawerItemFolders).setOnClickListener {
-            Toast.makeText(this, "Explorador de carpetas activo", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Explorador de carpetas activo - cargando por bloques", Toast.LENGTH_SHORT).show()
             drawerLayout.closeDrawers()
         }
 
@@ -384,19 +394,38 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    /**
+     * FIX 184 - Filtro de busqueda sin ANR
+     * Antes: filtraba en MainThread con 716 -> cuelgue al explorar
+     * Ahora: filtra en Dispatchers.Default y pagina de 80 en 80
+     */
     private fun filterTracksByQuery(query: String) {
-        if (query.isEmpty()) {
-            currentDisplayList.clear()
-            currentDisplayList.addAll(allTracksList)
-        } else {
-            val filtered = allTracksList.filter {
-                it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true)
+        lifecycleScope.launch(Dispatchers.Default) {
+            val filtered = if (query.isEmpty()) {
+                allTracksList
+            } else {
+                allTracksList.filter {
+                    it.title.contains(query, ignoreCase = true) || it.artist.contains(query, ignoreCase = true)
+                }
             }
-            currentDisplayList.clear()
-            currentDisplayList.addAll(filtered)
+
+            withContext(Dispatchers.Main) {
+                currentDisplayList.clear()
+                val batch = if (filtered.size > 80) filtered.take(80) else filtered
+                currentDisplayList.addAll(batch)
+                playlistAdapter.updateData(currentDisplayList)
+                updateTrackCount()
+
+                if (filtered.size > 80) {
+                    rvPlaylist.postDelayed({
+                        currentDisplayList.clear()
+                        currentDisplayList.addAll(filtered)
+                        playlistAdapter.updateData(currentDisplayList)
+                        updateTrackCount()
+                    }, 300)
+                }
+            }
         }
-        playlistAdapter.updateData(currentDisplayList)
-        updateTrackCount()
     }
 
     private fun filterTracks(filter: String) {
@@ -406,10 +435,21 @@ class MainActivity : AppCompatActivity() {
                 "history" -> database.trackDao().getHistoryTracks()
                 else -> database.trackDao().getAllTracks()
             }
+            // FIX 184 - Carga paginada tambien en filtros de drawer
             currentDisplayList.clear()
-            currentDisplayList.addAll(list)
+            val first = if (list.size > 60) list.take(60) else list
+            currentDisplayList.addAll(first)
             playlistAdapter.updateData(currentDisplayList)
             updateTrackCount()
+
+            if (list.size > 60) {
+                rvPlaylist.postDelayed({
+                    currentDisplayList.clear()
+                    currentDisplayList.addAll(list)
+                    playlistAdapter.updateData(currentDisplayList)
+                    updateTrackCount()
+                }, 300)
+            }
         }
     }
 
@@ -457,6 +497,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Scans MediaStore for audio files (FLAC, MP3, WAV, APE, OPUS, OGG, M4A).
      * FIX 716 TRACKS: carga progresiva para evitar ANR.
+     * FIX VISUAL: limpia <unknown> para evitar glitch verde
      */
     private fun scanAudioStorage() {
         lifecycleScope.launch {
@@ -487,11 +528,22 @@ class MainActivity : AppCompatActivity() {
                         var order = 0
                         while (c.moveToNext()) {
                             val id = c.getLong(idCol)
-                            val title = c.getString(titleCol) ?: "Audio Track"
-                            val artist = c.getString(artistCol) ?: "Unknown Artist"
+                            var rawTitle = c.getString(titleCol) ?: ""
+                            var rawArtist = c.getString(artistCol) ?: ""
                             val album = c.getString(albumCol) ?: "Unknown Album"
                             val duration = c.getLong(durationCol)
                             val path = c.getString(dataCol) ?: ""
+
+                            // FIX 183 VISUAL - Limpia <unknown> que genera pantalla verde
+                            val fileName = path.substringAfterLast("/").substringBeforeLast(".")
+                            val title = when {
+                                rawTitle.isBlank() || rawTitle.equals("<unknown>", ignoreCase = true) || rawTitle.equals("unknown", ignoreCase = true) -> fileName.ifBlank { "Audio Track ${order + 1}" }
+                                else -> rawTitle
+                            }
+                            val artist = when {
+                                rawArtist.isBlank() || rawArtist.equals("<unknown>", ignoreCase = true) || rawArtist.equals("unknown", ignoreCase = true) -> "SjbZ ATS-2835P"
+                                else -> rawArtist
+                            }
 
                             val contentUri = ContentUris.withAppendedId(uri, id).toString()
                             val format = detectFormat(path)
@@ -548,10 +600,14 @@ class MainActivity : AppCompatActivity() {
                     currentDisplayList.addAll(allTracksList)
                     playlistAdapter.updateData(currentDisplayList)
                     updateTrackCount()
-                    playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
+                    if (playbackService?.getPlaylist()?.isEmpty() == true) {
+                        playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
+                    }
                 }, 350)
             } else {
-                playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
+                if (playbackService?.getPlaylist()?.isEmpty() == true) {
+                    playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
+                }
             }
             // --- FIN FIX ---
         }
@@ -629,9 +685,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateTrackCount() {
-        val count = currentDisplayList.size
-        tvPlaylistTrackCount.text = "$count tracks"
-        emptyView.visibility = if (count == 0) View.VISIBLE else View.GONE
+        val count = allTracksList.size
+        val showing = currentDisplayList.size
+        tvPlaylistTrackCount.text = if (count > showing) "$showing / $count tracks" else "$count tracks"
+        emptyView.visibility = if (currentDisplayList.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun updatePlayerUi(track: Track?, index: Int) {

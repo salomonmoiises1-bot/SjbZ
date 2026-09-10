@@ -67,9 +67,6 @@ dependencies {
     implementation("androidx.media3:media3-session:1.4.0")
     implementation("androidx.media3:media3-common:1.4.0")
 
-    // Media Notification - FIX para MediaStyle (camino correcto)
-    implementation("androidx.media:media:1.7.0")
-
     // Room Database
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")

@@ -11,6 +11,13 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * GlobalAudioSessionManager
  * Implements non-root global system audio equalization (Wavelet / Poweramp Equalizer style).
+ *
+ * Intercepts audio sessions broadcasted by external players (Spotify, Deezer, Tidal, Apple Music,
+ * etc.) via android.media.action.OPEN_AUDIO_EFFECT_CONTROL_SESSION and applies the ATS2835P
+ * 32-band ISO curve, MDRC 5-band compression, and hardware limiter.
+ *
+ * Also maintains an active master session on audioSessionId = 0 (Global Output Mix) to process
+ * general Android system audio (YouTube, Chrome, games, video players).
  */
 class GlobalAudioSessionManager private constructor(private val appContext: Context) {
 
@@ -23,8 +30,8 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         private var instance: GlobalAudioSessionManager? = null
 
         fun getInstance(context: Context): GlobalAudioSessionManager {
-            return instance?: synchronized(this) {
-                instance?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
+            return instance ?: synchronized(this) {
+                instance ?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
             }
         }
     }
@@ -35,15 +42,20 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
     var isGlobalModeEnabled: Boolean = prefs.getBoolean(KEY_GLOBAL_MODE_ENABLED, false)
         private set
 
+    // Session ID -> DynamicsProcessingHelper
     val activeSessions = ConcurrentHashMap<Int, DynamicsProcessingHelper>()
+    // Session ID -> Package / App display name
     val sessionAppNames = ConcurrentHashMap<Int, String>()
 
+    // Global Output Mix helper (Session 0)
     private var globalMixHelper: DynamicsProcessingHelper? = null
 
+    // Cached audio parameters for new sessions
     private var cachedEqualizer: EqualizerProcessor = EqualizerProcessor()
     private var cachedMdrc: MDRCProcessor = MDRCProcessor()
     private var cachedLimiter: LimiterProcessor = LimiterProcessor()
 
+    // Listener for UI updates (e.g. EqActivity)
     var onSessionsChangedListener: (() -> Unit)? = null
 
     init {
@@ -56,7 +68,12 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         isGlobalModeEnabled = enabled
         prefs.edit().putBoolean(KEY_GLOBAL_MODE_ENABLED, enabled).apply()
         Log.i(TAG, "Global System Equalizer Mode (Wavelet style) changed: $enabled")
-        if (enabled) startGlobalMix() else stopAllSessions()
+
+        if (enabled) {
+            startGlobalMix()
+        } else {
+            stopAllSessions()
+        }
         notifySessionsChanged()
     }
 
@@ -84,13 +101,19 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
 
     fun onSessionOpened(sessionId: Int, packageName: String?, context: Context = appContext) {
         if (!isGlobalModeEnabled || sessionId < 0) return
+
         try {
-            val appLabel = resolveAppLabel(context, packageName)?: "App externa (ID #$sessionId)"
+            // Determine friendly app label
+            val appLabel = resolveAppLabel(context, packageName) ?: "App externa (ID #$sessionId)"
             sessionAppNames[sessionId] = appLabel
+
+            // If session already exists, release old one
             activeSessions[sessionId]?.release()
+
             val helper = DynamicsProcessingHelper()
             helper.attachToSession(sessionId, cachedEqualizer, cachedMdrc, cachedLimiter)
             activeSessions[sessionId] = helper
+
             Log.i(TAG, "Attached ATS2835P DSP to external session $sessionId for $appLabel")
             notifySessionsChanged()
         } catch (t: Throwable) {
@@ -100,6 +123,7 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
 
     fun onSessionClosed(sessionId: Int) {
         if (sessionId < 0) return
+
         try {
             activeSessions[sessionId]?.release()
             activeSessions.remove(sessionId)
@@ -111,7 +135,6 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         }
     }
 
-    // ORIGINAL - lo respetamos 100%
     fun syncAudioEffects(
         equalizer: EqualizerProcessor,
         mdrc: MDRCProcessor,
@@ -121,6 +144,7 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         cachedMdrc = mdrc
         cachedLimiter = limiter
 
+        // 1. Sync Global Output Mix
         globalMixHelper?.let { helper ->
             try {
                 helper.applyEqualizer(equalizer)
@@ -131,6 +155,7 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
             }
         }
 
+        // 2. Sync all external app sessions
         for ((sessionId, helper) in activeSessions) {
             try {
                 helper.applyEqualizer(equalizer)
@@ -142,19 +167,6 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         }
     }
 
-    // --- PARCHES COMPAT PARA QUE COMPILE EQACTIVITY SIN ROMPER TU ORIGINAL ---
-    // EqActivity a veces pasa Any? o pasa atsEngine, con esto no explota
-    fun syncAudioEffects(equalizer: Any?, mdrc: Any?, limiter: Any?) {
-        if (equalizer is EqualizerProcessor && mdrc is MDRCProcessor && limiter is LimiterProcessor) {
-            syncAudioEffects(equalizer, mdrc, limiter)
-        }
-    }
-
-    fun syncAudioEffects(equalizer: Any?, engine: Any?) {
-        // compat con versiones viejas de EqActivity que mandan 2 params
-        syncAudioEffects(equalizer, engine, null)
-    }
-
     private fun stopAllSessions() {
         try {
             globalMixHelper?.release()
@@ -162,8 +174,11 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         } catch (t: Throwable) {
             Log.w(TAG, "Error releasing globalMixHelper: ${t.message}")
         }
+
         for ((_, helper) in activeSessions) {
-            try { helper.release() } catch (t: Throwable) {
+            try {
+                helper.release()
+            } catch (t: Throwable) {
                 Log.w(TAG, "Error releasing external helper: ${t.message}")
             }
         }
@@ -173,13 +188,20 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
 
     fun getActiveSessionsSummary(): List<String> {
         val summary = mutableListOf<String>()
-        if (!isGlobalModeEnabled) return summary
-        if (globalMixHelper!= null) {
+        if (!isGlobalModeEnabled) {
+            return summary
+        }
+
+        if (globalMixHelper != null) {
             summary.add("● Android System Audio (Sesión 0: YouTube, Chrome, Juegos)")
         }
+
         for ((sessionId, appName) in sessionAppNames) {
-            if (sessionId!= 0) summary.add("● $appName (Sesión #$sessionId)")
+            if (sessionId != 0) {
+                summary.add("● $appName (Sesión #$sessionId)")
+            }
         }
+
         return summary
     }
 
@@ -195,6 +217,8 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
     }
 
     private fun notifySessionsChanged() {
-        mainHandler.post { onSessionsChangedListener?.invoke() }
+        mainHandler.post {
+            onSessionsChangedListener?.invoke()
+        }
     }
 }

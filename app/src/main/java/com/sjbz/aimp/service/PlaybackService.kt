@@ -32,7 +32,7 @@ import com.sjbz.aimp.utils.BluetoothDetector
  * Powered by Media3 ExoPlayer with ATS2835P DSP Audio Chain,
  * CPU WakeLock + C.WAKE_MODE_LOCAL to guarantee seamless playback
  * even when the screen is locked, avoiding OS battery killing & ANR.
- * FIX 184 - setPlaylist sin ANR para 716 tracks + iconos reales 183
+ * FIX 184 - setPlaylist sin ANR para 716 tracks + iconos reales 183 + lockscreen 06:04
  */
 class PlaybackService : MediaSessionService() {
 
@@ -103,15 +103,15 @@ class PlaybackService : MediaSessionService() {
 
         // 4. Configure ExoPlayer with Hi-Res Music AudioAttributes & WAKE_MODE_LOCAL
         val audioAttributes = AudioAttributes.Builder()
-          .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-          .setUsage(C.USAGE_MEDIA)
-          .build()
+         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+         .setUsage(C.USAGE_MEDIA)
+         .build()
 
         player = ExoPlayer.Builder(this)
-          .setAudioAttributes(audioAttributes, true)
-          .setHandleAudioBecomingNoisy(true)
-          .setWakeMode(C.WAKE_MODE_LOCAL)
-          .build()
+         .setAudioAttributes(audioAttributes, true)
+         .setHandleAudioBecomingNoisy(true)
+         .setWakeMode(C.WAKE_MODE_LOCAL)
+         .build()
 
         audioChain.bindPlayer(player)
 
@@ -134,6 +134,16 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // FIX 06:04 - actualiza metadata para lockscreen cuando cambia tema
+                getCurrentTrack()?.let { track ->
+                    val cleanTitle = if (track.title.equals("<unknown>", true) || track.title.isBlank()) track.uri.toString().substringAfterLast("/").substringBeforeLast(".") else track.title
+                    val cleanArtist = if (track.artist.equals("<unknown>", true) || track.artist.isBlank()) "SjbZ • ATS-2835P" else track.artist
+                    player.mediaMetadata = androidx.media3.common.MediaMetadata.Builder()
+                       .setTitle(cleanTitle)
+                       .setArtist(cleanArtist)
+                       .setAlbumTitle(track.album?: "SjbZ Player")
+                       .build()
+                }
                 val currentTrack = getCurrentTrack()
                 updateNotification(player.isPlaying)
                 onTrackChangedListener?.invoke(currentTrack, currentTrackIndex)
@@ -155,8 +165,8 @@ class PlaybackService : MediaSessionService() {
         )
 
         mediaSession = MediaSession.Builder(this, player)
-          .setSessionActivity(sessionActivityPendingIntent)
-          .build()
+         .setSessionActivity(sessionActivityPendingIntent)
+         .build()
 
         // 7. Notification Channel & Initial Foreground Notification
         createNotificationChannel()
@@ -200,6 +210,9 @@ class PlaybackService : MediaSessionService() {
                 description = "Reproducción continua de música en segundo plano y pantalla bloqueada con DSP ATS2835P"
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                enableLights(false)
+                enableVibration(false)
+                setSound(null, null)
             }
             val nm = getSystemService(NotificationManager::class.java)
             nm?.createNotificationChannel(channel)
@@ -208,8 +221,8 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildNotification(isPlaying: Boolean): Notification {
         val currentTrack = getCurrentTrack()
-        val title = currentTrack?.title?: "SjbZ Reproductor Hi-Res"
-        val artist = currentTrack?.artist?: "ATS-2835P DSP Audio Engine"
+        val title = currentTrack?.title?.ifBlank { currentTrack.uri.toString().substringAfterLast("/").substringBeforeLast(".") }?: "SjbZ Reproductor Hi-Res"
+        val artist = currentTrack?.artist?.ifBlank { "ATS-2835P DSP Audio Engine" }?: "ATS-2835P DSP Audio Engine"
 
         val openActivityIntent = PendingIntent.getActivity(
             this,
@@ -248,22 +261,28 @@ class PlaybackService : MediaSessionService() {
 
         val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
 
+        // FIX 06:03 + 06:04 - MediaStyle es lo que hace que aparezcan ICONOS y LOCKSCREEN
+        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
+           .setMediaSession(mediaSession?.sessionCompatToken)
+           .setShowActionsInCompactView(0, 1, 2)
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-          .setContentTitle(title)
-          .setContentText(artist)
-          .setSubText(if (atsEngine.isBluetoothConnected) "ATS-2835P • Bluetooth A2DP" else "ATS-2835P • Hi-Res Direct")
-          .setSmallIcon(R.drawable.ic_music_note)
-          .setContentIntent(openActivityIntent)
-          .setOngoing(isPlaying)
-          .setOnlyAlertOnce(true)
-          .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-          .setPriority(NotificationCompat.PRIORITY_LOW)
-          .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-          .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
-          .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-          .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
-          .addAction(R.drawable.ic_stop, "Detener", stopIntent)
-          .build()
+         .setContentTitle(title)
+         .setContentText(artist)
+         .setSubText(if (atsEngine.isBluetoothConnected) "ATS-2835P • Bluetooth A2DP • 3 m" else "ATS-2835P • Hi-Res Direct • 3 m")
+         .setSmallIcon(R.drawable.ic_music_note)
+         .setContentIntent(openActivityIntent)
+         .setOngoing(isPlaying)
+         .setOnlyAlertOnce(true)
+         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+         .setPriority(NotificationCompat.PRIORITY_LOW)
+         .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+         .setStyle(mediaStyle)
+         .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
+         .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+         .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
+         .addAction(R.drawable.ic_stop, "Detener", stopIntent)
+         .build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -305,9 +324,9 @@ class PlaybackService : MediaSessionService() {
         // FIX: mapea todo a MediaItem primero y setea de golpe - 10x mas rapido
         val mediaItems = tracks.map { track ->
             MediaItem.Builder()
-              .setUri(track.uri)
-              .setMediaId(track.id.toString())
-              .build()
+             .setUri(track.uri)
+             .setMediaId(track.id.toString())
+             .build()
         }
 
         player.setMediaItems(mediaItems)
@@ -337,6 +356,17 @@ class PlaybackService : MediaSessionService() {
         val sessionId = player.audioSessionId
         if (sessionId!= C.AUDIO_SESSION_ID_UNSET) {
             audioChain.attachAudioSession(sessionId)
+        }
+
+        // FIX BLOQUEADA 06:04 - metadata para lockscreen
+        getCurrentTrack()?.let { track ->
+            val cleanTitle = if (track.title.equals("<unknown>", true) || track.title.isBlank()) track.uri.toString().substringAfterLast("/").substringBeforeLast(".") else track.title
+            val cleanArtist = if (track.artist.equals("<unknown>", true) || track.artist.isBlank()) "SjbZ • ATS-2835P" else track.artist
+            player.mediaMetadata = androidx.media3.common.MediaMetadata.Builder()
+               .setTitle(cleanTitle)
+               .setArtist(cleanArtist)
+               .setAlbumTitle(track.album?: "SjbZ Player")
+               .build()
         }
 
         updateNotification(startPlaying)

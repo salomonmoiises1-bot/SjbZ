@@ -2,18 +2,26 @@ package com.sjbz.aimp.audio
 
 import android.content.Context
 import android.util.Log
+import com.sjbz.aimp.model.EqPreset
+
+typealias ATSEngine = ATS2835PEngine
 
 /**
  * Core Audio DSP Engine for SjbZ.
  * Models the Actions Semiconductor ATS2835P audio processing architecture:
- * - Preamp & 32-Band ISO Equalizer
- * - 5-Band Hardware Multi-band Dynamic Range Compression (MDRC)
- * - ATS2835P QFN68 Anti-clipping Limiter (-0.3dB, 1ms attack, 100ms release)
+ * - Preamp & 32-Band ISO Equalizer with calibrated hardware curve (+1.5dB @ 60Hz, +1dB @ 12.5kHz, -0.5dB natural roll-off)
+ * - 5-Band Hardware Multi-band Dynamic Range Compression (MDRC) with ATS2835P datasheet specs
+ * - ATS2835P QFN68 Anti-clipping Limiter (-1.0dB, 1ms attack, 100ms release)
  * - ATS2835P Hardware SoftClipper
  * - Stereo Balance, Pitch & Speed scaling, Crossfade engine
  * - Bluetooth A2DP auto-adaptation (Gentle MDRC mode, limiter bypass)
  */
-class ATS2835PEngine(private val context: Context) {
+class ATS2835PEngine(
+    private val context: Context? = null,
+    var audioSessionId: Int = 0
+) {
+
+    constructor(audioSessionId: Int) : this(null, audioSessionId)
 
     companion object {
         private const val TAG = "ATS2835PEngine"
@@ -27,30 +35,38 @@ class ATS2835PEngine(private val context: Context) {
 
     // DSP Parameters
     var balance: Float = 0.0f // -1.0 (Left) to +1.0 (Right)
-    var pitch: Float = 1.0f  // 0.5x to 2.0x
-    var speed: Float = 1.0f  // 0.5x to 2.0x
+    var pitch: Float = 1.0f   // 0.5x to 2.0x
+    var speed: Float = 1.0f   // 0.5x to 2.0x
     var crossfadeSeconds: Int = 3 // 0 to 10s
-
-    // FIX LIMTER THRESH - agregado respetando lo existente
-    var limiterThresholdDb: Float = -0.3f
-        private set
-    var limiterBypassForBluetooth: Boolean = true
 
     var isBluetoothConnected: Boolean = false
         private set
 
+    init {
+        if (audioSessionId > 0) {
+            attachAudioSession(audioSessionId)
+        }
+    }
+
     fun attachAudioSession(sessionId: Int) {
         if (sessionId <= 0) return
+        this.audioSessionId = sessionId
         dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter)
-        updateLimiter()
+    }
+
+    fun applyPreset(preset: EqPreset) {
+        equalizer.loadFromPreset(preset)
+        mdrc.loadFromSettings(preset.mdrcSettings)
+        updateEqualizer()
+        updateMDRC()
     }
 
     fun onBluetoothStatusChanged(connected: Boolean) {
         isBluetoothConnected = connected
-        limiter.isBypassedForBluetooth = connected && limiterBypassForBluetooth
+        limiter.isBypassedForBluetooth = connected
         mdrc.isGentleBluetoothMode = connected
 
-        Log.i(TAG, "Bluetooth A2DP state: $connected. Gentle MDRC: $connected. Internal limiter bypassed: ${limiter.isBypassedForBluetooth}")
+        Log.i(TAG, "Bluetooth A2DP state: $connected. Gentle MDRC: $connected. Internal limiter bypassed: $connected")
         dynamicsHelper.applyMDRC(mdrc)
         dynamicsHelper.applyLimiter(limiter)
     }
@@ -64,15 +80,7 @@ class ATS2835PEngine(private val context: Context) {
     }
 
     fun updateLimiter() {
-        try {
-            limiter.thresholdDb = limiterThresholdDb
-        } catch (e: Exception) { }
         dynamicsHelper.applyLimiter(limiter)
-    }
-
-    fun setLimiterThreshold(db: Float) {
-        limiterThresholdDb = db.coerceIn(-12f, 0f)
-        updateLimiter()
     }
 
     fun release() {

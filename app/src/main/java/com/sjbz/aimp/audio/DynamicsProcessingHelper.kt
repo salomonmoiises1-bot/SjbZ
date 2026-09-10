@@ -38,7 +38,7 @@ class DynamicsProcessingHelper {
         mdrcProcessor: MDRCProcessor,
         limiterProcessor: LimiterProcessor
     ) {
-        if (audioSessionId <= 0) return
+        if (audioSessionId < 0) return
         release()
         currentSessionId = audioSessionId
 
@@ -114,7 +114,7 @@ class DynamicsProcessingHelper {
                     for (b in 0 until bandCount) {
                         val cutoff = EqualizerProcessor.ISO_FREQUENCIES[b]
                         val gain = if (equalizerProcessor.isEnabled) {
-                            (equalizerProcessor.getBandGain(b) + preamp).coerceIn(-12.0f, 12.0f)
+                            equalizerProcessor.getEffectiveGain(b)
                         } else {
                             0.0f
                         }
@@ -146,8 +146,6 @@ class DynamicsProcessingHelper {
             val maxLevel = range[1]
 
             val isoFreqs = EqualizerProcessor.ISO_FREQUENCIES
-            val bandGains = equalizerProcessor.getBandGains()
-            val preamp = equalizerProcessor.preampDb
 
             for (b in 0 until numBands) {
                 val centerFreqHz = eq.getCenterFreq(b.toShort()) / 1000.0f
@@ -163,7 +161,11 @@ class DynamicsProcessingHelper {
                     }
                 }
 
-                val targetDb = (bandGains[closestIdx] + preamp).coerceIn(-12.0f, 12.0f)
+                val targetDb = if (equalizerProcessor.isEnabled) {
+                    equalizerProcessor.getEffectiveGain(closestIdx)
+                } else {
+                    0.0f
+                }
                 val milliBels = (targetDb * 100.0f).toInt().coerceIn(minLevel.toInt(), maxLevel.toInt()).toShort()
                 eq.setBandLevel(b.toShort(), milliBels)
             }

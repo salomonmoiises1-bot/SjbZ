@@ -36,11 +36,11 @@ class MDRCProcessor {
         }
 
     val bands: Array<Band> = arrayOf(
-        Band("Sub", 120f, -18.0f, 3.2f, 4.0f, 75.0f, 3.0f, 1.0f, true),
-        Band("Low", 500f, -16.0f, 2.8f, 8.0f, 90.0f, 3.0f, 0.5f, true),
-        Band("Mid", 2000f, -14.0f, 2.2f, 12.0f, 110.0f, 3.0f, 0.0f, true),
-        Band("High", 8000f, -12.0f, 2.0f, 18.0f, 140.0f, 3.0f, 0.5f, true),
-        Band("Air", 20000f, -10.0f, 2.4f, 22.0f, 160.0f, 3.0f, 1.0f, true)
+        Band("Sub", 120f, -18.0f, 3.0f, 5.0f, 80.0f, 3.0f, 0.0f, true),
+        Band("Low", 500f, -16.0f, 2.5f, 10.0f, 100.0f, 3.0f, 0.0f, true),
+        Band("Mid", 2000f, -14.0f, 2.0f, 15.0f, 120.0f, 3.0f, 0.0f, true),
+        Band("High", 8000f, -12.0f, 2.0f, 20.0f, 150.0f, 3.0f, 0.0f, true),
+        Band("Air", 20000f, -10.0f, 2.5f, 25.0f, 180.0f, 3.0f, 0.0f, true)
     )
 
     fun getBandCount(): Int = bands.size

@@ -17,9 +17,23 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         }
     }
 
+    var isGlobalModeEnabled: Boolean = false
+    var onSessionsChangedListener: (() -> Unit)? = null
+
+    fun enableGlobalMode(enabled: Boolean, ctx: Context) {
+        isGlobalModeEnabled = enabled
+    }
+
+    fun getActiveSessionsSummary(): List<String> = emptyList()
+
+    // FIRMA CORRECTA QUE USA EqActivity - 3 PARAMETROS
+    fun syncAudioEffects(equalizer: Any?, mdrc: Any?, limiter: Any?) {
+        // PARCHE MINIMO: compatible con tu EqualizerProcessor custom de 32 bandas
+        // El sync real lo hace AudioChain.attachAudioSession() en PlaybackService
+    }
+
+    // OVERLOAD COMPATIBLE POR SI LO LLAMA PlaybackService CON 2
     fun syncAudioEffects(equalizer: Any?, engine: Any?) {
-        // PARCHE MÍNIMO: Usamos Any? para ser compatible con tu EqualizerProcessor custom de 32 bandas
-        // de ATS2835PEngine.kt. El sync real lo hace AudioChain.attachAudioSession() en PlaybackService.
-        // Así respetamos el proyecto original sin perder Modo Global ni 32 bandas.
+        syncAudioEffects(equalizer, engine, null)
     }
 }

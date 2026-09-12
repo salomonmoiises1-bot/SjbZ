@@ -24,7 +24,7 @@
 
         <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="8dp">
 
-            <!-- BASS BOOST CARD -->
+            <!-- BASS BOOST CARD - NUEVO CON 60/85/120 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:layout_margin="6dp" app:cardCornerRadius="12dp"
@@ -32,7 +32,21 @@
                 <LinearLayout android:orientation="vertical" android:padding="16dp" android:layout_width="match_parent" android:layout_height="wrap_content">
                     <TextView android:text="BASS BOOST PSICOACÚSTICO +15dB" android:textColor="#00E5FF" android:textStyle="bold" android:textSize="13sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                     <TextView android:id="@+id/tvBassBoostValue" android:text="+6.0 dB (40%) ACTIVO" android:textColor="#00E5FF" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="6dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-                    <SeekBar android:id="@+id/seekBassBoost" android:max="1000" android:progress="400" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:progressTint="#00E5FF" android:thumbTint="#00E5FF"/>
+
+                    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:gravity="center_vertical">
+                        <TextView android:text="Frecuencia:" android:textColor="#8A9BB0" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                        <Button android:id="@+id/btnFreq60" android:text="60 Hz&#10;(Sub)" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="8sp" android:lineSpacingExtra="-3dp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:layout_marginStart="8dp"/>
+                        <Button android:id="@+id/btnFreq85" android:text="85 Hz&#10;(Punch)" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="8sp" android:lineSpacingExtra="-3dp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:layout_marginStart="4dp"/>
+                        <Button android:id="@+id/btnFreq120" android:text="120 Hz&#10;(Mid)" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="8sp" android:lineSpacingExtra="-3dp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:layout_marginStart="4dp"/>
+                    </LinearLayout>
+
+                    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp">
+                        <TextView android:text="Ganancia BassBoost" android:textColor="#8A9BB0" android:textSize="11sp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+                        <TextView android:id="@+id/tvBassGainSide" android:text="+6.0 dB" android:textColor="#00E5FF" android:textSize="11sp" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    </LinearLayout>
+
+                    <SeekBar android:id="@+id/seekBassBoost" android:max="1000" android:progress="400" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:progressTint="#00E5FF" android:thumbTint="#00E5FF"/>
+
                     <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:weightSum="5">
                         <Button android:id="@+id/btnBassOff" android:text="OFF" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp" android:layout_margin="2dp"/>
                         <Button android:id="@+id/btnBass3" android:text="+3" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp" android:layout_margin="2dp"/>
@@ -43,7 +57,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- PRESETS + GLOBAL -->
+            <!-- PRESETS + GLOBAL - CON FIX BOTONES -->
             <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#1A1A1A">
                 <LinearLayout android:orientation="vertical" android:padding="12dp" android:layout_width="match_parent" android:layout_height="wrap_content">
                     <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchEqEnabled" android:text="Ecualizador 32 Bandas" android:textColor="#FFF" android:layout_width="match_parent" android:layout_height="wrap_content"/>
@@ -51,7 +65,6 @@
                     <TextView android:id="@+id/tvActiveSessionsStatus" android:text="Estado: Modo local SjbZ AIMP" android:textColor="#A0A0A0" android:textSize="11sp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp"/>
                     <Button android:id="@+id/btnGlobalHelp" android:text="?" android:layout_width="40dp" android:layout_height="32dp" android:layout_marginTop="6dp" style="@style/Widget.Material3.Button.OutlinedButton"/>
                     <Spinner android:id="@+id/spinnerPresets" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"/>
-                    <!-- FIX BOTONES CIRCULARES -->
                     <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
                         <Button android:id="@+id/btnSavePreset" android:text="GUARDAR" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="11sp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp" android:layout_margin="3dp"/>
                         <Button android:id="@+id/btnDeletePreset" android:text="BORRAR" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="11sp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp" android:layout_margin="3dp"/>
@@ -73,16 +86,9 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- FIX GLITCH + ALTURA -->
+            <!-- FIX GLITCH 400dp -->
             <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#1A1A1A">
-                <HorizontalScrollView 
-                    android:id="@+id/hsvBands"
-                    android:layout_width="match_parent" 
-                    android:layout_height="400dp"
-                    android:layerType="software"
-                    android:clipChildren="false"
-                    android:fillViewport="true"
-                    android:scrollbars="none">
+                <HorizontalScrollView android:id="@+id/hsvBands" android:layout_width="match_parent" android:layout_height="400dp" android:layerType="software" android:clipChildren="false" android:fillViewport="true" android:scrollbars="none">
                     <LinearLayout android:id="@+id/container32Bands" android:orientation="horizontal" android:layout_width="wrap_content" android:layout_height="match_parent" android:gravity="bottom"/>
                 </HorizontalScrollView>
             </com.google.android.material.card.MaterialCardView>

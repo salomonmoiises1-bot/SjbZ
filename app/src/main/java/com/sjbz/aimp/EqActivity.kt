@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -20,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
+import com.sjbz.aimp.audio.BassBoostProcessor
 import com.sjbz.aimp.audio.EqualizerProcessor
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
 import com.sjbz.aimp.audio.LimiterProcessor
@@ -56,10 +58,12 @@ class EqActivity : AppCompatActivity() {
     private lateinit var sbMdrcGainAir: SeekBar; private lateinit var tvMdrcGainAir: TextView
     private lateinit var btnSavePreset: Button; private lateinit var btnDeletePreset: Button; private lateinit var btnExportSjbz: Button; private lateinit var btnImportSjbz: Button
 
-    // BASS BOOST
+    // BASS BOOST PRO
     private lateinit var seekBassBoost: SeekBar
     private lateinit var tvBassBoostValue: TextView
+    private lateinit var tvBassGainValue: TextView
     private lateinit var btnBassOff: Button; private lateinit var btnBass3: Button; private lateinit var btnBass6: Button; private lateinit var btnBass9: Button; private lateinit var btnBass12: Button
+    private lateinit var btnFreq60: Button; private lateinit var btnFreq85: Button; private lateinit var btnFreq120: Button
 
     private val bandSeekBars = ArrayList<SeekBar>(); private val bandValueLabels = ArrayList<TextView>()
     private val mdrcSeekBars = ArrayList<SeekBar>(); private val mdrcValueLabels = ArrayList<TextView>()
@@ -109,8 +113,12 @@ class EqActivity : AppCompatActivity() {
         sbMdrcGainMid = findViewById(R.id.sbMdrcGainMid); tvMdrcGainMid = findViewById(R.id.tvMdrcGainMid); sbMdrcGainHigh = findViewById(R.id.sbMdrcGainHigh); tvMdrcGainHigh = findViewById(R.id.tvMdrcGainHigh)
         sbMdrcGainAir = findViewById(R.id.sbMdrcGainAir); tvMdrcGainAir = findViewById(R.id.tvMdrcGainAir)
         btnSavePreset = findViewById(R.id.btnSavePreset); btnDeletePreset = findViewById(R.id.btnDeletePreset); btnExportSjbz = findViewById(R.id.btnExportSjbz); btnImportSjbz = findViewById(R.id.btnImportSjbz)
+
         seekBassBoost = findViewById(R.id.seekBassBoost); tvBassBoostValue = findViewById(R.id.tvBassBoostValue)
+        tvBassGainValue = findViewById(R.id.tvBassGainValue)
         btnBassOff = findViewById(R.id.btnBassOff); btnBass3 = findViewById(R.id.btnBass3); btnBass6 = findViewById(R.id.btnBass6); btnBass9 = findViewById(R.id.btnBass9); btnBass12 = findViewById(R.id.btnBass12)
+        btnFreq60 = findViewById(R.id.btnFreq60); btnFreq85 = findViewById(R.id.btnFreq85); btnFreq120 = findViewById(R.id.btnFreq120)
+
         switchEqEnabled.isChecked = equalizerProcessor.isEnabled
         switchEqEnabled.setOnCheckedChangeListener { _, isChecked -> equalizerProcessor.isEnabled = isChecked; PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects(); updateSlidersEnabled(isChecked) }
     }
@@ -141,6 +149,17 @@ class EqActivity : AppCompatActivity() {
             val faderContainer = LinearLayout(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 0, 1.0f); gravity = Gravity.CENTER }
             val seekBar = SeekBar(this).apply { layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 160).toInt(), (resources.displayMetrics.density * 36).toInt()); rotation = 270f; max = 240; val currentG = equalizerProcessor.getBandGain(i); progress = (currentG * 10.0f + 120).toInt().coerceIn(0,240); progressTintList = ColorStateList.valueOf(currentThemeColor); thumbTintList = ColorStateList.valueOf(currentThemeColor) }
             tvGain.text = String.format("%+.1f", equalizerProcessor.getBandGain(i))
+
+            // FIX: Evitar que se mueva toda la pantalla
+            seekBar.setOnTouchListener { v, event ->
+                when(event.action){
+                    MotionEvent.ACTION_DOWN -> { v.parent.requestDisallowInterceptTouchEvent(true); true }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { v.parent.requestDisallowInterceptTouchEvent(false); false }
+                    else -> false
+                }
+                false
+            }
+
             val bandIndex = i
             seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) { val gainDb = (progress - 120) / 10.0f; tvGain.text = String.format("%+.1f", gainDb); if (fromUser &&!isUpdatingUiFromPreset) { equalizerProcessor.setBandGain(bandIndex, gainDb); PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects() } }
@@ -185,21 +204,66 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun setupBassBoost() {
-        val bassProc = PlaybackService.instance?.bassBoostProcessor
-        if(bassProc!=null){ seekBassBoost.progress = bassProc.strength; tvBassBoostValue.text = bassProc.toDisplay() }
-        else { seekBassBoost.progress = 400; tvBassBoostValue.text = "+6.0 dB (40%) ACTIVO" }
-        seekBassBoost.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean){
-                tvBassBoostValue.text = "+${p*15/1000}.0 dB (${p*100/1000}%) ACTIVO"
-                if(fromUser){ PlaybackService.instance?.bassBoostProcessor?.setPercent(p*100/1000); PlaybackService.instance?.updateBassBoost() }
+        try {
+            val bassProc = PlaybackService.instance?.bassBoostProcessor
+            if(bassProc!=null){
+                seekBassBoost.progress = bassProc.strength
+                tvBassBoostValue.text = bassProc.toDisplay()
+                tvBassGainValue.text = bassProc.toShortDisplay()
+                updateFreqButtons(bassProc.freqMode)
+            } else {
+                seekBassBoost.progress = 400
+                tvBassBoostValue.text = "+6.0 dB (40%)"
+                tvBassGainValue.text = "+6.0 dB"
             }
-            override fun onStartTrackingTouch(s: SeekBar?) {}; override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-        btnBassOff.setOnClickListener { seekBassBoost.progress = 0 }
-        btnBass3.setOnClickListener { seekBassBoost.progress = 200 }
-        btnBass6.setOnClickListener { seekBassBoost.progress = 400 }
-        btnBass9.setOnClickListener { seekBassBoost.progress = 600 }
-        btnBass12.setOnClickListener { seekBassBoost.progress = 800 }
+
+            seekBassBoost.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean){
+                    val db = p*15/1000
+                    val per = p*100/1000
+                    tvBassBoostValue.text = if(p==0) "OFF" else "+$db.0 dB ($per%)"
+                    tvBassGainValue.text = if(p==0) "OFF" else "+$db.0 dB"
+                    if(fromUser){
+                        try{
+                            PlaybackService.instance?.bassBoostProcessor?.setPercent(per)
+                        }catch(_:Exception){}
+                    }
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+
+            btnBassOff.setOnClickListener { seekBassBoost.progress = 0 }
+            btnBass3.setOnClickListener { seekBassBoost.progress = 200 }
+            btnBass6.setOnClickListener { seekBassBoost.progress = 400 }
+            btnBass9.setOnClickListener { seekBassBoost.progress = 600 }
+            btnBass12.setOnClickListener { seekBassBoost.progress = 800 }
+
+            btnFreq60.setOnClickListener { setFreqMode(BassBoostProcessor.FreqMode.SUB_60) }
+            btnFreq85.setOnClickListener { setFreqMode(BassBoostProcessor.FreqMode.PUNCH_85) }
+            btnFreq120.setOnClickListener { setFreqMode(BassBoostProcessor.FreqMode.MID_120) }
+
+        } catch(e:Exception){
+            android.util.Log.e("EqActivity","BassBoost setup error ${e.message}")
+        }
+    }
+
+    private fun setFreqMode(mode: BassBoostProcessor.FreqMode){
+        try{
+            PlaybackService.instance?.bassBoostProcessor?.setFrequency(mode)
+            updateFreqButtons(mode)
+        }catch(_:Exception){}
+    }
+
+    private fun updateFreqButtons(mode: BassBoostProcessor.FreqMode){
+        val activeColor = Color.parseColor("#00BCD4")
+        val inactiveColor = Color.parseColor("#2A2A2A")
+        btnFreq60.backgroundTintList = ColorStateList.valueOf(if(mode==BassBoostProcessor.FreqMode.SUB_60) activeColor else inactiveColor)
+        btnFreq85.backgroundTintList = ColorStateList.valueOf(if(mode==BassBoostProcessor.FreqMode.PUNCH_85) activeColor else inactiveColor)
+        btnFreq120.backgroundTintList = ColorStateList.valueOf(if(mode==BassBoostProcessor.FreqMode.MID_120) activeColor else inactiveColor)
+        btnFreq60.setTextColor(if(mode==BassBoostProcessor.FreqMode.SUB_60) Color.BLACK else Color.WHITE)
+        btnFreq85.setTextColor(if(mode==BassBoostProcessor.FreqMode.PUNCH_85) Color.BLACK else Color.WHITE)
+        btnFreq120.setTextColor(if(mode==BassBoostProcessor.FreqMode.MID_120) Color.BLACK else Color.WHITE)
     }
 
     private fun setupPresetsSpinner() {

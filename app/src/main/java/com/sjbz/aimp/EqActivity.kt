@@ -87,7 +87,14 @@ class EqActivity : AppCompatActivity() {
     private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
         if (uri!= null) {
             val currentPresetName = spinnerPresets.selectedItem?.toString()?: "SjbZ_Preset"
-            val preset = equalizerProcessor.toEqPreset(name = currentPresetName, isCustom = true, mdrcSettings = mdrcProcessor.toMDRCSettings(), color = currentThemeColor)
+            val preset = equalizerProcessor.toEqPreset(
+                name = currentPresetName,
+                isCustom = true,
+                mdrcSettings = mdrcProcessor.toMDRCSettings(),
+                color = currentThemeColor,
+                bassBoostFreq = currentBassFreq,
+                bassBoostGain = seekBassBoost.progress / 1000f * 15f
+            )
             val success = presetManager.exportPresetToSjbz(preset, uri)
             Toast.makeText(this, if (success) "Exportado SJBZ" else "Error export", Toast.LENGTH_SHORT).show()
         }
@@ -337,30 +344,32 @@ class EqActivity : AppCompatActivity() {
         isUpdatingUiFromPreset = true
         try {
             currentThemeColor = preset.color
-            equalizerProcessor.applyPreset(preset)
-            mdrcProcessor.applySettings(preset.mdrcSettings)
-            preset.bassBoostGain?.let { bassProcessor.gainDb = it }
-            preset.bassBoostFreq?.let { currentBassFreq = it }
+            // FIX: usar bandGains y preampDb del nuevo modelo
+            equalizerProcessor.loadFromPreset(preset)
+            mdrcProcessor.loadFromSettings(preset.mdrcSettings)
+            currentBassFreq = preset.bassBoostFreq
+            val bassG = preset.bassBoostGain
 
-            seekBarPreamp.progress = (preset.preamp * 10f + 120).toInt().coerceIn(0,240)
-            tvPreampValue.text = String.format("%+.1f dB", preset.preamp)
+            seekBarPreamp.progress = (preset.preampDb * 10f + 120).toInt().coerceIn(0,240)
+            tvPreampValue.text = String.format("%+.1f dB", preset.preampDb)
 
             for(i in 0 until EqualizerProcessor.BAND_COUNT.coerceAtMost(bandSeekBars.size)) {
-                val g = preset.bands.getOrNull(i)?: 0f
+                val g = preset.bandGains.getOrNull(i)?: 0f
                 bandSeekBars[i].progress = (g*10f+120).toInt().coerceIn(0,240)
                 bandValueLabels[i].text = String.format("%+.1f", g)
             }
-            val bassG = preset.bassBoostGain?: 6f
+
             seekBassBoost.progress = (bassG/15f*1000).toInt().coerceIn(0,1000)
             tvBassBoostValue.text = String.format("+%.1f dB (%d%%) ACTIVO", bassG, (bassG/15f*100).toInt())
             tvBassGainSide.text = String.format("+%.1f dB", bassG)
 
-            val mdrcGains = listOf(preset.mdrcSettings.subGain, preset.mdrcSettings.lowGain, preset.mdrcSettings.midGain, preset.mdrcSettings.highGain, preset.mdrcSettings.airGain)
+            // FIX MDRC: ahora es List<MDRCBandConfig>
             val sbs = listOf(sbMdrcGainSub, sbMdrcGainLow, sbMdrcGainMid, sbMdrcGainHigh, sbMdrcGainAir)
             val tvs = listOf(tvMdrcGainSub, tvMdrcGainLow, tvMdrcGainMid, tvMdrcGainHigh, tvMdrcGainAir)
             for(i in sbs.indices) {
-                sbs[i].progress = (mdrcGains[i]*10f+120).toInt().coerceIn(0,240)
-                tvs[i].text = String.format("%+.1f dB", mdrcGains[i])
+                val g = preset.mdrcSettings.bands.getOrNull(i)?.gainDb?: 0f
+                sbs[i].progress = (g*10f+120).toInt().coerceIn(0,240)
+                tvs[i].text = String.format("%+.1f dB", g)
             }
             postAudioUpdateDebounced(0, true) {
                 PlaybackService.instance?.atsEngine?.apply {
@@ -376,9 +385,16 @@ class EqActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnSavePreset).setOnClickListener {
             val input = EditText(this); input.hint = "Nombre preset"
             AlertDialog.Builder(this).setTitle("Guardar preset").setView(input)
-               .setPositiveButton("Guardar") { _, _ ->
+              .setPositiveButton("Guardar") { _, _ ->
                     val name = input.text.toString().ifEmpty { "Custom ${System.currentTimeMillis()}" }
-                    val preset = equalizerProcessor.toEqPreset(name = name, isCustom = true, mdrcSettings = mdrcProcessor.toMDRCSettings(), color = currentThemeColor, bassBoostFreq = currentBassFreq, bassBoostGain = seekBassBoost.progress/1000f*15f)
+                    val preset = equalizerProcessor.toEqPreset(
+                        name = name,
+                        isCustom = true,
+                        mdrcSettings = mdrcProcessor.toMDRCSettings(),
+                        color = currentThemeColor,
+                        bassBoostFreq = currentBassFreq,
+                        bassBoostGain = seekBassBoost.progress/1000f*15f
+                    )
                     presetManager.saveCustomPreset(preset)
                     refreshPresetsSpinner(name)
                 }.setNegativeButton("Cancel", null).show()

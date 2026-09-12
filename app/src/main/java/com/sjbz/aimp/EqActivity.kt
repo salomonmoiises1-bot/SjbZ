@@ -32,7 +32,7 @@ import com.sjbz.aimp.service.PlaybackService
 import com.sjbz.aimp.ui.VerticalSeekBar
 
 /**
- * 32-Band Equalizer Activity for SjbZ.
+ * 32-Band Equalizer Activity for SjbZ - FIXED
  */
 class EqActivity : AppCompatActivity() {
 
@@ -79,7 +79,6 @@ class EqActivity : AppCompatActivity() {
     private var isUpdatingUiFromPreset = false
     private var currentThemeColor: Int = 0xFFFF7700.toInt()
 
-    // FIX 2: Handler para evitar ANR / buggeo
     private val audioHandler = Handler(Looper.getMainLooper())
 
     private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
@@ -178,8 +177,8 @@ class EqActivity : AppCompatActivity() {
         switchEqEnabled.setOnCheckedChangeListener { _, isChecked ->
             equalizerProcessor.isEnabled = isChecked
             audioHandler.post {
-                try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_:Exception){}
-                try { syncAllEffects() } catch (_:Exception){}
+                try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_: Exception) {}
+                try { syncAllEffects() } catch (_: Exception) {}
             }
             updateSlidersEnabled(isChecked)
         }
@@ -232,7 +231,6 @@ class EqActivity : AppCompatActivity() {
            .setPositiveButton("Entendido", null).show()
     }
 
-    // FIX 1: VerticalSeekBar en vez de SeekBar rotado
     private fun setup32BandSliders() {
         container32Bands.removeAllViews()
         bandSeekBars.clear()
@@ -243,10 +241,10 @@ class EqActivity : AppCompatActivity() {
 
         for (i in 0 until bandCount) {
             val bandCol = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 54).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
+                layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 58).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(4, 8, 4, 8)
+                setPadding(2, 8, 2, 8)
             }
 
             val tvGain = TextView(this).apply {
@@ -260,12 +258,13 @@ class EqActivity : AppCompatActivity() {
             bandValueLabels.add(tvGain)
 
             val faderContainer = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 0, 1.0f)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f)
                 gravity = Gravity.CENTER
             }
 
+            // FIX DEFINITIVO: ancho MATCH_PARENT y alto 340dp
             val seekBar = VerticalSeekBar(this).apply {
-                layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 40).toInt(), (resources.displayMetrics.density * 280).toInt())
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (resources.displayMetrics.density * 340).toInt())
                 max = 240
                 val currentG = equalizerProcessor.getBandGain(i)
                 progress = (currentG * 10.0f + 120).toInt().coerceIn(0, 240)
@@ -282,8 +281,8 @@ class EqActivity : AppCompatActivity() {
                     if (fromUser &&!isUpdatingUiFromPreset) {
                         equalizerProcessor.setBandGain(bandIndex, gainDb)
                         audioHandler.post {
-                            try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_:Exception){}
-                            try { syncAllEffects() } catch (_:Exception){}
+                            try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_: Exception) {}
+                            try { syncAllEffects() } catch (_: Exception) {}
                         }
                     }
                 }
@@ -318,8 +317,8 @@ class EqActivity : AppCompatActivity() {
                 if (fromUser &&!isUpdatingUiFromPreset) {
                     equalizerProcessor.preampDb = db
                     audioHandler.post {
-                        try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_:Exception){}
-                        try { syncAllEffects() } catch (_:Exception){}
+                        try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_: Exception) {}
+                        try { syncAllEffects() } catch (_: Exception) {}
                     }
                 }
             }
@@ -370,8 +369,8 @@ class EqActivity : AppCompatActivity() {
                     if (fromUser &&!isUpdatingUiFromPreset) {
                         mdrcProcessor.getBand(bandIndex)?.gainDb = gainDb
                         audioHandler.post {
-                            try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_:Exception){}
-                            try { syncAllEffects() } catch (_:Exception){}
+                            try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_: Exception) {}
+                            try { syncAllEffects() } catch (_: Exception) {}
                         }
                     }
                 }
@@ -383,8 +382,8 @@ class EqActivity : AppCompatActivity() {
         switchMdrcEnabled.setOnCheckedChangeListener { _, isChecked ->
             mdrcProcessor.isEnabled = isChecked
             audioHandler.post {
-                try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_:Exception){}
-                try { syncAllEffects() } catch (_:Exception){}
+                try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_: Exception) {}
+                try { syncAllEffects() } catch (_: Exception) {}
             }
             for (sb in mdrcSeekBars) { sb.isEnabled = isChecked }
         }
@@ -453,9 +452,9 @@ class EqActivity : AppCompatActivity() {
                 mdrcValueLabels[i].text = String.format("%+.1f dB", bandCfg.gainDb)
             }
             audioHandler.post {
-                try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_:Exception){}
-                try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_:Exception){}
-                try { syncAllEffects() } catch (_:Exception){}
+                try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_: Exception) {}
+                try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_: Exception) {}
+                try { syncAllEffects() } catch (_: Exception) {}
             }
         } finally { isUpdatingUiFromPreset = false }
     }

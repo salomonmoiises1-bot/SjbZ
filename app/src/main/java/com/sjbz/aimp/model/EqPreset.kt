@@ -26,7 +26,14 @@ data class EqPreset(
     val ats2835pProfileEnabled: Boolean = true,
 
     @SerializedName("color")
-    val color: Int = generateRandomColor()
+    val color: Int = generateRandomColor(),
+
+    // --- NUEVA CARACTERISTICA BASSBOOST ---
+    @SerializedName("bassBoostFreq")
+    val bassBoostFreq: Int = 85,
+
+    @SerializedName("bassBoostGain")
+    val bassBoostGain: Float = 6f
 ) {
     fun withColor(newColor: Int): EqPreset = copy(color = newColor)
 

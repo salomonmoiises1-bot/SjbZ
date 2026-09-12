@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -75,12 +76,11 @@ class EqActivity : AppCompatActivity() {
     private var isUpdatingUiFromPreset = false
     private var currentThemeColor: Int = 0xFFFF7700.toInt()
 
-    // FIX ANR: hilo de fondo + debounce
     private val audioExecutor = Executors.newSingleThreadExecutor()
     private var lastAudioUpdate = 0L
     private fun postAudioUpdate(action: () -> Unit) {
         val now = System.currentTimeMillis()
-        if (now - lastAudioUpdate < 80) return // debounce 80ms
+        if (now - lastAudioUpdate < 80) return
         lastAudioUpdate = now
         audioExecutor.execute {
             try { action() } catch (_: Exception) {}
@@ -217,8 +217,13 @@ class EqActivity : AppCompatActivity() {
                         postAudioUpdate { PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects() }
                     }
                 }
-                override fun onStartTrackingTouch(sb: SeekBar?) { parent?.requestDisallowInterceptTouchEvent(true) }
-                override fun onStopTrackingTouch(sb: SeekBar?) { parent?.requestDisallowInterceptTouchEvent(false); postAudioUpdate { PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects() } }
+                override fun onStartTrackingTouch(sb: SeekBar?) {
+                    (sb?.parent as? ViewGroup)?.requestDisallowInterceptTouchEvent(true)
+                }
+                override fun onStopTrackingTouch(sb: SeekBar?) {
+                    (sb?.parent as? ViewGroup)?.requestDisallowInterceptTouchEvent(false)
+                    postAudioUpdate { PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects() }
+                }
             })
             faderContainer.addView(seekBar); bandCol.addView(faderContainer); bandSeekBars.add(seekBar)
             val tvFreq = TextView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT); text = labels[i]; textSize = 9.5f; setTextColor(Color.parseColor("#CCCCCC")); gravity = Gravity.CENTER }

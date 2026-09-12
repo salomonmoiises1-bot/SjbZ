@@ -1,4 +1,4 @@
-package com.sjbz.aimp
+import com.sjbz.aimp.ui.VerticalSeekBar
 
 import android.app.AlertDialog
 import android.content.res.ColorStateList
@@ -147,7 +147,7 @@ class EqActivity : AppCompatActivity() {
             val tvGain = TextView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT); text = "0.0"; textSize = 10f; setTextColor(currentThemeColor); gravity = Gravity.CENTER }
             bandCol.addView(tvGain); bandValueLabels.add(tvGain)
             val faderContainer = LinearLayout(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 0, 1.0f); gravity = Gravity.CENTER }
-            val seekBar = SeekBar(this).apply { layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 160).toInt(), (resources.displayMetrics.density * 36).toInt()); rotation = 270f; max = 240; val currentG = equalizerProcessor.getBandGain(i); progress = (currentG * 10.0f + 120).toInt().coerceIn(0,240); progressTintList = ColorStateList.valueOf(currentThemeColor); thumbTintList = ColorStateList.valueOf(currentThemeColor) }
+            val seekBar = VerticalSeekBar(this).apply { layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 160).toInt(), (resources.displayMetrics.density * 36).toInt()); rotation = 270f; max = 240; val currentG = equalizerProcessor.getBandGain(i); progress = (currentG * 10.0f + 120).toInt().coerceIn(0,240); progressTintList = ColorStateList.valueOf(currentThemeColor); thumbTintList = ColorStateList.valueOf(currentThemeColor) }
             tvGain.text = String.format("%+.1f", equalizerProcessor.getBandGain(i))
 
             // FIX: Evitar que se mueva toda la pantalla

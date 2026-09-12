@@ -24,7 +24,7 @@
 
         <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="8dp">
 
-            <!-- BASS BOOST CARD - LO QUE QUERIAS -->
+            <!-- BASS BOOST CARD -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:layout_margin="6dp" app:cardCornerRadius="12dp"
@@ -43,47 +43,58 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- PRESETS + GLOBAL + PREAMP + RESTO (TU ORIGINAL) -->
-            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardBackgroundColor="#1A1A1A">
+            <!-- PRESETS + GLOBAL -->
+            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#1A1A1A">
                 <LinearLayout android:orientation="vertical" android:padding="12dp" android:layout_width="match_parent" android:layout_height="wrap_content">
                     <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchEqEnabled" android:text="Ecualizador 32 Bandas" android:textColor="#FFF" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchGlobalSystemEq" android:text="Modo Global (Spotify/Deezer)" android:textColor="#FFF" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"/>
-                    <TextView android:id="@+id/tvActiveSessionsStatus" android:text="Modo local" android:textColor="#A0A0A0" android:textSize="11sp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <Button android:id="@+id/btnGlobalHelp" android:text="?" android:layout_width="40dp" android:layout_height="30dp" android:layout_marginTop="4dp"/>
-                    <Spinner android:id="@+id/spinnerPresets" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp"/>
-                    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp">
-                        <Button android:id="@+id/btnSavePreset" android:text="GUARDAR" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_margin="2dp"/>
-                        <Button android:id="@+id/btnDeletePreset" android:text="BORRAR" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_margin="2dp"/>
-                        <Button android:id="@+id/btnExportSjbz" android:text="EXPORT" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_margin="2dp"/>
-                        <Button android:id="@+id/btnImportSjbz" android:text="IMPORT" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_margin="2dp"/>
+                    <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchGlobalSystemEq" android:text="Modo Global (Spotify/Deezer)" android:textColor="#FFF" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"/>
+                    <TextView android:id="@+id/tvActiveSessionsStatus" android:text="Estado: Modo local SjbZ AIMP" android:textColor="#A0A0A0" android:textSize="11sp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp"/>
+                    <Button android:id="@+id/btnGlobalHelp" android:text="?" android:layout_width="40dp" android:layout_height="32dp" android:layout_marginTop="6dp" style="@style/Widget.Material3.Button.OutlinedButton"/>
+                    <Spinner android:id="@+id/spinnerPresets" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"/>
+                    <!-- FIX BOTONES CIRCULARES -->
+                    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                        <Button android:id="@+id/btnSavePreset" android:text="GUARDAR" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="11sp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp" android:layout_margin="3dp"/>
+                        <Button android:id="@+id/btnDeletePreset" android:text="BORRAR" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="11sp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp" android:layout_margin="3dp"/>
+                        <Button android:id="@+id/btnExportSjbz" android:text="EXPORT" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="11sp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp" android:layout_margin="3dp"/>
+                        <Button android:id="@+id/btnImportSjbz" android:text="IMPORT" style="@style/Widget.Material3.Button.OutlinedButton" android:textSize="11sp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp" android:layout_margin="3dp"/>
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardBackgroundColor="#1A1A1A">
+            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#1A1A1A">
                 <LinearLayout android:orientation="vertical" android:padding="12dp" android:layout_width="match_parent" android:layout_height="wrap_content">
-                    <TextView android:text="PREAMP / SPEED / CROSSFADE" android:textColor="#00E5FF" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-                    <TextView android:id="@+id/tvPreampValue" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-                    <SeekBar android:id="@+id/seekBarPreamp" android:max="240" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <TextView android:id="@+id/tvSpeedValue" android:text="1.00x" android:textColor="#FFF" android:layout_marginTop="8dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-                    <SeekBar android:id="@+id/seekBarSpeed" android:max="100" android:progress="50" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <TextView android:id="@+id/tvCrossfadeValue" android:text="0s" android:textColor="#FFF" android:layout_marginTop="8dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-                    <SeekBar android:id="@+id/seekBarCrossfade" android:max="12" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+                    <TextView android:text="PREAMP / SPEED / CROSSFADE" android:textColor="#00E5FF" android:textSize="11sp" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <TextView android:id="@+id/tvPreampValue" android:text="+0.0 dB" android:textColor="#FF7700" android:textSize="12sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <SeekBar android:id="@+id/seekBarPreamp" android:max="240" android:progress="120" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#FF7700" android:thumbTint="#FF7700"/>
+                    <TextView android:id="@+id/tvSpeedValue" android:text="1.00x" android:textColor="#FFF" android:layout_marginTop="10dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <SeekBar android:id="@+id/seekBarSpeed" android:max="100" android:progress="50" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#FF7700" android:thumbTint="#FF7700"/>
+                    <TextView android:id="@+id/tvCrossfadeValue" android:text="0s" android:textColor="#FFF" android:layout_marginTop="10dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <SeekBar android:id="@+id/seekBarCrossfade" android:max="12" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#FF7700" android:thumbTint="#FF7700"/>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <HorizontalScrollView android:layout_width="match_parent" android:layout_height="220dp" android:layout_margin="6dp" android:background="#1A1A1A">
-                <LinearLayout android:id="@+id/container32Bands" android:orientation="horizontal" android:layout_width="wrap_content" android:layout_height="match_parent"/>
-            </HorizontalScrollView>
+            <!-- FIX GLITCH + ALTURA -->
+            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#1A1A1A">
+                <HorizontalScrollView 
+                    android:id="@+id/hsvBands"
+                    android:layout_width="match_parent" 
+                    android:layout_height="400dp"
+                    android:layerType="software"
+                    android:clipChildren="false"
+                    android:fillViewport="true"
+                    android:scrollbars="none">
+                    <LinearLayout android:id="@+id/container32Bands" android:orientation="horizontal" android:layout_width="wrap_content" android:layout_height="match_parent" android:gravity="bottom"/>
+                </HorizontalScrollView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardBackgroundColor="#1A1A1A">
+            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="6dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#1A1A1A">
                 <LinearLayout android:orientation="vertical" android:padding="12dp" android:layout_width="match_parent" android:layout_height="wrap_content">
                     <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchMdrcEnabled" android:text="MDRC Dinámica" android:textColor="#FFF" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <TextView android:id="@+id/tvMdrcGainSub" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_marginTop="8dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainSub" android:max="240" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <TextView android:id="@+id/tvMdrcGainLow" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainLow" android:max="240" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <TextView android:id="@+id/tvMdrcGainMid" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainMid" android:max="240" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <TextView android:id="@+id/tvMdrcGainHigh" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainHigh" android:max="240" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                    <TextView android:id="@+id/tvMdrcGainAir" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainAir" android:max="240" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+                    <TextView android:id="@+id/tvMdrcGainSub" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_marginTop="10dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainSub" android:max="240" android:progress="120" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#00E5FF" android:thumbTint="#00E5FF"/>
+                    <TextView android:id="@+id/tvMdrcGainLow" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainLow" android:max="240" android:progress="120" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#00E5FF" android:thumbTint="#00E5FF"/>
+                    <TextView android:id="@+id/tvMdrcGainMid" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainMid" android:max="240" android:progress="120" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#00E5FF" android:thumbTint="#00E5FF"/>
+                    <TextView android:id="@+id/tvMdrcGainHigh" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainHigh" android:max="240" android:progress="120" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#00E5FF" android:thumbTint="#00E5FF"/>
+                    <TextView android:id="@+id/tvMdrcGainAir" android:text="+0.0 dB" android:textColor="#00E5FF" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/sbMdrcGainAir" android:max="240" android:progress="120" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#00E5FF" android:thumbTint="#00E5FF"/>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

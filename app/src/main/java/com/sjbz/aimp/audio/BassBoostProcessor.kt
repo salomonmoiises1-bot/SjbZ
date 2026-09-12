@@ -1,59 +1,33 @@
 package com.sjbz.aimp.audio
-import android.media.audiofx.BassBoost
 
+/**
+ * SjbZ BassBoost Psicoacústico +15dB
+ * Nueva característica: frecuencia seleccionable 60/85/120 Hz
+ */
 class BassBoostProcessor {
-    enum class FreqMode(val hz:Int){ SUB_60(60), PUNCH_85(85), MID_120(120) }
 
-    // FIX: renombrado interno para no chocar con setStrength()
-    @get:JvmName("getBassStrength")
-    @set:JvmName("setBassStrengthInternal")
-    var strength:Int = 400
+    var frequency: Int = 85 // 60 = Sub, 85 = Punch, 120 = Mid-Bass
+        private set
 
-    var freqMode = FreqMode.PUNCH_85
-    private var bb:BassBoost? = null
-    private var sid:Int = 0
+    var gainDb: Float = 6.0f
+        private set
 
-    fun attach(id:Int){
-        if(id==0) return
-        try{
-            if(sid==id && bb!=null){ apply(); return }
-            release()
-            sid=id
-            bb=BassBoost(0,id).apply{ enabled=true; setStrength(strength.toShort()) }
-        }catch(_:Exception){}
+    var isEnabled: Boolean = true
+
+    fun setBassBoost(freq: Int, gain: Float) {
+        frequency = when (freq) {
+            60, 85, 120 -> freq
+            else -> 85
+        }
+        gainDb = gain.coerceIn(0f, 15f)
+        isEnabled = gainDb > 0.1f
     }
 
-    fun setPercent(p:Int){
-        strength=(p.coerceIn(0,100)*10).coerceIn(0,1000)
-        apply()
+    fun getBassBoostGain(): Float = gainDb
+    fun getBassBoostFreq(): Int = frequency
+
+    fun toStrength(): Int {
+        // Android BassBoost es 0-1000
+        return (gainDb / 15f * 1000f).toInt().coerceIn(0, 1000)
     }
-
-    fun setStrength(s:Int){
-        strength=s.coerceIn(0,1000)
-        apply()
-    }
-
-    fun setStrengthPercent(p:Int){ setPercent(p) }
-
-    fun setFrequency(m:FreqMode){ freqMode=m }
-
-    private fun apply(){
-        try{
-            bb?.setStrength(strength.toShort())
-            bb?.enabled = strength>0
-        }catch(_:Exception){}
-    }
-
-    fun toDisplay():String{
-        val db=strength*15/1000
-        val per=strength*100/1000
-        return if(strength==0) "OFF" else "+$db.0 dB ($per%)"
-    }
-
-    fun toShortDisplay():String{
-        val db=strength*15/1000
-        return if(strength==0) "OFF" else "+$db.0 dB"
-    }
-
-    fun release(){ try{bb?.release()}catch(_:Exception){}; bb=null; sid=0 }
 }

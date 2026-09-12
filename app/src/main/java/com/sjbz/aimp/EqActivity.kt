@@ -5,8 +5,6 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.widget.AdapterView
@@ -30,10 +28,8 @@ import com.sjbz.aimp.audio.PresetManager
 import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.service.PlaybackService
 import com.sjbz.aimp.ui.VerticalSeekBar
+import java.util.concurrent.Executors
 
-/**
- * 32-Band Equalizer Activity for SjbZ - FIXED
- */
 class EqActivity : AppCompatActivity() {
 
     private lateinit var presetManager: PresetManager
@@ -79,17 +75,22 @@ class EqActivity : AppCompatActivity() {
     private var isUpdatingUiFromPreset = false
     private var currentThemeColor: Int = 0xFFFF7700.toInt()
 
-    private val audioHandler = Handler(Looper.getMainLooper())
+    // FIX ANR: hilo de fondo + debounce
+    private val audioExecutor = Executors.newSingleThreadExecutor()
+    private var lastAudioUpdate = 0L
+    private fun postAudioUpdate(action: () -> Unit) {
+        val now = System.currentTimeMillis()
+        if (now - lastAudioUpdate < 80) return // debounce 80ms
+        lastAudioUpdate = now
+        audioExecutor.execute {
+            try { action() } catch (_: Exception) {}
+        }
+    }
 
     private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
         if (uri!= null) {
             val currentPresetName = spinnerPresets.selectedItem?.toString()?: "SjbZ_Preset"
-            val preset = equalizerProcessor.toEqPreset(
-                name = currentPresetName,
-                isCustom = true,
-                mdrcSettings = mdrcProcessor.toMDRCSettings(),
-                color = currentThemeColor
-            )
+            val preset = equalizerProcessor.toEqPreset(name = currentPresetName, isCustom = true, mdrcSettings = mdrcProcessor.toMDRCSettings(), color = currentThemeColor)
             val success = presetManager.exportPresetToSjbz(preset, uri)
             Toast.makeText(this, if (success) "Exportado a.sjbz con éxito" else "Error al exportar", Toast.LENGTH_SHORT).show()
         }
@@ -111,25 +112,13 @@ class EqActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_eq)
-
         presetManager = PresetManager(this)
-
         val liveEngine = PlaybackService.instance?.atsEngine
         equalizerProcessor = liveEngine?.equalizer?: EqualizerProcessor()
         mdrcProcessor = liveEngine?.mdrc?: MDRCProcessor()
-
-        initViews()
-        setupToolbar()
-        setupGlobalSystemEq()
-        setup32BandSliders()
-        setupPreampAndControls()
-        setupMdrcGainControls()
-        setupPresetsSpinner()
-        setupButtons()
-
+        initViews(); setupToolbar(); setupGlobalSystemEq(); setup32BandSliders(); setupPreampAndControls(); setupMdrcGainControls(); setupPresetsSpinner(); setupButtons()
         val activeName = presetManager.getActivePresetName()
-        val activePreset = presetManager.getAllPresets().find { it.name.equals(activeName, ignoreCase = true) }
-           ?: presetManager.getFactoryPresets().first()
+        val activePreset = presetManager.getAllPresets().find { it.name.equals(activeName, ignoreCase = true) }?: presetManager.getFactoryPresets().first()
         loadPresetToUi(activePreset)
     }
 
@@ -147,7 +136,6 @@ class EqActivity : AppCompatActivity() {
         tvActiveSessionsStatus = findViewById(R.id.tvActiveSessionsStatus)
         btnGlobalHelp = findViewById(R.id.btnGlobalHelp)
         globalSessionManager = GlobalAudioSessionManager.getInstance(this)
-
         spinnerPresets = findViewById(R.id.spinnerPresets)
         seekBarPreamp = findViewById(R.id.seekBarPreamp)
         tvPreampValue = findViewById(R.id.tvPreampValue)
@@ -156,37 +144,23 @@ class EqActivity : AppCompatActivity() {
         seekBarCrossfade = findViewById(R.id.seekBarCrossfade)
         tvCrossfadeValue = findViewById(R.id.tvCrossfadeValue)
         container32Bands = findViewById(R.id.container32Bands)
-
-        sbMdrcGainSub = findViewById(R.id.sbMdrcGainSub)
-        tvMdrcGainSub = findViewById(R.id.tvMdrcGainSub)
-        sbMdrcGainLow = findViewById(R.id.sbMdrcGainLow)
-        tvMdrcGainLow = findViewById(R.id.tvMdrcGainLow)
-        sbMdrcGainMid = findViewById(R.id.sbMdrcGainMid)
-        tvMdrcGainMid = findViewById(R.id.tvMdrcGainMid)
-        sbMdrcGainHigh = findViewById(R.id.sbMdrcGainHigh)
-        tvMdrcGainHigh = findViewById(R.id.tvMdrcGainHigh)
-        sbMdrcGainAir = findViewById(R.id.sbMdrcGainAir)
-        tvMdrcGainAir = findViewById(R.id.tvMdrcGainAir)
-
-        btnSavePreset = findViewById(R.id.btnSavePreset)
-        btnDeletePreset = findViewById(R.id.btnDeletePreset)
-        btnExportSjbz = findViewById(R.id.btnExportSjbz)
-        btnImportSjbz = findViewById(R.id.btnImportSjbz)
-
+        sbMdrcGainSub = findViewById(R.id.sbMdrcGainSub); tvMdrcGainSub = findViewById(R.id.tvMdrcGainSub)
+        sbMdrcGainLow = findViewById(R.id.sbMdrcGainLow); tvMdrcGainLow = findViewById(R.id.tvMdrcGainLow)
+        sbMdrcGainMid = findViewById(R.id.sbMdrcGainMid); tvMdrcGainMid = findViewById(R.id.tvMdrcGainMid)
+        sbMdrcGainHigh = findViewById(R.id.sbMdrcGainHigh); tvMdrcGainHigh = findViewById(R.id.tvMdrcGainHigh)
+        sbMdrcGainAir = findViewById(R.id.sbMdrcGainAir); tvMdrcGainAir = findViewById(R.id.tvMdrcGainAir)
+        btnSavePreset = findViewById(R.id.btnSavePreset); btnDeletePreset = findViewById(R.id.btnDeletePreset); btnExportSjbz = findViewById(R.id.btnExportSjbz); btnImportSjbz = findViewById(R.id.btnImportSjbz)
         switchEqEnabled.isChecked = equalizerProcessor.isEnabled
         switchEqEnabled.setOnCheckedChangeListener { _, isChecked ->
             equalizerProcessor.isEnabled = isChecked
-            audioHandler.post {
-                try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_: Exception) {}
-                try { syncAllEffects() } catch (_: Exception) {}
-            }
+            postAudioUpdate { PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects() }
             updateSlidersEnabled(isChecked)
         }
     }
 
     private fun updateSlidersEnabled(enabled: Boolean) {
         seekBarPreamp.isEnabled = enabled
-        for (sb in bandSeekBars) { sb.isEnabled = enabled }
+        for (sb in bandSeekBars) sb.isEnabled = enabled
     }
 
     private fun setupGlobalSystemEq() {
@@ -194,29 +168,21 @@ class EqActivity : AppCompatActivity() {
         updateGlobalSessionsUi()
         switchGlobalSystemEq.setOnCheckedChangeListener { _, isChecked ->
             globalSessionManager.enableGlobalMode(isChecked, this)
-            syncAllEffects()
+            postAudioUpdate { syncAllEffects() }
             updateGlobalSessionsUi()
-            val msg = if (isChecked) "Modo Global Activado" else "Modo Global Desactivado"
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (isChecked) "Modo Global Activado" else "Modo Global Desactivado", Toast.LENGTH_SHORT).show()
         }
-        globalSessionManager.onSessionsChangedListener = { updateGlobalSessionsUi() }
+        globalSessionManager.onSessionsChangedListener = { runOnUiThread { updateGlobalSessionsUi() } }
         btnGlobalHelp.setOnClickListener { showGlobalHelpDialog() }
     }
 
     private fun updateGlobalSessionsUi() {
         if (!globalSessionManager.isGlobalModeEnabled) {
-            tvActiveSessionsStatus.text = "Estado: Modo local SjbZ AIMP"
-            tvActiveSessionsStatus.setTextColor(Color.parseColor("#A0A0A0"))
-            return
+            tvActiveSessionsStatus.text = "Estado: Modo local SjbZ AIMP"; tvActiveSessionsStatus.setTextColor(Color.parseColor("#A0A0A0")); return
         }
         val sessions = globalSessionManager.getActiveSessionsSummary()
-        val text = buildString {
-            append("● Modo Global ACTIVO\n")
-            if (sessions.isEmpty()) append("Esperando reproducción...")
-            else sessions.forEach { append(it).append("\n") }
-        }.trimEnd()
-        tvActiveSessionsStatus.text = text
-        tvActiveSessionsStatus.setTextColor(Color.parseColor("#00E676"))
+        val text = buildString { append("● Modo Global ACTIVO\n"); if (sessions.isEmpty()) append("Esperando reproducción...") else sessions.forEach { append(it).append("\n") } }.trimEnd()
+        tvActiveSessionsStatus.text = text; tvActiveSessionsStatus.setTextColor(Color.parseColor("#00E676"))
     }
 
     private fun syncAllEffects() {
@@ -224,55 +190,23 @@ class EqActivity : AppCompatActivity() {
         globalSessionManager.syncAudioEffects(equalizerProcessor, mdrcProcessor, limiter)
     }
 
-    private fun showGlobalHelpDialog() {
-        AlertDialog.Builder(this)
-           .setTitle("Modo Global")
-           .setMessage("Intercepta sesiones de audio de Spotify, YouTube, etc.")
-           .setPositiveButton("Entendido", null).show()
-    }
+    private fun showGlobalHelpDialog() { AlertDialog.Builder(this).setTitle("Modo Global").setMessage("Intercepta sesiones de audio de Spotify, YouTube, etc.").setPositiveButton("Entendido", null).show() }
 
     private fun setup32BandSliders() {
-        container32Bands.removeAllViews()
-        bandSeekBars.clear()
-        bandValueLabels.clear()
-
-        val bandCount = EqualizerProcessor.BAND_COUNT
-        val labels = EqualizerProcessor.BAND_LABELS
-
+        container32Bands.removeAllViews(); bandSeekBars.clear(); bandValueLabels.clear()
+        val bandCount = EqualizerProcessor.BAND_COUNT; val labels = EqualizerProcessor.BAND_LABELS
         for (i in 0 until bandCount) {
-            val bandCol = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 58).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(2, 8, 2, 8)
-            }
-
-            val tvGain = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                text = "0.0"
-                textSize = 10f
-                setTextColor(currentThemeColor)
-                gravity = Gravity.CENTER
-            }
-            bandCol.addView(tvGain)
-            bandValueLabels.add(tvGain)
-
-            val faderContainer = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f)
-                gravity = Gravity.CENTER
-            }
-
-            // FIX DEFINITIVO: ancho MATCH_PARENT y alto 340dp
+            val bandCol = LinearLayout(this).apply { layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 58).toInt(), LinearLayout.LayoutParams.MATCH_PARENT); orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(2, 8, 2, 8) }
+            val tvGain = TextView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT); text = "0.0"; textSize = 10f; setTextColor(currentThemeColor); gravity = Gravity.CENTER }
+            bandCol.addView(tvGain); bandValueLabels.add(tvGain)
+            val faderContainer = LinearLayout(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f); gravity = Gravity.CENTER }
             val seekBar = VerticalSeekBar(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (resources.displayMetrics.density * 340).toInt())
                 max = 240
-                val currentG = equalizerProcessor.getBandGain(i)
-                progress = (currentG * 10.0f + 120).toInt().coerceIn(0, 240)
-                progressTintList = ColorStateList.valueOf(currentThemeColor)
-                thumbTintList = ColorStateList.valueOf(currentThemeColor)
+                progress = (equalizerProcessor.getBandGain(i) * 10.0f + 120).toInt().coerceIn(0, 240)
+                progressTintList = ColorStateList.valueOf(currentThemeColor); thumbTintList = ColorStateList.valueOf(currentThemeColor)
             }
             tvGain.text = String.format("%+.1f", equalizerProcessor.getBandGain(i))
-
             val bandIndex = i
             seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -280,70 +214,38 @@ class EqActivity : AppCompatActivity() {
                     tvGain.text = String.format("%+.1f", gainDb)
                     if (fromUser &&!isUpdatingUiFromPreset) {
                         equalizerProcessor.setBandGain(bandIndex, gainDb)
-                        audioHandler.post {
-                            try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_: Exception) {}
-                            try { syncAllEffects() } catch (_: Exception) {}
-                        }
+                        postAudioUpdate { PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects() }
                     }
                 }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
+                override fun onStartTrackingTouch(sb: SeekBar?) { parent?.requestDisallowInterceptTouchEvent(true) }
+                override fun onStopTrackingTouch(sb: SeekBar?) { parent?.requestDisallowInterceptTouchEvent(false); postAudioUpdate { PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects() } }
             })
-
-            faderContainer.addView(seekBar)
-            bandCol.addView(faderContainer)
-            bandSeekBars.add(seekBar)
-
-            val tvFreq = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                text = labels[i]
-                textSize = 9.5f
-                setTextColor(Color.parseColor("#CCCCCC"))
-                gravity = Gravity.CENTER
-            }
-            bandCol.addView(tvFreq)
-            container32Bands.addView(bandCol)
+            faderContainer.addView(seekBar); bandCol.addView(faderContainer); bandSeekBars.add(seekBar)
+            val tvFreq = TextView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT); text = labels[i]; textSize = 9.5f; setTextColor(Color.parseColor("#CCCCCC")); gravity = Gravity.CENTER }
+            bandCol.addView(tvFreq); container32Bands.addView(bandCol)
         }
     }
 
     private fun setupPreampAndControls() {
-        seekBarPreamp.progress = (equalizerProcessor.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
-        tvPreampValue.text = String.format("%+.1f dB", equalizerProcessor.preampDb)
-
+        seekBarPreamp.progress = (equalizerProcessor.preampDb * 10.0f + 120).toInt().coerceIn(0, 240); tvPreampValue.text = String.format("%+.1f dB", equalizerProcessor.preampDb)
         seekBarPreamp.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val db = (progress - 120) / 10.0f
-                tvPreampValue.text = String.format("%+.1f dB", db)
-                if (fromUser &&!isUpdatingUiFromPreset) {
-                    equalizerProcessor.preampDb = db
-                    audioHandler.post {
-                        try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_: Exception) {}
-                        try { syncAllEffects() } catch (_: Exception) {}
-                    }
-                }
+                val db = (progress - 120) / 10.0f; tvPreampValue.text = String.format("%+.1f dB", db)
+                if (fromUser &&!isUpdatingUiFromPreset) { equalizerProcessor.preampDb = db; postAudioUpdate { PlaybackService.instance?.atsEngine?.updateEqualizer(); syncAllEffects() } }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-
         seekBarSpeed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val factor = 0.5f + (progress / 100.0f)
-                tvSpeedValue.text = String.format("%.2fx", factor)
-                if (fromUser) {
-                    PlaybackService.instance?.setPlaybackSpeed(factor)
-                    PlaybackService.instance?.audioChain?.setPlaybackParameters(factor, factor)
-                }
+                val factor = 0.5f + (progress / 100.0f); tvSpeedValue.text = String.format("%.2fx", factor)
+                if (fromUser) { postAudioUpdate { PlaybackService.instance?.setPlaybackSpeed(factor); PlaybackService.instance?.audioChain?.setPlaybackParameters(factor, factor) } }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-
         seekBarCrossfade.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                tvCrossfadeValue.text = "${progress}s"
-                if (fromUser) { PlaybackService.instance?.atsEngine?.crossfadeSeconds = progress }
-            }
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) { tvCrossfadeValue.text = "${progress}s"; if (fromUser) postAudioUpdate { PlaybackService.instance?.atsEngine?.crossfadeSeconds = progress } }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
@@ -353,40 +255,21 @@ class EqActivity : AppCompatActivity() {
         mdrcSeekBars.clear(); mdrcValueLabels.clear()
         mdrcSeekBars.add(sbMdrcGainSub); mdrcSeekBars.add(sbMdrcGainLow); mdrcSeekBars.add(sbMdrcGainMid); mdrcSeekBars.add(sbMdrcGainHigh); mdrcSeekBars.add(sbMdrcGainAir)
         mdrcValueLabels.add(tvMdrcGainSub); mdrcValueLabels.add(tvMdrcGainLow); mdrcValueLabels.add(tvMdrcGainMid); mdrcValueLabels.add(tvMdrcGainHigh); mdrcValueLabels.add(tvMdrcGainAir)
-
         for (i in 0 until 5) {
-            val sb = mdrcSeekBars[i]
-            val tv = mdrcValueLabels[i]
-            val bandIndex = i
-            val band = mdrcProcessor.getBand(bandIndex)
-            val currentGain = band?.gainDb?: 0.0f
-            sb.progress = (currentGain * 10.0f + 120).toInt().coerceIn(0, 240)
-            tv.text = String.format("%+.1f dB", currentGain)
+            val sb = mdrcSeekBars[i]; val tv = mdrcValueLabels[i]; val bandIndex = i
+            val band = mdrcProcessor.getBand(bandIndex); val currentGain = band?.gainDb?: 0.0f
+            sb.progress = (currentGain * 10.0f + 120).toInt().coerceIn(0, 240); tv.text = String.format("%+.1f dB", currentGain)
             sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val gainDb = (progress - 120) / 10.0f
-                    tv.text = String.format("%+.1f dB", gainDb)
-                    if (fromUser &&!isUpdatingUiFromPreset) {
-                        mdrcProcessor.getBand(bandIndex)?.gainDb = gainDb
-                        audioHandler.post {
-                            try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_: Exception) {}
-                            try { syncAllEffects() } catch (_: Exception) {}
-                        }
-                    }
+                    val gainDb = (progress - 120) / 10.0f; tv.text = String.format("%+.1f dB", gainDb)
+                    if (fromUser &&!isUpdatingUiFromPreset) { mdrcProcessor.getBand(bandIndex)?.gainDb = gainDb; postAudioUpdate { PlaybackService.instance?.atsEngine?.updateMDRC(); syncAllEffects() } }
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
         }
         switchMdrcEnabled.isChecked = mdrcProcessor.isEnabled
-        switchMdrcEnabled.setOnCheckedChangeListener { _, isChecked ->
-            mdrcProcessor.isEnabled = isChecked
-            audioHandler.post {
-                try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_: Exception) {}
-                try { syncAllEffects() } catch (_: Exception) {}
-            }
-            for (sb in mdrcSeekBars) { sb.isEnabled = isChecked }
-        }
+        switchMdrcEnabled.setOnCheckedChangeListener { _, isChecked -> mdrcProcessor.isEnabled = isChecked; postAudioUpdate { PlaybackService.instance?.atsEngine?.updateMDRC(); syncAllEffects() }; for (sb in mdrcSeekBars) sb.isEnabled = isChecked }
     }
 
     private fun setupPresetsSpinner() {
@@ -403,125 +286,59 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun refreshPresetsSpinner(selectPresetName: String? = null) {
-        val allPresets = presetManager.getAllPresets()
-        val names = allPresets.map { it.name }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
-        spinnerPresets.adapter = adapter
-        val target = selectPresetName?: presetManager.getActivePresetName()
-        val idx = names.indexOf(target)
-        if (idx >= 0) spinnerPresets.setSelection(idx)
+        val names = presetManager.getAllPresets().map { it.name }
+        spinnerPresets.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
+        val idx = names.indexOf(selectPresetName?: presetManager.getActivePresetName()); if (idx >= 0) spinnerPresets.setSelection(idx)
     }
 
     private fun applyPresetColor(color: Int) {
-        currentThemeColor = color
-        val colorList = ColorStateList.valueOf(color)
-        seekBarPreamp.progressTintList = colorList; seekBarPreamp.thumbTintList = colorList
-        tvPreampValue.setTextColor(color)
+        currentThemeColor = color; val colorList = ColorStateList.valueOf(color)
+        seekBarPreamp.progressTintList = colorList; seekBarPreamp.thumbTintList = colorList; tvPreampValue.setTextColor(color)
         seekBarSpeed.progressTintList = colorList; seekBarSpeed.thumbTintList = colorList
         seekBarCrossfade.progressTintList = colorList; seekBarCrossfade.thumbTintList = colorList
         for (sb in bandSeekBars) { sb.progressTintList = colorList; sb.thumbTintList = colorList }
-        for (tv in bandValueLabels) { tv.setTextColor(color) }
+        for (tv in bandValueLabels) tv.setTextColor(color)
         for (sb in mdrcSeekBars) { sb.progressTintList = colorList; sb.thumbTintList = colorList }
-        for (tv in mdrcValueLabels) { tv.setTextColor(color) }
-        btnSavePreset.setTextColor(color)
-        switchEqEnabled.thumbTintList = colorList; switchMdrcEnabled.thumbTintList = colorList
+        for (tv in mdrcValueLabels) tv.setTextColor(color)
+        btnSavePreset.setTextColor(color); switchEqEnabled.thumbTintList = colorList; switchMdrcEnabled.thumbTintList = colorList
     }
 
     private fun loadPresetToUi(preset: EqPreset) {
         isUpdatingUiFromPreset = true
         try {
-            equalizerProcessor.loadFromPreset(preset)
-            applyPresetColor(preset.color)
-            val preampProgress = (preset.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
-            seekBarPreamp.progress = preampProgress
-            tvPreampValue.text = String.format("%+.1f dB", preset.preampDb)
-            val gains = preset.bandGains
-            for (i in 0 until minOf(gains.size, bandSeekBars.size)) {
-                val g = gains[i]
-                val p = (g * 10.0f + 120).toInt().coerceIn(0, 240)
-                bandSeekBars[i].progress = p
-                bandValueLabels[i].text = String.format("%+.1f", g)
-            }
-            val mdrcSettings = preset.mdrcSettings
-            mdrcProcessor.loadFromSettings(mdrcSettings)
-            switchMdrcEnabled.isChecked = mdrcSettings.enabled
-            for (i in 0 until minOf(5, mdrcSettings.bands.size, mdrcSeekBars.size)) {
-                val bandCfg = mdrcSettings.bands[i]
-                val p = (bandCfg.gainDb * 10.0f + 120).toInt().coerceIn(0, 240)
-                mdrcSeekBars[i].progress = p
-                mdrcValueLabels[i].text = String.format("%+.1f dB", bandCfg.gainDb)
-            }
-            audioHandler.post {
-                try { PlaybackService.instance?.atsEngine?.updateEqualizer() } catch (_: Exception) {}
-                try { PlaybackService.instance?.atsEngine?.updateMDRC() } catch (_: Exception) {}
-                try { syncAllEffects() } catch (_: Exception) {}
-            }
+            equalizerProcessor.loadFromPreset(preset); applyPresetColor(preset.color)
+            seekBarPreamp.progress = (preset.preampDb * 10.0f + 120).toInt().coerceIn(0, 240); tvPreampValue.text = String.format("%+.1f dB", preset.preampDb)
+            for (i in 0 until minOf(preset.bandGains.size, bandSeekBars.size)) { val g = preset.bandGains[i]; bandSeekBars[i].progress = (g * 10.0f + 120).toInt().coerceIn(0, 240); bandValueLabels[i].text = String.format("%+.1f", g) }
+            val mdrcSettings = preset.mdrcSettings; mdrcProcessor.loadFromSettings(mdrcSettings); switchMdrcEnabled.isChecked = mdrcSettings.enabled
+            for (i in 0 until minOf(5, mdrcSettings.bands.size, mdrcSeekBars.size)) { val b = mdrcSettings.bands[i]; mdrcSeekBars[i].progress = (b.gainDb * 10.0f + 120).toInt().coerceIn(0, 240); mdrcValueLabels[i].text = String.format("%+.1f dB", b.gainDb) }
+            postAudioUpdate { PlaybackService.instance?.atsEngine?.updateEqualizer(); PlaybackService.instance?.atsEngine?.updateMDRC(); syncAllEffects() }
         } finally { isUpdatingUiFromPreset = false }
     }
 
     private fun setupButtons() {
         btnSavePreset.setOnClickListener { showSavePresetDialog() }
-        btnSavePreset.setOnLongClickListener {
-            showColorPicker { chosenColor -> applyPresetColor(chosenColor); Toast.makeText(this, "Color actualizado", Toast.LENGTH_SHORT).show() }
-            true
-        }
+        btnSavePreset.setOnLongClickListener { showColorPicker { chosenColor -> applyPresetColor(chosenColor); Toast.makeText(this, "Color actualizado", Toast.LENGTH_SHORT).show() }; true }
         btnDeletePreset.setOnClickListener {
             val selected = spinnerPresets.selectedItem?.toString()?: return@setOnClickListener
-            if (presetManager.defaultPresetNames.contains(selected)) {
-                Toast.makeText(this, "No se pueden borrar presets de fábrica", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            AlertDialog.Builder(this).setTitle("Borrar Preset").setMessage("¿Eliminar '$selected'?")
-               .setPositiveButton("Borrar") { _, _ -> presetManager.deletePreset(selected); refreshPresetsSpinner("ATS-2835P Master"); Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show() }
-               .setNegativeButton("Cancelar", null).show()
+            if (presetManager.defaultPresetNames.contains(selected)) { Toast.makeText(this, "No se pueden borrar presets de fábrica", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+            AlertDialog.Builder(this).setTitle("Borrar Preset").setMessage("¿Eliminar '$selected'?").setPositiveButton("Borrar") { _, _ -> presetManager.deletePreset(selected); refreshPresetsSpinner("ATS-2835P Master"); Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show() }.setNegativeButton("Cancelar", null).show()
         }
         btnExportSjbz.setOnClickListener { exportSjbzLauncher.launch("${spinnerPresets.selectedItem}.sjbz") }
         btnImportSjbz.setOnClickListener { importSjbzLauncher.launch(arrayOf("*/*")) }
     }
 
     private fun showColorPicker(onColorSelected: (Int) -> Unit) {
-        val palette = EqPreset.PALETTE
-        val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(36, 24, 36, 24); setBackgroundColor(Color.parseColor("#1E1E1E")) }
-        val title = TextView(this).apply { text = "Elige Color"; setTextColor(Color.WHITE); textSize = 15f; setPadding(0, 0, 0, 16); gravity = Gravity.CENTER }
-        container.addView(title)
+        val palette = EqPreset.PALETTE; val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(36, 24, 36, 24); setBackgroundColor(Color.parseColor("#1E1E1E")) }
+        val title = TextView(this).apply { text = "Elige Color"; setTextColor(Color.WHITE); textSize = 15f; setPadding(0, 0, 0, 16); gravity = Gravity.CENTER }; container.addView(title)
         var dialog: AlertDialog? = null
-        for (row in 0..1) {
-            val rowLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, 6, 0, 6) }
-            for (col in 0..4) {
-                val idx = row * 5 + col
-                val c = palette[idx]
-                val btn = Button(this).apply {
-                    layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 52).toInt(), (resources.displayMetrics.density * 44).toInt()).apply { setMargins(6, 4, 6, 4) }
-                    backgroundTintList = ColorStateList.valueOf(c)
-                    setOnClickListener { onColorSelected(c); dialog?.dismiss() }
-                }
-                rowLayout.addView(btn)
-            }
-            container.addView(rowLayout)
-        }
-        dialog = AlertDialog.Builder(this).setView(container).setNegativeButton("Cancelar", null).create()
-        dialog.show()
+        for (row in 0..1) { val rowLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, 6, 0, 6) }; for (col in 0..4) { val idx = row * 5 + col; val c = palette[idx]; val btn = Button(this).apply { layoutParams = LinearLayout.LayoutParams((resources.displayMetrics.density * 52).toInt(), (resources.displayMetrics.density * 44).toInt()).apply { setMargins(6, 4, 6, 4) }; backgroundTintList = ColorStateList.valueOf(c); setOnClickListener { onColorSelected(c); dialog?.dismiss() } }; rowLayout.addView(btn) }; container.addView(rowLayout) }
+        dialog = AlertDialog.Builder(this).setView(container).setNegativeButton("Cancelar", null).create(); dialog.show()
     }
 
     private fun showSavePresetDialog() {
         val input = EditText(this).apply { hint = "Nombre del Preset"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
-        AlertDialog.Builder(this).setTitle("Guardar Preset").setView(input)
-           .setPositiveButton("Guardar") { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    val existing = presetManager.getCustomPresets().find { it.name.equals(name, ignoreCase = true) }
-                    val colorToSave = existing?.color?: currentThemeColor
-                    val currentPreset = equalizerProcessor.toEqPreset(name = name, isCustom = true, mdrcSettings = mdrcProcessor.toMDRCSettings(), color = colorToSave)
-                    presetManager.saveCustomPreset(currentPreset)
-                    refreshPresetsSpinner(name); applyPresetColor(colorToSave)
-                    Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show()
-                }
-            }
-           .setNegativeButton("Cancelar", null).show()
+        AlertDialog.Builder(this).setTitle("Guardar Preset").setView(input).setPositiveButton("Guardar") { _, _ -> val name = input.text.toString().trim(); if (name.isNotEmpty()) { val existing = presetManager.getCustomPresets().find { it.name.equals(name, ignoreCase = true) }; val colorToSave = existing?.color?: currentThemeColor; val currentPreset = equalizerProcessor.toEqPreset(name = name, isCustom = true, mdrcSettings = mdrcProcessor.toMDRCSettings(), color = colorToSave); presetManager.saveCustomPreset(currentPreset); refreshPresetsSpinner(name); applyPresetColor(colorToSave); Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show() } }.setNegativeButton("Cancelar", null).show()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        globalSessionManager.onSessionsChangedListener = null
-    }
+    override fun onDestroy() { super.onDestroy(); globalSessionManager.onSessionsChangedListener = null; audioExecutor.shutdown() }
 }

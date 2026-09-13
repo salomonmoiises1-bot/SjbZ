@@ -3,10 +3,6 @@ package com.sjbz.aimp.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-/**
- * Entity representing an audio track in the SjbZ player.
- * Supports FLAC, MP3, WAV, APE, OPUS, OGG, M4A up to 24-bit/192kHz.
- */
 @Entity(tableName = "tracks")
 data class Track(
     @PrimaryKey(autoGenerate = true)
@@ -14,13 +10,13 @@ data class Track(
     val title: String,
     val artist: String = "Unknown Artist",
     val album: String = "Unknown Album",
-    val duration: Long = 0L, // in milliseconds
+    val duration: Long = 0L,
     val uri: String,
     val path: String = "",
-    val format: String = "MP3", // FLAC, MP3, WAV, APE, OPUS, OGG, M4A
-    val bitrate: Int = 320, // in kbps
-    val sampleRate: Int = 44100, // in Hz (supports up to 192000)
-    val bitDepth: Int = 16, // 16-bit, 24-bit
+    val format: String = "MP3",
+    val bitrate: Int = 320,
+    val sampleRate: Int = 44100,
+    val bitDepth: Int = 16,
     val isFavorite: Boolean = false,
     val isHistory: Boolean = false,
     val playlistId: Long = 1L,
@@ -38,4 +34,12 @@ data class Track(
     fun getTechInfo(): String {
         return "$format • ${bitrate}kbps • ${sampleRate / 1000}kHz • ${bitDepth}bit"
     }
+
+    // --- FIX PARA PlaybackService.kt:208,220 ---
+    fun toDisplay(): String {
+        return if (artist.isNotBlank() && artist != "Unknown Artist") "$title - $artist"
+        else title
+    }
+
+    fun toDisplayNotification(): String = toDisplay()
 }

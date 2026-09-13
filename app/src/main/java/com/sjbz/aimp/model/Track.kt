@@ -23,7 +23,7 @@ data class Track(
     val orderIndex: Int = 0,
     val albumArtUri: String? = null,
     val dateAdded: Long = System.currentTimeMillis()
- {
+) {
     fun getFormattedDuration(): String {
         val totalSeconds = duration / 1000
         val minutes = totalSeconds / 60
@@ -36,8 +36,7 @@ data class Track(
     }
 
     fun toDisplay(): String {
-        return if (artist.isNotBlank() && artist != "Unknown Artist") "$title - $artist"
-        else title
+        return if (artist.isNotBlank() && artist != "Unknown Artist") "$title - $artist" else title
     }
 
     fun toDisplayNotification(): String = toDisplay()

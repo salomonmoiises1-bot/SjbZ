@@ -117,6 +117,7 @@ class EqActivity : AppCompatActivity() {
         equalizerProcessor = liveEngine?.equalizer?: EqualizerProcessor()
         mdrcProcessor = liveEngine?.mdrc?: MDRCProcessor()
         bassProcessor = liveEngine?.bassBoost?: BassBoostProcessor()
+        globalSessionManager = GlobalAudioSessionManager.getInstance(this)
 
         initViews()
         setupToolbar()
@@ -158,7 +159,6 @@ class EqActivity : AppCompatActivity() {
         tvMdrcGainMid = findViewById(R.id.tvMdrcGainMid)
         tvMdrcGainHigh = findViewById(R.id.tvMdrcGainHigh)
         tvMdrcGainAir = findViewById(R.id.tvMdrcGainAir)
-        globalSessionManager = GlobalAudioSessionManager.getInstance(this)
         switchEqEnabled.isChecked = equalizerProcessor.isEnabled
         switchMdrcEnabled.isChecked = mdrcProcessor.isEnabled
     }
@@ -261,7 +261,13 @@ class EqActivity : AppCompatActivity() {
             tvActiveSessionsStatus.text = if(c) "Global: Activo - Spotify/Deezer" else "Estado: Modo local SjbZ AIMP"
             postAudioUpdateDebounced(0, true) {}
         }
-        globalSessionManager.onSessionsChangedListener = { count -> runOnUiThread { tvActiveSessionsStatus.text = "Sesiones activas: $count" } }
+        // FIX: listener sin parametro
+        globalSessionManager.onSessionsChangedListener = {
+            runOnUiThread {
+                val summary = globalSessionManager.getActiveSessionsSummary()
+                tvActiveSessionsStatus.text = if (summary.isEmpty()) "Estado: Modo local SjbZ AIMP" else summary.joinToString("\n")
+            }
+        }
         findViewById<Button>(R.id.btnGlobalHelp).setOnClickListener {
             AlertDialog.Builder(this).setTitle("Modo Global").setMessage("Aplica EQ a Spotify, YouTube, Deezer. Requiere permiso de audio. Si hay ANR, desactívalo.").setPositiveButton("OK", null).show()
         }
@@ -294,14 +300,22 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun setupMdrcControls() {
-        val pairs = listOf(tvMdrcGainSub to sbMdrcGainSub, tvMdrcGainLow to sbMdrcGainLow, tvMdrcGainMid to sbMdrcGainMid, tvMdrcGainHigh to sbMdrcGainHigh, tvMdrcGainAir to sbMdrcGainAir)
+        // FIX linea 264: tipo explicito para inferencia
+        val pairs: List<Pair<TextView, SeekBar>> = listOf(
+            Pair(tvMdrcGainSub, sbMdrcGainSub),
+            Pair(tvMdrcGainLow, sbMdrcGainLow),
+            Pair(tvMdrcGainMid, sbMdrcGainMid),
+            Pair(tvMdrcGainHigh, sbMdrcGainHigh),
+            Pair(tvMdrcGainAir, sbMdrcGainAir)
+        )
         for((tv, sb) in pairs) {
             sb.setOnSeekBarChangeListener(object: SeekBar.OnSeekBarChangeListener{
                 override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                     val db = (p-120)/10f
                     tv.text = String.format("%+.1f dB", db)
                     if(fromUser) {
-                        mdrcProcessor.setGainForIndex(pairs.indexOf(tv to sb), db)
+                        val idx = pairs.indexOfFirst { it.second == sb }
+                        if (idx >= 0) mdrcProcessor.setGainForIndex(idx, db)
                         postAudioUpdateDebounced(60, false){ PlaybackService.instance?.atsEngine?.updateMDRC() }
                     }
                 }
@@ -344,7 +358,6 @@ class EqActivity : AppCompatActivity() {
         isUpdatingUiFromPreset = true
         try {
             currentThemeColor = preset.color
-            // FIX: usar bandGains y preampDb del nuevo modelo
             equalizerProcessor.loadFromPreset(preset)
             mdrcProcessor.loadFromSettings(preset.mdrcSettings)
             currentBassFreq = preset.bassBoostFreq
@@ -363,7 +376,6 @@ class EqActivity : AppCompatActivity() {
             tvBassBoostValue.text = String.format("+%.1f dB (%d%%) ACTIVO", bassG, (bassG/15f*100).toInt())
             tvBassGainSide.text = String.format("+%.1f dB", bassG)
 
-            // FIX MDRC: ahora es List<MDRCBandConfig>
             val sbs = listOf(sbMdrcGainSub, sbMdrcGainLow, sbMdrcGainMid, sbMdrcGainHigh, sbMdrcGainAir)
             val tvs = listOf(tvMdrcGainSub, tvMdrcGainLow, tvMdrcGainMid, tvMdrcGainHigh, tvMdrcGainAir)
             for(i in sbs.indices) {
@@ -385,7 +397,7 @@ class EqActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnSavePreset).setOnClickListener {
             val input = EditText(this); input.hint = "Nombre preset"
             AlertDialog.Builder(this).setTitle("Guardar preset").setView(input)
-              .setPositiveButton("Guardar") { _, _ ->
+             .setPositiveButton("Guardar") { _, _ ->
                     val name = input.text.toString().ifEmpty { "Custom ${System.currentTimeMillis()}" }
                     val preset = equalizerProcessor.toEqPreset(
                         name = name,

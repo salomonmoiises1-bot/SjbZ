@@ -15,7 +15,6 @@ typealias ATSEngine = ATS2835PEngine
  * - ATS2835P Hardware SoftClipper
  * - Stereo Balance, Pitch & Speed scaling, Crossfade engine
  * - Bluetooth A2DP auto-adaptation (Gentle MDRC mode, limiter bypass)
- * - SjbZ Psicoacustic BassBoost 60/85/120Hz +15dB
  */
 class ATS2835PEngine(
     private val context: Context? = null,
@@ -32,11 +31,8 @@ class ATS2835PEngine(
     val mdrc = MDRCProcessor()
     val limiter = LimiterProcessor()
     val crossover = CrossoverProcessor()
-    val dynamicsHelper = DynamicsProcessingHelper()
-    
-    // --- NUEVA CARACTERISTICA BASSBOOST ---
     val bassBoost = BassBoostProcessor()
-    private var androidBassBoost: android.media.audiofx.BassBoost? = null
+    val dynamicsHelper = DynamicsProcessingHelper()
 
     // DSP Parameters
     var balance: Float = 0.0f // -1.0 (Left) to +1.0 (Right)
@@ -57,23 +53,16 @@ class ATS2835PEngine(
         if (sessionId <= 0) return
         this.audioSessionId = sessionId
         dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter)
-        
-        try {
-            androidBassBoost?.release()
-            androidBassBoost = android.media.audiofx.BassBoost(0, sessionId).apply {
-                enabled = true
-                setStrength(bassBoost.toStrength().toShort())
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "BassBoost no soportado en este device: ${e.message}")
-        }
+        bassBoost.attachToSession(sessionId)
     }
 
     fun applyPreset(preset: EqPreset) {
         equalizer.loadFromPreset(preset)
         mdrc.loadFromSettings(preset.mdrcSettings)
-        // Cargar BassBoost del preset
-        bassBoost.setBassBoost(preset.bassBoostFreq, preset.bassBoostGain)
+        if (preset.name == "Bass Boost") {
+            bassBoost.isEnabled = true
+            bassBoost.strength = 800.toShort()
+        }
         updateEqualizer()
         updateMDRC()
         updateBassBoost()
@@ -101,26 +90,12 @@ class ATS2835PEngine(
         dynamicsHelper.applyLimiter(limiter)
     }
 
-    // --- METODOS BASSBOOST ---
-    fun setBassBoost(freq: Int, gain: Float) {
-        bassBoost.setBassBoost(freq, gain)
-        updateBassBoost()
-    }
-
     fun updateBassBoost() {
-        try {
-            androidBassBoost?.let {
-                it.setStrength(bassBoost.toStrength().toShort())
-                it.enabled = bassBoost.isEnabled
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updateBassBoost: ${e.message}")
-        }
+        bassBoost.updateNativeEffect()
     }
 
     fun release() {
         dynamicsHelper.release()
-        try { androidBassBoost?.release() } catch (_: Exception) {}
-        androidBassBoost = null
+        bassBoost.release()
     }
 }

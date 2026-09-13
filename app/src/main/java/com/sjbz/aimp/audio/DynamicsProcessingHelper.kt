@@ -31,6 +31,7 @@ class DynamicsProcessingHelper {
 
     /**
      * Attaches audio processing to the specified ExoPlayer audioSessionId.
+     * Reuses active instance if audioSessionId is unchanged to prevent heavy HAL audio IPC blockages (ANR).
      */
     fun attachToSession(
         audioSessionId: Int,
@@ -39,6 +40,12 @@ class DynamicsProcessingHelper {
         limiterProcessor: LimiterProcessor
     ) {
         if (audioSessionId < 0) return
+        
+        // CRITICAL ANTI-ANR: If already attached to this audioSessionId, never recreate heavy HAL effect
+        if (currentSessionId == audioSessionId && (dynamicsProcessing != null || legacyEqualizer != null)) {
+            return
+        }
+
         release()
         currentSessionId = audioSessionId
 

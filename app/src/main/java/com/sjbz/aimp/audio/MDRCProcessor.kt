@@ -6,6 +6,13 @@ import com.sjbz.aimp.model.MDRCSettings
 /**
  * 5-Band Multi-band Dynamic Range Compression (MDRC) Processor.
  * Modeled after the ATS2835P audio DSP hardware architecture.
+ *
+ * Bands:
+ * 1. Sub: 20 Hz - 120 Hz
+ * 2. Low: 120 Hz - 500 Hz
+ * 3. Mid: 500 Hz - 2,000 Hz
+ * 4. High: 2,000 Hz - 8,000 Hz
+ * 5. Air: 8,000 Hz - 20,000 Hz
  */
 class MDRCProcessor {
 
@@ -37,28 +44,20 @@ class MDRCProcessor {
     )
 
     fun getBandCount(): Int = bands.size
-    fun getBand(index: Int): Band? = if (index in bands.indices) bands[index] else null
 
-    // --- FIX PARA EqActivity.kt:304 ---
-    fun setGainForIndex(index: Int, gainDb: Float) {
-        if (index in bands.indices) {
-            bands[index].gainDb = gainDb
-        }
-    }
-
-    fun setGainForIndex(index: Int, gainDb: Double) {
-        setGainForIndex(index, gainDb.toFloat())
-    }
-
-    fun getGainForIndex(index: Int): Float {
-        return if (index in bands.indices) bands[index].gainDb else 0f
+    fun getBand(index: Int): Band? {
+        return if (index in bands.indices) bands[index] else null
     }
 
     private fun applyGentleConstraints() {
         if (isGentleBluetoothMode) {
             for (band in bands) {
-                if (band.ratio > 3.0f) band.ratio = 3.0f
-                if (band.thresholdDb < -14.0f) band.thresholdDb = -14.0f
+                if (band.ratio > 3.0f) {
+                    band.ratio = 3.0f
+                }
+                if (band.thresholdDb < -14.0f) {
+                    band.thresholdDb = -14.0f
+                }
             }
         }
     }
@@ -96,7 +95,4 @@ class MDRCProcessor {
         }
         applyGentleConstraints()
     }
-
-    // --- FIX PARA COMPATIBILIDAD CON CODIGO VIEJO ---
-    fun applySettings(settings: MDRCSettings) = loadFromSettings(settings)
 }

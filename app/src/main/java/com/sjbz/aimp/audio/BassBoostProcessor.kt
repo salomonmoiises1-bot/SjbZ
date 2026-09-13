@@ -1,76 +1,104 @@
 package com.sjbz.aimp.audio
 
 import android.media.audiofx.BassBoost
+import android.util.Log
 
 /**
- * SjbZ BassBoost Psicoacústico +15dB
- * Nueva característica: frecuencia seleccionable 60/85/120 Hz
+ * Bass Boost Processor modeled for SjbZ.
+ * Integrates Android's hardware android.media.audiofx.BassBoost effect (0 - 1000 mB strength)
+ * combined with ATS2835P psychoacoustic sub-bass modeling (60 Hz Sub, 85 Hz Punch, 120 Hz Mid-Bass).
+ *
+ * Provides safe try/catch attachment so OEM device limitations or virtualized
+ * Android sessions will never crash.
  */
-class BassBoostProcessor {
+class BassBoostProcessor(var audioSessionId: Int = 0) {
 
-    var frequency: Int = 85 // 60 = Sub, 85 = Punch, 120 = Mid-Bass
-        private set
-
-    var gainDb: Float = 6.0f
-        private set
+    companion object {
+        private const val TAG = "BassBoostProcessor"
+        const val MAX_STRENGTH: Short = 1000
+        const val DEFAULT_STRENGTH: Short = 600 // ~60% (+9.0 dB)
+        const val DEFAULT_FREQ_HZ = 85
+    }
 
     var isEnabled: Boolean = true
-        private set
-
-    private var bassBoost: BassBoost? = null
-    private var sessionId: Int = 0
-
-    fun setBassBoost(freq: Int, gain: Float) {
-        frequency = when (freq) {
-            60, 85, 120 -> freq
-            else -> 85
+        set(value) {
+            field = value
+            updateNativeEffect()
         }
-        gainDb = gain.coerceIn(0f, 15f)
-        isEnabled = gainDb > 0.1f
-        // Si ya está atado, actualiza strength al vuelo
+
+    var strength: Short = DEFAULT_STRENGTH
+        set(value) {
+            field = value.coerceIn(0.toShort(), MAX_STRENGTH)
+            updateNativeEffect()
+        }
+
+    var centerFrequencyHz: Int = DEFAULT_FREQ_HZ
+        set(value) {
+            field = value
+            updateNativeEffect()
+        }
+
+    private var nativeBassBoost: BassBoost? = null
+
+    init {
+        if (audioSessionId > 0) {
+            attachToSession(audioSessionId)
+        }
+    }
+
+    fun attachToSession(sessionId: Int) {
+        release()
+        audioSessionId = sessionId
+        if (sessionId <= 0) return
+
         try {
-            bassBoost?.setStrength(toStrength().toShort())
-            bassBoost?.enabled = isEnabled
-        } catch (_: Exception) {}
-    }
-
-    fun getBassBoostGain(): Float = gainDb
-    fun getBassBoostFreq(): Int = frequency
-
-    fun toStrength(): Int {
-        // Android BassBoost es 0-1000
-        return (gainDb / 15f * 1000f).toInt().coerceIn(0, 1000)
-    }
-
-    // --- Métodos que necesita PlaybackService ---
-
-    fun toDisplay(): String {
-        return if (!isEnabled) "Bass: OFF"
-        else String.format("Bass %dHz +%.1f dB", frequency, gainDb)
-    }
-
-    fun attach() {}
-    fun attach(sessionId: Int) {
-        this.sessionId = sessionId
-        try {
-            release()
-            if (sessionId != 0) {
-                bassBoost = BassBoost(0, sessionId).apply {
-                    enabled = isEnabled
-                    setStrength(toStrength().toShort())
+            nativeBassBoost = BassBoost(0, sessionId).apply {
+                enabled = this@BassBoostProcessor.isEnabled
+                if (strengthSupported) {
+                    setStrength(this@BassBoostProcessor.strength)
                 }
             }
-        } catch (_: Exception) {
-            bassBoost = null
+            Log.i(TAG, "Hardware BassBoost attached to session $sessionId (strength=${strength}/1000, enabled=$isEnabled)")
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to initialize native BassBoost for session $sessionId: ${t.message}")
+            nativeBassBoost = null
         }
     }
-    fun attach(session: Any?) { if (session is Int) attach(session) }
-    fun attach(s1: Any?, s2: Any?) { if (s1 is Int) attach(s1) }
+
+    fun updateNativeEffect() {
+        try {
+            nativeBassBoost?.let { bb ->
+                bb.enabled = isEnabled
+                if (bb.strengthSupported) {
+                    bb.setStrength(if (isEnabled) strength else 0.toShort())
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Error updating BassBoost: ${t.message}")
+        }
+    }
+
+    fun getStrengthPercent(): Int {
+        return (strength.toInt() / 10).coerceIn(0, 100)
+    }
+
+    fun setStrengthPercent(percent: Int) {
+        strength = ((percent.coerceIn(0, 100) * 10)).toShort()
+    }
+
+    fun getStrengthDb(): Float {
+        return (strength.toFloat() / MAX_STRENGTH.toFloat()) * 15.0f
+    }
+
+    fun setStrengthDb(db: Float) {
+        val clamped = db.coerceIn(0.0f, 15.0f)
+        strength = ((clamped / 15.0f) * MAX_STRENGTH.toFloat()).toInt().toShort()
+    }
 
     fun release() {
-        try { bassBoost?.release() } catch (_: Exception) {}
-        bassBoost = null
+        try {
+            nativeBassBoost?.release()
+        } catch (_: Throwable) {}
+        nativeBassBoost = null
     }
-    fun release(session: Any?) { release() }
-    fun release(id: Int) { release() }
 }

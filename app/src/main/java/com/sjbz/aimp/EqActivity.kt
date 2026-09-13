@@ -264,8 +264,10 @@ class EqActivity : AppCompatActivity() {
         // FIX: listener sin parametro
         globalSessionManager.onSessionsChangedListener = {
             runOnUiThread {
+                val summary =         globalSessionManager.onSessionsChangedListener = {
+            runOnUiThread {
                 val summary = globalSessionManager.getActiveSessionsSummary()
-                tvActiveSessionsStatus.text = if (summary.isEmpty()) "Estado: Modo local SjbZ AIMP" else summary.joinToString("\n")
+                tvActiveSessionsStatus.text = if (summary.isEmpty()) "Estado: Modo local SjbZ AIMP" else summary
             }
         }
         findViewById<Button>(R.id.btnGlobalHelp).setOnClickListener {

@@ -18,6 +18,7 @@ import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
@@ -157,7 +158,12 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (currentDisplayList.isNotEmpty() && srv.getPlaylist().isEmpty()) {
-                    srv.setPlaylist(currentDisplayList, 0, startPlaying = false)
+                    val (savedIndex, savedPos) = srv.restorePlaybackSession()
+                    val targetIndex = if (savedIndex in currentDisplayList.indices) savedIndex else 0
+                    srv.setPlaylist(currentDisplayList, targetIndex, startPlaying = false)
+                    if (savedPos > 0L) {
+                        srv.seekTo(savedPos)
+                    }
                 }
             }
         }
@@ -170,6 +176,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Lock screen display support requested by user
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+
         setContentView(R.layout.activity_main)
 
         database = AppDatabase.getDatabase(this)
@@ -559,7 +579,7 @@ class MainActivity : AppCompatActivity() {
         return listOf(
             Track(
                 id = 1,
-                title = "AIMP SjbZ Bass Master Reference",
+                title = "SjbZ Studio Bass Master Reference",
                 artist = "ATS2835P Hi-Res Studio",
                 album = "Audiophile Acoustic Tests 2026",
                 duration = 248000L,

@@ -11,7 +11,6 @@
         android:orientation="vertical"
         android:padding="12dp">
 
-        <!-- TOOLBAR QUE FALTABA -->
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/eqToolbar"
             android:layout_width="match_parent"
@@ -20,7 +19,6 @@
             app:title="SjbZ Equalizer 32 Bandas + MDRC + ATS2835P"
             app:titleTextColor="#FFFF7700" />
 
-        <!-- SWITCHES QUE FALTABAN -->
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="12dp">
             <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchEqEnabled" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="EQ" android:textColor="#FFF"/>
             <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchMdrcEnabled" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="MDRC" android:textColor="#FFF"/>
@@ -38,7 +36,6 @@
             <Button android:id="@+id/btnImportSjbz" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Import"/>
         </LinearLayout>
 
-        <!-- PREAMP / SPEED / CROSSFADE QUE FALTABAN -->
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Preamp" android:textColor="#FFF" android:layout_marginTop="12dp"/>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
             <SeekBar android:id="@+id/seekBarPreamp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="240" android:progress="120"/>
@@ -55,31 +52,20 @@
             <TextView android:id="@+id/tvCrossfadeValue" android:layout_width="70dp" android:layout_height="wrap_content" android:text="0s" android:textColor="#FFF"/>
         </LinearLayout>
 
-        <!-- TU RV DE 32 BANDAS (LO MANTUVE) -->
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SjbZ Equalizer 32 Bandas + MDRC + ATS2835P" android:textColor="#FFFF7700" android:textStyle="bold" android:textSize="14sp" android:layout_marginTop="16dp"/>
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvEqBands"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
-        <!-- COMPATIBILIDAD: contenedor viejo que pide EqActivity -->
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvEqBands" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"/>
         <HorizontalScrollView android:layout_width="match_parent" android:layout_height="280dp" android:background="#1E1E1E" android:visibility="gone">
             <LinearLayout android:id="@+id/container32Bands" android:layout_width="wrap_content" android:layout_height="match_parent" android:orientation="horizontal"/>
         </HorizontalScrollView>
 
-        <!-- TU SECCION BASSBOOST 60/85/120 - INTACTA + BOTONES EXTRA -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardCornerRadius="12dp"
-            app:cardBackgroundColor="#FF1E1E1E">
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#FF1E1E1E">
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BASSBOOST PSICOACÚSTICO +15dB" android:textColor="#FFFF7700" android:textStyle="bold" android:textSize="12sp"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp" android:weightSum="3">
-                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq60" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:text="60Hz&#10;SUB" android:textSize="10sp" app:cornerRadius="8dp"/>
-                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq85" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:layout_marginStart="4dp" android:text="85Hz&#10;PUNCH" android:textSize="10sp" app:cornerRadius="8dp"/>
-                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq120" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:text="120Hz&#10;MID-BASS" android:textSize="10sp" app:cornerRadius="8dp"/>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq60" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:text="60Hz&#10;SUB" android:textSize="10sp" app:cornerRadius="8dp"/>
+                    <!-- CORREGIDO: solo 1 layout_weight -->
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq85" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:layout_marginStart="4dp" android:text="85Hz&#10;PUNCH" android:textSize="10sp" app:cornerRadius="8dp"/>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq120" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="4dp" android:text="120Hz&#10;MID-BASS" android:textSize="10sp" app:cornerRadius="8dp"/>
                 </LinearLayout>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
                     <Button android:id="@+id/btnBassOff" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="OFF" android:textSize="9sp"/>
@@ -91,7 +77,6 @@
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="12dp" android:gravity="center_vertical">
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="GAIN:" android:textColor="#FFAAAAAA" android:textSize="11sp"/>
                     <SeekBar android:id="@+id/seekBassGain" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:max="150"/>
-                    <!-- SeekBar viejo que pide EqActivity -->
                     <SeekBar android:id="@+id/seekBassBoost" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="1000" android:progress="400" android:visibility="gone"/>
                     <TextView android:id="@+id/tvBassGainSide" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:text="+6.0dB" android:textColor="#FFFF7700" android:textStyle="bold" android:textSize="12sp" android:minWidth="45dp"/>
                 </LinearLayout>
@@ -99,14 +84,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- MDRC SECTION TUYA + IDS VIEJOS -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardMdrc"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardCornerRadius="12dp"
-            app:cardBackgroundColor="#FF1E1E1E">
+        <com.google.android.material.card.MaterialCardView android:id="@+id/cardMdrc" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#FF1E1E1E">
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MDRC 5-Bandas ATS2835P" android:textColor="#FF00BCD4" android:textStyle="bold" android:textSize="12sp"/>
                 <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvMdrcBands" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"/>

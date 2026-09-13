@@ -8,7 +8,7 @@ import android.os.Looper
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
-class GlobalAudioSessionManager private constructor(private val appContext: Context) {
+object GlobalAudioSessionManager private constructor(private val appContext: Context) {
 
     companion object {
         private const val TAG = "GlobalAudioSessionMgr"

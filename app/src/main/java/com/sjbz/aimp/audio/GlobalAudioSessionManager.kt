@@ -25,6 +25,13 @@ object GlobalAudioSessionManager {
     fun attach(context: Context) {}
     fun attach(player: MediaPlayer?) {}
 
+    fun onSessionOpened(sessionId: Int, packageName: String?, context: Context) {}
+    fun onSessionOpened(sessionId: Int, packageName: String?) {}
+    fun onSessionOpened(sessionId: Int) {}
+
+    fun onSessionClosed(sessionId: Int) {}
+    fun onSessionClosed(sessionId: Int, packageName: String?) {}
+
     fun enableGlobalMode(enabled: Boolean, context: Context) { _globalEnabled = enabled }
     fun enableGlobalMode(enabled: Boolean) { _globalEnabled = enabled }
 

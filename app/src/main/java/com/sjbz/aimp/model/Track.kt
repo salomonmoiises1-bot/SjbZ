@@ -23,7 +23,7 @@ data class Track(
     val orderIndex: Int = 0,
     val albumArtUri: String? = null,
     val dateAdded: Long = System.currentTimeMillis()
-) {
+ {
     fun getFormattedDuration(): String {
         val totalSeconds = duration / 1000
         val minutes = totalSeconds / 60

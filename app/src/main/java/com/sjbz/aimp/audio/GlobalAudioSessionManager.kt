@@ -6,10 +6,10 @@ object GlobalAudioSessionManager {
     @Volatile private var instance: GlobalAudioSessionManager? = null
     @Volatile private var _globalEnabled: Boolean = false
 
+    @get:JvmName("getGlobalEnabled")
+    @set:JvmName("setGlobalEnabled")
     var isGlobalModeEnabled: Boolean
-        @JvmName("getGlobalEnabled")
         get() = _globalEnabled
-        @JvmName("setGlobalEnabled")
         set(value) { _globalEnabled = value }
 
     var onSessionsChangedListener: (() -> Unit)? = null

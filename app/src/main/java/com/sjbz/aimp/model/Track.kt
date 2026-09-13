@@ -11,11 +11,11 @@ import androidx.room.PrimaryKey
 data class Track(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val title: String,
+    val title: String = "",
     val artist: String = "Unknown Artist",
     val album: String = "Unknown Album",
     val duration: Long = 0L, // in milliseconds
-    val uri: String,
+    val uri: String = "",
     val path: String = "",
     val format: String = "MP3", // FLAC, MP3, WAV, APE, OPUS, OGG, M4A
     val bitrate: Int = 320, // in kbps
@@ -38,4 +38,6 @@ data class Track(
     fun getTechInfo(): String {
         return "$format • ${bitrate}kbps • ${sampleRate / 1000}kHz • ${bitDepth}bit"
     }
+
+    fun toDisplay(): String = "$artist - $title"
 }

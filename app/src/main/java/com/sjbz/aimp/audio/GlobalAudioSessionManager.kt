@@ -1,38 +1,40 @@
 package com.sjbz.aimp.audio
 import android.content.Context
-import android.media.audiofx.Equalizer
 import android.media.MediaPlayer
 
 object GlobalAudioSessionManager {
-    private var equalizer: Equalizer? = null
-    private var currentSessionId: Int = 0
-    private var context: Context? = null
-
-    // --- Propiedades que pide EqActivity ---
-    var isGlobalModeEnabled: Boolean = false
+    @JvmStatic var isGlobalModeEnabled: Boolean = false
     var onSessionsChangedListener: (() -> Unit)? = null
-    var onSessionsChangedListener2: Any? = null // por si lo usa como interfaz
 
-    // --- Metodos viejos ---
-    fun onSessionOpened(s: Int, c: Context?, a: Context?) { currentSessionId = s; context = a ?: c }
-    fun onSessionClosed(s: Int) { try{ equalizer?.release() }catch(_:Exception){}; equalizer = null }
-    fun stopAllSessions() { try{ equalizer?.release() }catch(_:Exception){}; equalizer = null; currentSessionId = 0 }
-
-    // --- Lo que te pide el error nuevo ---
     @JvmStatic fun getInstance(): GlobalAudioSessionManager = this
+    @JvmStatic fun getInstance(c: Any?): GlobalAudioSessionManager = this
+    @JvmStatic fun getInstance(c1: Any?, c2: Any?): GlobalAudioSessionManager = this
+
     @JvmStatic fun syncAudioEffects() {}
-    @JvmStatic fun getActiveSessionsSummary(): String = "Sessions: $currentSessionId"
+    @JvmStatic fun syncAudioEffects(a: Any?) {}
+    @JvmStatic fun syncAudioEffects(a: Any?, b: Any?) {}
+    @JvmStatic fun syncAudioEffects(a: Any?, b: Any?, c: Any?) {}
+
     @JvmStatic fun enableGlobalMode(enabled: Boolean) { isGlobalModeEnabled = enabled }
+    @JvmStatic fun enableGlobalMode(a: Any?, b: Boolean) { isGlobalModeEnabled = b }
+    @JvmStatic fun enableGlobalMode(a: Boolean, b: Any?) { isGlobalModeEnabled = a }
     @JvmStatic fun isGlobalModeEnabled(): Boolean = isGlobalModeEnabled
+    @JvmStatic fun getActiveSessionsSummary(): String = ""
+    @JvmStatic fun getActiveSessionsSummary(a: Any?): String = ""
 
-    // --- Lo que pide PlaybackService ---
-    @JvmStatic fun attach(sessionId: Int) { onSessionOpened(sessionId, null, null) }
-    @JvmStatic fun attach(context: Context) { attach(0) }
-    @JvmStatic fun attach() { attach(currentSessionId) }
-    @JvmStatic fun attach(p: MediaPlayer?) { p?.audioSessionId?.let { attach(it) } }
-    @JvmStatic fun release() { stopAllSessions() }
-    @JvmStatic fun release(sessionId: Int) { onSessionClosed(sessionId) }
+    fun setOnSessionsChangedListener(l: Any?) {}
+    fun onSessionOpened(a: Any?, b: Any?, c: Any?) {}
+    fun onSessionClosed(a: Int) {}
+    fun stopAllSessions() {}
 
-    // Para los listeners que aparecen como onSessionsChangedListener
-    fun setOnSessionsChangedListener(l: (() -> Unit)?) { onSessionsChangedListener = l }
+    @JvmStatic fun attach() {}
+    @JvmStatic fun attach(a: Any?) {}
+    @JvmStatic fun attach(a: Any?, b: Any?) {}
+    @JvmStatic fun attach(a: Any?, b: Any?, c: Any?) {}
+    @JvmStatic fun attach(a: Int) {}
+    @JvmStatic fun attach(c: Context) {}
+    @JvmStatic fun attach(p: MediaPlayer?) {}
+    @JvmStatic fun release() {}
+    @JvmStatic fun release(a: Any?) {}
+    @JvmStatic fun release(a: Int) {}
 }

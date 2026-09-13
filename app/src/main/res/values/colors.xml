@@ -1,25 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- AIMP Signature Dark & Orange Theme -->
-    <color name="aimp_black">#121212</color>
-    <color name="aimp_black_surface">#1A1A1A</color>
-    <color name="aimp_charcoal">#242424</color>
-    <color name="aimp_charcoal_light">#2E2E2E</color>
-    <color name="aimp_border">#383838</color>
+    <!-- SjbZ Studio Modern Cyan & Slate Theme -->
+    <color name="studio_black">#0A0E17</color>
+    <color name="studio_surface">#0F172A</color>
+    <color name="studio_charcoal">#1E293B</color>
+    <color name="studio_charcoal_light">#334155</color>
+    <color name="studio_border">#1E293B</color>
 
-    <!-- AIMP Vibrant Oranges -->
-    <color name="aimp_orange">#FF7700</color>
-    <color name="aimp_orange_light">#FF9900</color>
-    <color name="aimp_orange_dark">#E66700</color>
-    <color name="aimp_orange_alpha">#33FF7700</color>
+    <!-- Studio Vibrant Cyan & Teal Palette -->
+    <color name="studio_cyan">#00E5FF</color>
+    <color name="studio_cyan_light">#38BDF8</color>
+    <color name="studio_cyan_dark">#0284C7</color>
+    <color name="studio_cyan_alpha">#3300E5FF</color>
+
+    <!-- Theme Aliases for Full Backward Compatibility with Layouts -->
+    <color name="aimp_black">#0A0E17</color>
+    <color name="aimp_black_surface">#0F172A</color>
+    <color name="aimp_charcoal">#1E293B</color>
+    <color name="aimp_charcoal_light">#334155</color>
+    <color name="aimp_border">#1E293B</color>
+    <color name="aimp_orange">#00E5FF</color>
+    <color name="aimp_orange_light">#38BDF8</color>
+    <color name="aimp_orange_dark">#0284C7</color>
+    <color name="aimp_orange_alpha">#3300E5FF</color>
 
     <!-- VU Meter & Audio Levels -->
-    <color name="vu_green">#00E676</color>
-    <color name="vu_yellow">#FFD600</color>
-    <color name="vu_red">#FF3D00</color>
+    <color name="vu_green">#00E5FF</color>
+    <color name="vu_yellow">#14B8A6</color>
+    <color name="vu_red">#F43F5E</color>
 
     <!-- Text colors -->
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#B0B0B0</color>
-    <color name="text_muted">#707070</color>
+    <color name="text_primary">#F8FAFC</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="text_muted">#64748B</color>
 </resources>

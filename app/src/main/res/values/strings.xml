@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SjbZ</string>
-    <string name="title_equalizer">Ecualizador SjbZ 32 Bandas</string>
-    <string name="hint_search_music">Buscar canciones, artistas...</string>
+    <string name="app_name">SB-Z</string>
+    <string name="app_full_name">SB-Z Studio Audio Player</string>
+    <string name="title_equalizer">Ecualizador SB-Z 32 Bandas</string>
+    <string name="hint_search_music">Buscar canciones, artistas en SB-Z...</string>
     <string name="drawer_playlists">Playlists</string>
     <string name="drawer_favorites">Favoritos</string>
     <string name="drawer_history">Historial</string>
@@ -12,5 +13,8 @@
     <string name="btn_delete">Borrar</string>
     <string name="btn_export">Exportar .sjbz</string>
     <string name="btn_import">Importar .sjbz</string>
-    <string name="ats2835p_dsp_label">ATS2835P Hardware DSP</string>
+    <string name="ats2835p_dsp_label">SB-Z ATS2835P DSP Studio</string>
+    <string name="bass_boost_60">60 Hz (Sub)</string>
+    <string name="bass_boost_85">85 Hz (Punch)</string>
+    <string name="bass_boost_120">120 Hz (Mid)</string>
 </resources>

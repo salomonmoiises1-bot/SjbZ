@@ -40,8 +40,6 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
 
     init { if (isGlobalModeEnabled) startGlobalMix() }
 
-    // --- FIX PARA PlaybackService.kt ---
-    // PlaybackService llama a attach() / release() simple
     fun attach(sessionId: Int) {
         onSessionOpened(sessionId, null, appContext)
     }
@@ -83,7 +81,7 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
     fun onSessionOpened(sessionId: Int, packageName: String?, context: Context = appContext) {
         if (!isGlobalModeEnabled || sessionId < 0) return
         try {
-            val appLabel = resolveAppLabel(context, packageName)?: "App externa (ID #$sessionId)"
+            val appLabel = resolveAppLabel(context, packageName)
             sessionAppNames[sessionId] = appLabel
             activeSessions[sessionId]?.release()
             val helper = DynamicsProcessingHelper()
@@ -134,13 +132,16 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         return summary
     }
 
-    private fun resolveAppLabel(context: Context, packageName: String?): String? {
-        if (packageName.isNullOrBlank()) return null
+    private fun resolveAppLabel(context: Context, packageName: String?): String {
+        if (packageName.isNullOrBlank()) return "App externa"
         return try {
             val pm = context.packageManager
             val appInfo = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(appInfo).toString()
-        } catch (e: PackageManager.NameNotFoundException) { packageName }
+            pm.getApplicationLabel(appInfo)?.toString()?: packageName
+        } catch (e: Exception) {
+            packageName
+        }
     }
+
     private fun notifySessionsChanged() { mainHandler.post { onSessionsChangedListener?.invoke() } }
 }

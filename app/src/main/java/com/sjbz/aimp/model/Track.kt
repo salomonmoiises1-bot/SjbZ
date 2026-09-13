@@ -32,10 +32,9 @@ data class Track(
     }
 
     fun getTechInfo(): String {
-        return "$format • ${bitrate}kbps • ${sampleRate / 1000}kHz • ${bitDepth}bit"
+        return "$format - ${bitrate}kbps - ${sampleRate / 1000}khz - ${bitDepth}bit"
     }
 
-    // --- FIX PARA PlaybackService.kt:208,220 ---
     fun toDisplay(): String {
         return if (artist.isNotBlank() && artist != "Unknown Artist") "$title - $artist"
         else title

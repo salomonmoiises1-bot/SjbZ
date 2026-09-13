@@ -261,10 +261,7 @@ class EqActivity : AppCompatActivity() {
             tvActiveSessionsStatus.text = if(c) "Global: Activo - Spotify/Deezer" else "Estado: Modo local SjbZ AIMP"
             postAudioUpdateDebounced(0, true) {}
         }
-        // FIX: listener sin parametro
         globalSessionManager.onSessionsChangedListener = {
-            runOnUiThread {
-                val summary =         globalSessionManager.onSessionsChangedListener = {
             runOnUiThread {
                 val summary = globalSessionManager.getActiveSessionsSummary()
                 tvActiveSessionsStatus.text = if (summary.isEmpty()) "Estado: Modo local SjbZ AIMP" else summary
@@ -302,7 +299,6 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun setupMdrcControls() {
-        // FIX linea 264: tipo explicito para inferencia
         val pairs: List<Pair<TextView, SeekBar>> = listOf(
             Pair(tvMdrcGainSub, sbMdrcGainSub),
             Pair(tvMdrcGainLow, sbMdrcGainLow),
@@ -399,7 +395,7 @@ class EqActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnSavePreset).setOnClickListener {
             val input = EditText(this); input.hint = "Nombre preset"
             AlertDialog.Builder(this).setTitle("Guardar preset").setView(input)
-             .setPositiveButton("Guardar") { _, _ ->
+            .setPositiveButton("Guardar") { _, _ ->
                     val name = input.text.toString().ifEmpty { "Custom ${System.currentTimeMillis()}" }
                     val preset = equalizerProcessor.toEqPreset(
                         name = name,

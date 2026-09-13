@@ -1,101 +1,780 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF121212">
+    android:background="@color/aimp_black"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <!-- EQ Header / Toolbar -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/eqToolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="12dp">
+        android:layout_height="56dp"
+        android:background="@color/aimp_black_surface"
+        android:elevation="4dp"
+        app:navigationIcon="?attr/homeAsUpIndicator">
 
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/eqToolbar"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="#1E1E1E"
-            app:title="SjbZ Equalizer 32 Bandas + MDRC + ATS2835P"
-            app:titleTextColor="#FFFF7700" />
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingEnd="16dp">
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="12dp">
-            <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchEqEnabled" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="EQ" android:textColor="#FFF"/>
-            <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchMdrcEnabled" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="MDRC" android:textColor="#FFF"/>
-        </LinearLayout>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
-            <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchGlobalSystemEq" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Global System EQ" android:textColor="#FFFF7700"/>
-            <Button android:id="@+id/btnGlobalHelp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="?"/>
-        </LinearLayout>
-        <TextView android:id="@+id/tvActiveSessionsStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Modo local" android:textColor="#AAA"/>
-        <Spinner android:id="@+id/spinnerPresets" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <Button android:id="@+id/btnSavePreset" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Guardar"/>
-            <Button android:id="@+id/btnDeletePreset" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Borrar"/>
-            <Button android:id="@+id/btnExportSjbz" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Export"/>
-            <Button android:id="@+id/btnImportSjbz" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Import"/>
-        </LinearLayout>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="sans-serif-bold"
+                android:text="Ecualizador 32 Bandas (ATS2835P)"
+                android:textColor="@color/aimp_orange"
+                android:textSize="16sp" />
 
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Preamp" android:textColor="#FFF" android:layout_marginTop="12dp"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <SeekBar android:id="@+id/seekBarPreamp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="240" android:progress="120"/>
-            <TextView android:id="@+id/tvPreampValue" android:layout_width="70dp" android:layout_height="wrap_content" android:text="+0.0 dB" android:textColor="#FFFF7700"/>
+            <!-- Master EQ Switch -->
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switchEqEnabled"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:thumbTint="@color/aimp_orange"
+                app:trackTint="@color/aimp_orange_alpha" />
         </LinearLayout>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Speed" android:textColor="#FFF"/>
-            <SeekBar android:id="@+id/seekBarSpeed" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="150" android:progress="50"/>
-            <TextView android:id="@+id/tvSpeedValue" android:layout_width="70dp" android:layout_height="wrap_content" android:text="1.00x" android:textColor="#FFF"/>
-        </LinearLayout>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Crossfade" android:textColor="#FFF"/>
-            <SeekBar android:id="@+id/seekBarCrossfade" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="12"/>
-            <TextView android:id="@+id/tvCrossfadeValue" android:layout_width="70dp" android:layout_height="wrap_content" android:text="0s" android:textColor="#FFF"/>
-        </LinearLayout>
+    </androidx.appcompat.widget.Toolbar>
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SjbZ Equalizer 32 Bandas + MDRC + ATS2835P" android:textColor="#FFFF7700" android:textStyle="bold" android:textSize="14sp" android:layout_marginTop="16dp"/>
-        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvEqBands" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"/>
-        <HorizontalScrollView android:layout_width="match_parent" android:layout_height="280dp" android:background="#1E1E1E" android:visibility="gone">
-            <LinearLayout android:id="@+id/container32Bands" android:layout_width="wrap_content" android:layout_height="match_parent" android:orientation="horizontal"/>
-        </HorizontalScrollView>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
-        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#FF1E1E1E">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BASSBOOST PSICOACÚSTICO +15dB" android:textColor="#FFFF7700" android:textStyle="bold" android:textSize="12sp"/>
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp" android:weightSum="3">
-                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq60" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:text="60Hz&#10;SUB" android:textSize="10sp" app:cornerRadius="8dp"/>
-                    <!-- CORREGIDO: solo 1 layout_weight -->
-                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq85" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp" android:layout_marginStart="4dp" android:text="85Hz&#10;PUNCH" android:textSize="10sp" app:cornerRadius="8dp"/>
-                    <com.google.android.material.button.MaterialButton android:id="@+id/btnFreq120" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="4dp" android:text="120Hz&#10;MID-BASS" android:textSize="10sp" app:cornerRadius="8dp"/>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <!-- Global System EQ (Wavelet / External Apps Mode) Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:background="@drawable/bg_aimp_card"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="Modo Global de Audio (Estilo Wavelet)"
+                            android:textColor="@color/aimp_orange"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/tvGlobalEqSubtitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Ecualiza Spotify, YouTube, Chrome y todo Android"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchGlobalSystemEq"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/aimp_orange"
+                        app:trackTint="@color/aimp_orange_alpha" />
                 </LinearLayout>
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
-                    <Button android:id="@+id/btnBassOff" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="OFF" android:textSize="9sp"/>
-                    <Button android:id="@+id/btnBass3" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="+3" android:textSize="9sp"/>
-                    <Button android:id="@+id/btnBass6" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="+6" android:textSize="9sp"/>
-                    <Button android:id="@+id/btnBass9" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="+9" android:textSize="9sp"/>
-                    <Button android:id="@+id/btnBass12" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="+12" android:textSize="9sp"/>
-                </LinearLayout>
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="12dp" android:gravity="center_vertical">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="GAIN:" android:textColor="#FFAAAAAA" android:textSize="11sp"/>
-                    <SeekBar android:id="@+id/seekBassGain" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:max="150"/>
-                    <SeekBar android:id="@+id/seekBassBoost" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="1000" android:progress="400" android:visibility="gone"/>
-                    <TextView android:id="@+id/tvBassGainSide" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:text="+6.0dB" android:textColor="#FFFF7700" android:textStyle="bold" android:textSize="12sp" android:minWidth="45dp"/>
-                </LinearLayout>
-                <TextView android:id="@+id/tvBassBoostValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="+6.0 dB (40%) ACTIVO" android:textColor="#FFFF7700" android:gravity="center" android:layout_marginTop="4dp"/>
+
+                <!-- Active Sessions Status indicator -->
+                <TextView
+                    android:id="@+id/tvActiveSessionsStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="sans-serif-mono"
+                    android:text="Estado: Modo local SjbZ AIMP"
+                    android:textColor="#A0A0A0"
+                    android:textSize="10sp" />
+
+                <Button
+                    android:id="@+id/btnGlobalHelp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="@color/aimp_charcoal"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="0dp"
+                    android:paddingBottom="0dp"
+                    android:text="ℹ Instrucciones para YouTube / ADB"
+                    android:textColor="@color/text_primary"
+                    android:textSize="10sp" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <com.google.android.material.card.MaterialCardView android:id="@+id/cardMdrc" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:cardCornerRadius="12dp" app:cardBackgroundColor="#FF1E1E1E">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MDRC 5-Bandas ATS2835P" android:textColor="#FF00BCD4" android:textStyle="bold" android:textSize="12sp"/>
-                <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvMdrcBands" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"/>
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"><TextView android:layout_width="60dp" android:layout_height="wrap_content" android:text="Sub" android:textColor="#FFF"/><SeekBar android:id="@+id/sbMdrcGainSub" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="240" android:progress="120"/><TextView android:id="@+id/tvMdrcGainSub" android:layout_width="70dp" android:layout_height="wrap_content" android:text="+0.0 dB" android:textColor="#FFF"/></LinearLayout>
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"><TextView android:layout_width="60dp" android:layout_height="wrap_content" android:text="Low" android:textColor="#FFF"/><SeekBar android:id="@+id/sbMdrcGainLow" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="240" android:progress="120"/><TextView android:id="@+id/tvMdrcGainLow" android:layout_width="70dp" android:layout_height="wrap_content" android:text="+0.0 dB" android:textColor="#FFF"/></LinearLayout>
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"><TextView android:layout_width="60dp" android:layout_height="wrap_content" android:text="Mid" android:textColor="#FFF"/><SeekBar android:id="@+id/sbMdrcGainMid" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="240" android:progress="120"/><TextView android:id="@+id/tvMdrcGainMid" android:layout_width="70dp" android:layout_height="wrap_content" android:text="+0.0 dB" android:textColor="#FFF"/></LinearLayout>
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"><TextView android:layout_width="60dp" android:layout_height="wrap_content" android:text="High" android:textColor="#FFF"/><SeekBar android:id="@+id/sbMdrcGainHigh" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="240" android:progress="120"/><TextView android:id="@+id/tvMdrcGainHigh" android:layout_width="70dp" android:layout_height="wrap_content" android:text="+0.0 dB" android:textColor="#FFF"/></LinearLayout>
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"><TextView android:layout_width="60dp" android:layout_height="wrap_content" android:text="Air" android:textColor="#FFF"/><SeekBar android:id="@+id/sbMdrcGainAir" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:max="240" android:progress="120"/><TextView android:id="@+id/tvMdrcGainAir" android:layout_width="70dp" android:layout_height="wrap_content" android:text="+0.0 dB" android:textColor="#FFF"/></LinearLayout>
+            <!-- Presets & Actions Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_aimp_card"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Preset:"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <!-- Presets Spinner -->
+                    <Spinner
+                        android:id="@+id/spinnerPresets"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="#262626" />
+                </LinearLayout>
+
+                <!-- Preset Action Buttons: Guardar, Cargar, Borrar, Exportar, Importar -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnSavePreset"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="@string/btn_save"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btnDeletePreset"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="@string/btn_delete"
+                        android:textColor="#FF5252"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btnExportSjbz"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="@string/btn_export"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btnImportSjbz"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="@string/btn_import"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
                 </LinearLayout>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-    </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+
+            <!-- Preamp & Master DSP Sliders -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_aimp_card"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <!-- Preamp Slider Row (-12dB to +12dB) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="70dp"
+                        android:layout_height="wrap_content"
+                        android:text="Preamp:"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarPreamp"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="120"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvPreampValue"
+                        android:layout_width="50dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="0.0 dB"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Pitch & Speed Row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="70dp"
+                        android:layout_height="wrap_content"
+                        android:text="Pitch / Vel:"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarSpeed"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="150"
+                        android:progress="50"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvSpeedValue"
+                        android:layout_width="50dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="1.00x"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Crossfade Duration -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="70dp"
+                        android:layout_height="wrap_content"
+                        android:text="Crossfade:"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarCrossfade"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="10"
+                        android:progress="3"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvCrossfadeValue"
+                        android:layout_width="50dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="3s"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- BASS BOOST Psicoacústico Card (ATS2835P Hardware) -->
+            <LinearLayout
+                android:id="@+id/cardBassBoost"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_aimp_card"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="BASS BOOST Psicoacústico"
+                            android:textColor="@color/aimp_orange"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Filtro resonante sub-armónico ATS2835P • AudioFX Hardware"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchBassBoostEnabled"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        app:thumbTint="@color/aimp_orange"
+                        app:trackTint="@color/aimp_orange_alpha" />
+                </LinearLayout>
+
+                <!-- Slider Row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="70dp"
+                        android:layout_height="wrap_content"
+                        android:text="Intensidad:"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarBassBoost"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="1000"
+                        android:progress="600"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvBassBoostValue"
+                        android:layout_width="70dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="+9.0 dB (60%)"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- Frequency Tuning Options (60Hz Sub, 85Hz Punch, 120Hz Mid) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="70dp"
+                        android:layout_height="wrap_content"
+                        android:text="Corte Freq:"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btnBassFreq60"
+                        android:layout_width="0dp"
+                        android:layout_height="30dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="60 Hz"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="10sp" />
+
+                    <Button
+                        android:id="@+id/btnBassFreq85"
+                        android:layout_width="0dp"
+                        android:layout_height="30dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_orange"
+                        android:padding="0dp"
+                        android:text="85 Hz"
+                        android:textColor="#000000"
+                        android:textSize="10sp" />
+
+                    <Button
+                        android:id="@+id/btnBassFreq120"
+                        android:layout_width="0dp"
+                        android:layout_height="30dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="120 Hz"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <!-- Quick Presets Row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnBassQuickOff"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_marginEnd="3dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="Off"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="9sp" />
+
+                    <Button
+                        android:id="@+id/btnBassQuick3dB"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_marginEnd="3dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="+3 dB"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="9sp" />
+
+                    <Button
+                        android:id="@+id/btnBassQuick6dB"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_marginEnd="3dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="+6 dB"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="9sp" />
+
+                    <Button
+                        android:id="@+id/btnBassQuick9dB"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_marginEnd="3dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="+9 dB"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="9sp" />
+
+                    <Button
+                        android:id="@+id/btnBassQuick12dB"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/aimp_charcoal"
+                        android:padding="0dp"
+                        android:text="+12 dB"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="9sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 32-Band Horizontal Scroll Sliders Container -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="6dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="32 BANDAS ISO (20 Hz - 20 kHz)"
+                android:textColor="@color/aimp_orange"
+                android:textSize="12sp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="260dp"
+                android:background="@drawable/bg_aimp_card"
+                android:padding="8dp">
+
+                <LinearLayout
+                    android:id="@+id/container32Bands"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <!-- ATS2835P MDRC 5-Bands Profile & Gain Controls Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_aimp_card"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="MDRC Processor 5 Bandas (ATS2835P)"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="13sp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchMdrcEnabled"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        app:thumbTint="@color/aimp_orange"
+                        app:trackTint="@color/aimp_orange_alpha" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvMdrcDetails"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="sans-serif-mono"
+                    android:text="Controles de Ganancia por Banda (-12 dB a +12 dB) y Compresión Dinámica:\n• Limiter: -0.3 dBFS @ 1ms • SoftClipper: ATS2835P Modeled"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="10sp" />
+
+                <!-- MDRC Band 1: Sub (20-120 Hz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="100dp"
+                        android:layout_height="wrap_content"
+                        android:text="1. Sub (120Hz)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbMdrcGainSub"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="130"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcGainSub"
+                        android:layout_width="55dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="+1.0 dB"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- MDRC Band 2: Low (120-500 Hz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="100dp"
+                        android:layout_height="wrap_content"
+                        android:text="2. Low (500Hz)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbMdrcGainLow"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="125"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcGainLow"
+                        android:layout_width="55dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="+0.5 dB"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- MDRC Band 3: Mid (500-2,000 Hz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="100dp"
+                        android:layout_height="wrap_content"
+                        android:text="3. Mid (2kHz)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbMdrcGainMid"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="120"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcGainMid"
+                        android:layout_width="55dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="0.0 dB"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- MDRC Band 4: High (2,000-8,000 Hz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="100dp"
+                        android:layout_height="wrap_content"
+                        android:text="4. High (8kHz)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbMdrcGainHigh"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="125"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcGainHigh"
+                        android:layout_width="55dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="+0.5 dB"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- MDRC Band 5: Air (8,000-20,000 Hz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="100dp"
+                        android:layout_height="wrap_content"
+                        android:text="5. Air (20kHz)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbMdrcGainAir"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="130"
+                        android:progressTint="@color/aimp_orange"
+                        android:thumbTint="@color/aimp_orange" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcGainAir"
+                        android:layout_width="55dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="+1.0 dB"
+                        android:textColor="@color/aimp_orange"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

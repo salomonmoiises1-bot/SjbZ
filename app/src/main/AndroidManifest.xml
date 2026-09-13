@@ -26,11 +26,15 @@
         android:theme="@style/Theme.SjbZ"
         tools:targetApi="34">
 
-        <!-- Main SjbZ Player Activity -->
+        <!-- Main SB-Z Studio Player Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:showForAllUsers="true"
+            android:inheritShowWhenLocked="true"
             android:theme="@style/Theme.SjbZ">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

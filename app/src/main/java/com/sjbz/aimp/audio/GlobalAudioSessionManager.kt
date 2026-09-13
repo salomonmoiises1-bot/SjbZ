@@ -3,38 +3,35 @@ import android.content.Context
 import android.media.MediaPlayer
 
 object GlobalAudioSessionManager {
-    var isGlobalModeEnabled: Boolean = false
+    @Volatile private var instance: GlobalAudioSessionManager? = null
+    @Volatile private var _globalEnabled: Boolean = false
+
+    var isGlobalModeEnabled: Boolean
+        @JvmName("getGlobalEnabled")
+        get() = _globalEnabled
+        @JvmName("setGlobalEnabled")
+        set(value) { _globalEnabled = value }
+
     var onSessionsChangedListener: (() -> Unit)? = null
 
+    fun getInstance(context: Context): GlobalAudioSessionManager { instance = this; return this }
     fun getInstance(): GlobalAudioSessionManager = this
-    fun getInstance(c: Any?): GlobalAudioSessionManager = this
-    fun getInstance(c1: Any?, c2: Any?): GlobalAudioSessionManager = this
-
-    fun syncAudioEffects() {}
-    fun syncAudioEffects(a: Any?) {}
-    fun syncAudioEffects(a: Any?, b: Any?) {}
-    fun syncAudioEffects(a: Any?, b: Any?, c: Any?) {}
-
-    fun enableGlobalMode(enabled: Boolean) { isGlobalModeEnabled = enabled }
-    fun enableGlobalMode(a: Any?, b: Boolean) { isGlobalModeEnabled = b }
-    fun enableGlobalMode(a: Boolean, b: Any?) { isGlobalModeEnabled = a }
-    fun isGlobalModeEnabled(): Boolean = isGlobalModeEnabled
-    fun getActiveSessionsSummary(): String = ""
-    fun getActiveSessionsSummary(a: Any?): String = ""
-
-    fun setOnSessionsChangedListener(l: Any?) {}
-    fun onSessionOpened(a: Any?, b: Any?, c: Any?) {}
-    fun onSessionClosed(a: Int) {}
-    fun stopAllSessions() {}
 
     fun attach() {}
-    fun attach(a: Any?) {}
-    fun attach(a: Any?, b: Any?) {}
-    fun attach(a: Any?, b: Any?, c: Any?) {}
-    fun attach(a: Int) {}
-    fun attach(c: Context) {}
-    fun attach(p: MediaPlayer?) {}
+    fun attach(session: Any?) {}
+    fun attach(s1: Any?, s2: Any?) {}
+    fun attach(s1: Any?, s2: Any?, s3: Any?) {}
+    fun attach(id: Int) {}
+    fun attach(context: Context) {}
+    fun attach(player: MediaPlayer?) {}
+
+    fun enableGlobalMode(enabled: Boolean, context: Context) { _globalEnabled = enabled }
+    fun enableGlobalMode(enabled: Boolean) { _globalEnabled = enabled }
+
+    fun getActiveSessionsSummary(): String = if (_globalEnabled) "Global: Activo" else ""
+    fun syncAudioEffects(eq: Any?, mdrc: Any?, limiter: Any?) {}
     fun release() {}
-    fun release(a: Any?) {}
-    fun release(a: Int) {}
+    fun release(session: Any?) {}
+    fun release(id: Int) {}
+    fun release(player: MediaPlayer?) {}
 }

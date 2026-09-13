@@ -40,18 +40,12 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
 
     init { if (isGlobalModeEnabled) startGlobalMix() }
 
-    fun attach(sessionId: Int) {
-        onSessionOpened(sessionId, null, appContext)
-    }
-    fun attach(context: Context) {
-        attach(0)
-    }
-    fun attach() {
-        attach(0)
-    }
-    fun release() {
-        stopAllSessions()
-    }
+    // FIX para PlaybackService - todas las sobrecargas que usa
+    fun attach(sessionId: Int) { onSessionOpened(sessionId, null, appContext) }
+    fun attach(context: Context) { attach(0) }
+    fun attach() { attach(0) }
+    fun release() { stopAllSessions() }
+    fun release(sessionId: Int) { onSessionClosed(sessionId) }
 
     fun enableGlobalMode(enabled: Boolean, context: Context) {
         isGlobalModeEnabled = enabled
@@ -68,19 +62,17 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
                 helper.attachToSession(0, cachedEqualizer, cachedMdrc, cachedLimiter)
                 globalMixHelper = helper
                 sessionAppNames[0] = "Audio Global de Android (Mezclador Maestro #0)"
-                Log.i(TAG, "Global Output Mix (Session 0) attached")
             }
         } catch (t: Throwable) { Log.e(TAG, "Failed Global Mix: ${t.message}", t) }
     }
 
-    fun onNewAudioSessionOpened(sessionId: Int, packageName: String?, context: Context = appContext) {
-        onSessionOpened(sessionId, packageName, context)
-    }
+    fun onNewAudioSessionOpened(sessionId: Int, packageName: String?, context: Context = appContext) { onSessionOpened(sessionId, packageName, context) }
     fun onAudioSessionClosed(sessionId: Int) { onSessionClosed(sessionId) }
 
     fun onSessionOpened(sessionId: Int, packageName: String?, context: Context = appContext) {
         if (!isGlobalModeEnabled || sessionId < 0) return
         try {
+            // FIX linea 121 - ya no devuelve nullable
             val appLabel = resolveAppLabel(context, packageName)
             sessionAppNames[sessionId] = appLabel
             activeSessions[sessionId]?.release()
@@ -98,49 +90,38 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
             activeSessions[sessionId]?.release()
             activeSessions.remove(sessionId)
             sessionAppNames.remove(sessionId)
-            Log.i(TAG, "Detached from session $sessionId")
             notifySessionsChanged()
         } catch (t: Throwable) { Log.e(TAG, "Error closing $sessionId: ${t.message}", t) }
     }
 
     fun syncAudioEffects(equalizer: EqualizerProcessor, mdrc: MDRCProcessor, limiter: LimiterProcessor) {
-        cachedEqualizer = equalizer
-        cachedMdrc = mdrc
-        cachedLimiter = limiter
-        globalMixHelper?.let {
-            try { it.applyEqualizer(equalizer); it.applyMDRC(mdrc); it.applyLimiter(limiter) }
-            catch (t: Throwable) { Log.w(TAG, "Error syncing global mix: ${t.message}") }
-        }
-        for ((sessionId, helper) in activeSessions) {
-            try { helper.applyEqualizer(equalizer); helper.applyMDRC(mdrc); helper.applyLimiter(limiter) }
-            catch (t: Throwable) { Log.w(TAG, "Error syncing $sessionId: ${t.message}") }
-        }
+        cachedEqualizer = equalizer; cachedMdrc = mdrc; cachedLimiter = limiter
+        try { globalMixHelper?.applyEqualizer(equalizer); globalMixHelper?.applyMDRC(mdrc); globalMixHelper?.applyLimiter(limiter) } catch (t: Throwable) {}
+        for ((_, helper) in activeSessions) { try { helper.applyEqualizer(equalizer); helper.applyMDRC(mdrc); helper.applyLimiter(limiter) } catch (t: Throwable) {} }
     }
 
     private fun stopAllSessions() {
-        try { globalMixHelper?.release(); globalMixHelper = null } catch (t: Throwable) { Log.w(TAG, t.message) }
-        for ((_, helper) in activeSessions) { try { helper.release() } catch (t: Throwable) { Log.w(TAG, t.message) } }
-        activeSessions.clear()
-        sessionAppNames.clear()
+        try { globalMixHelper?.release(); globalMixHelper = null } catch (t: Throwable) {}
+        for ((_, helper) in activeSessions) { try { helper.release() } catch (t: Throwable) {} }
+        activeSessions.clear(); sessionAppNames.clear()
     }
 
     fun getActiveSessionsSummary(): List<String> {
         val summary = mutableListOf<String>()
         if (!isGlobalModeEnabled) return summary
         if (globalMixHelper!= null) summary.add("● Android System Audio (Sesión 0)")
-        for ((sessionId, appName) in sessionAppNames) if (sessionId!= 0) summary.add("● $appName (#$sessionId)")
+        for ((sid, name) in sessionAppNames) if (sid!= 0) summary.add("● $name (#$sid)")
         return summary
     }
 
+    // FIX DEFINITIVO - devuelve String, nunca String?
     private fun resolveAppLabel(context: Context, packageName: String?): String {
         if (packageName.isNullOrBlank()) return "App externa"
         return try {
             val pm = context.packageManager
-            val appInfo = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(appInfo)?.toString()?: packageName
-        } catch (e: Exception) {
-            packageName
-        }
+            val ai = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(ai)?.toString()?: packageName
+        } catch (e: Exception) { packageName }
     }
 
     private fun notifySessionsChanged() { mainHandler.post { onSessionsChangedListener?.invoke() } }

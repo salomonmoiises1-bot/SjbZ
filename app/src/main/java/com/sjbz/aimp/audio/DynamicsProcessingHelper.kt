@@ -86,7 +86,9 @@ class DynamicsProcessingHelper {
                     val cutoff = EqualizerProcessor.ISO_FREQUENCIES[b]
                     val gain = equalizerProcessor.getEffectiveGain(b, bassBoostProcessor)
                     val eqBand = createEqBand(equalizerProcessor.isEnabled, cutoff, gain, 1.0f)
-                    configBuilder.setPreEqBandAllChannelsTo(b, eqBand)
+                    // CORREGIDO: Builder no tiene setPreEqBandAllChannelsTo, usar por canal
+                    configBuilder.setPreEqBandByChannelIndex(0, b, eqBand)
+                    configBuilder.setPreEqBandByChannelIndex(1, b, eqBand)
                 }
 
                 val config = configBuilder.build()
@@ -248,8 +250,8 @@ class DynamicsProcessingHelper {
                     0,
                     limiterProcessor.attackMs,
                     limiterProcessor.releaseMs,
-                    limiterProcessor.ratio,
                     limiterProcessor.thresholdDb,
+                    limiterProcessor.ratio,
                     0.0f
                 )
                 dp.setLimiterByChannelIndex(ch, limiter)
@@ -274,8 +276,4 @@ class DynamicsProcessingHelper {
         isLegacyFallbackActive = false
         currentSessionId = 0
     }
-}
-
-fun EqBand(enabled: Boolean, centerFreq: Float, gain: Float, q: Float = 1.0f): DynamicsProcessing.EqBand {
-    return DynamicsProcessing.EqBand(enabled, centerFreq, gain)
 }

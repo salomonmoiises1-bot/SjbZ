@@ -18,6 +18,29 @@ class DynamicsProcessingHelper {
 
     companion object {
         private const val TAG = "DynamicsProcHelper"
+
+        /**
+         * Factory creating DynamicsProcessing.EqBand instance.
+         * Supports (enabled, centerFreq, gain, q = 1f) or (enabled, centerFreq, gain).
+         */
+        fun createEqBand(enabled: Boolean, centerFreq: Float, gain: Float, q: Float = 1.0f): DynamicsProcessing.EqBand {
+            return DynamicsProcessing.EqBand(enabled, centerFreq, gain)
+        }
+    }
+
+    /**
+     * Directly updates a PreEq band across all channels on the active DynamicsProcessing effect.
+     * Note: Never calls setPreEqBandAllChannelsTo on Eq (which doesn't support it);
+     * calls dynamicsProcessing.setPreEqBandAllChannelsTo(band, eqBand) directly.
+     */
+    fun setPreEqBandAllChannelsTo(band: Int, eqBand: DynamicsProcessing.EqBand) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                dynamicsProcessing?.setPreEqBandAllChannelsTo(band, eqBand)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Error setting PreEq band $band: ${t.message}")
+            }
+        }
     }
 
     private var dynamicsProcessing: DynamicsProcessing? = null
@@ -75,7 +98,7 @@ class DynamicsProcessingHelper {
                 for (b in 0 until preEqBandCount) {
                     val cutoff = EqualizerProcessor.ISO_FREQUENCIES[b]
                     val gain = equalizerProcessor.getEffectiveGain(b, bassBoostProcessor)
-                    val eqBand = DynamicsProcessing.EqBand(equalizerProcessor.isEnabled, cutoff, gain)
+                    val eqBand = createEqBand(equalizerProcessor.isEnabled, cutoff, gain, 1.0f)
                     configBuilder.setPreEqBandAllChannelsTo(b, eqBand)
                 }
 
@@ -280,3 +303,13 @@ class DynamicsProcessingHelper {
         currentSessionId = 0
     }
 }
+
+/**
+ * Global factory for DynamicsProcessing.EqBand.
+ * Allows calling EqBand(true, centerFreq, gain, 1f) safely.
+ * Android DynamicsProcessing.EqBand constructor takes (boolean enabled, float cutoffFrequency, float gain).
+ */
+fun EqBand(enabled: Boolean, centerFreq: Float, gain: Float, q: Float = 1.0f): DynamicsProcessing.EqBand {
+    return DynamicsProcessing.EqBand(enabled, centerFreq, gain)
+}
+

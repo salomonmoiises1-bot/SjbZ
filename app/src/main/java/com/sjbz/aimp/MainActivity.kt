@@ -46,21 +46,35 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStreamWriter
 
+/**
+ * Main Activity for SjbZ Audio Player.
+ * AIMP Dark Orange and Pitch-Black UI with:
+ * - Top Toolbar (Search, SjbZ logo, EQ button)
+ * - Navigation Drawer (Playlists, Favorites, History, Folders, M3U8 Export/Import)
+ * - Central Playlist RecyclerView (Drag & drop reordering, Swipe to delete)
+ * - Bottom AIMP Deck (Stereo VU Meters, Waveform peak, elapsed/remaining time, controls)
+ * - Automatic playlist looping and MediaStore scanner for Hi-Res audio.
+ */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var database: AppDatabase
     private var playbackService: PlaybackService? = null
     private var isServiceBound = false
 
+    // Views
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var rvPlaylist: RecyclerView
     private lateinit var playlistAdapter: PlaylistAdapter
     private lateinit var emptyView: View
     private lateinit var btnScanStorage: Button
+
+    // Toolbar views
     private lateinit var btnMenuDrawer: ImageButton
     private lateinit var etSearchTracks: EditText
     private lateinit var btnOpenEqualizer: ImageButton
     private lateinit var tvPlaylistTrackCount: TextView
+
+    // Bottom Player views
     private lateinit var ivPlayerArtwork: ImageView
     private lateinit var tvPlayerTitle: TextView
     private lateinit var tvPlayerArtist: TextView
@@ -68,6 +82,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvElapsedTime: TextView
     private lateinit var tvRemainingTime: TextView
     private lateinit var playerSeekBar: SeekBar
+
+    // Control buttons
     private lateinit var btnShuffle: ImageButton
     private lateinit var btnPrevious: ImageButton
     private lateinit var btnStop: ImageButton
@@ -75,25 +91,31 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnNext: ImageButton
     private lateinit var btnRepeat: ImageButton
     private lateinit var btnCrossfade: ImageButton
+
+    // VU Meters
     private lateinit var vuMeterLeftBar: ProgressBar
     private lateinit var vuMeterRightBar: ProgressBar
     private lateinit var tvVuPeakText: TextView
 
+    // Data lists
     private val allTracksList = mutableListOf<Track>()
     private val currentDisplayList = mutableListOf<Track>()
+
     private var isShuffleActive = false
     private var isRepeatLoopActive = true
     private var isCrossfadeActive = true
     private var isUserTrackingSeekBar = false
 
+    // Timer handler for seekbar and VU meters
     private val uiHandler = Handler(Looper.getMainLooper())
     private val uiUpdateRunnable = object : Runnable {
         override fun run() {
             updatePlaybackProgressAndVUMeters()
-            uiHandler.postDelayed(this, 100)
+            uiHandler.postDelayed(this, 100) // 10 FPS smooth VU meter and seekbar update
         }
     }
 
+    // Permission launcher
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -106,6 +128,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Export M3U8 launcher
     private val exportM3U8Launcher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("audio/x-mpegurl")
     ) { uri: Uri? ->
@@ -114,6 +137,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Service Connection to PlaybackService
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as PlaybackService.LocalBinder
@@ -138,7 +162,7 @@ class MainActivity : AppCompatActivity() {
                     val targetIndex = if (savedIndex in currentDisplayList.indices) savedIndex else 0
                     srv.setPlaylist(currentDisplayList, targetIndex, startPlaying = false)
                     if (savedPos > 0L) {
-                        srv.player.seekTo(savedPos)
+                        srv.seekTo(savedPos)
                     }
                 }
             }
@@ -152,6 +176,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Lock screen display support requested by user
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -163,8 +189,11 @@ class MainActivity : AppCompatActivity() {
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             )
         }
+
         setContentView(R.layout.activity_main)
+
         database = AppDatabase.getDatabase(this)
+
         initViews()
         setupPlaylistRecyclerView()
         setupPlayerControls()
@@ -189,10 +218,12 @@ class MainActivity : AppCompatActivity() {
         rvPlaylist = findViewById(R.id.rvPlaylist)
         emptyView = findViewById(R.id.emptyView)
         btnScanStorage = findViewById(R.id.btnScanStorage)
+
         btnMenuDrawer = findViewById(R.id.btnMenuDrawer)
         etSearchTracks = findViewById(R.id.etSearchTracks)
         btnOpenEqualizer = findViewById(R.id.btnOpenEqualizer)
         tvPlaylistTrackCount = findViewById(R.id.tvPlaylistTrackCount)
+
         ivPlayerArtwork = findViewById(R.id.ivPlayerArtwork)
         tvPlayerTitle = findViewById(R.id.tvPlayerTitle)
         tvPlayerArtist = findViewById(R.id.tvPlayerArtist)
@@ -200,6 +231,7 @@ class MainActivity : AppCompatActivity() {
         tvElapsedTime = findViewById(R.id.tvElapsedTime)
         tvRemainingTime = findViewById(R.id.tvRemainingTime)
         playerSeekBar = findViewById(R.id.playerSeekBar)
+
         btnShuffle = findViewById(R.id.btnShuffle)
         btnPrevious = findViewById(R.id.btnPrevious)
         btnStop = findViewById(R.id.btnStop)
@@ -207,14 +239,20 @@ class MainActivity : AppCompatActivity() {
         btnNext = findViewById(R.id.btnNext)
         btnRepeat = findViewById(R.id.btnRepeat)
         btnCrossfade = findViewById(R.id.btnCrossfade)
+
         vuMeterLeftBar = findViewById(R.id.vuMeterLeftBar)
         vuMeterRightBar = findViewById(R.id.vuMeterRightBar)
         tvVuPeakText = findViewById(R.id.tvVuPeakText)
-        btnScanStorage.setOnClickListener { checkPermissionsAndScan() }
+
+        btnScanStorage.setOnClickListener {
+            checkPermissionsAndScan()
+        }
+
         btnOpenEqualizer.setOnClickListener {
             val intent = Intent(this, EqActivity::class.java)
             startActivity(intent)
         }
+
         btnMenuDrawer.setOnClickListener {
             if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
                 drawerLayout.closeDrawer(GravityCompat.START)
@@ -243,19 +281,32 @@ class MainActivity : AppCompatActivity() {
                 updateTrackCount()
             }
         )
+
         rvPlaylist.layoutManager = LinearLayoutManager(this)
         rvPlaylist.adapter = playlistAdapter
+
+        // Attach ItemTouchHelper for drag-and-drop & swipe-to-delete
         playlistAdapter.getItemTouchHelper().attachToRecyclerView(rvPlaylist)
     }
 
     private fun setupPlayerControls() {
-        btnPlayPause.setOnClickListener { playbackService?.togglePlayPause() }
+        btnPlayPause.setOnClickListener {
+            playbackService?.togglePlayPause()
+        }
+
         btnStop.setOnClickListener {
             playbackService?.stopPlayback()
             btnPlayPause.setImageResource(R.drawable.ic_play)
         }
-        btnNext.setOnClickListener { playbackService?.playNext() }
-        btnPrevious.setOnClickListener { playbackService?.playPrevious() }
+
+        btnNext.setOnClickListener {
+            playbackService?.playNext()
+        }
+
+        btnPrevious.setOnClickListener {
+            playbackService?.playPrevious()
+        }
+
         btnShuffle.setOnClickListener {
             isShuffleActive = !isShuffleActive
             btnShuffle.setColorFilter(if (isShuffleActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
@@ -269,18 +320,21 @@ class MainActivity : AppCompatActivity() {
                 playlistAdapter.updateData(currentDisplayList)
             }
         }
+
         btnRepeat.setOnClickListener {
             isRepeatLoopActive = !isRepeatLoopActive
             playbackService?.isLoopPlaylistEnabled = isRepeatLoopActive
             btnRepeat.setColorFilter(if (isRepeatLoopActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
             Toast.makeText(this, if (isRepeatLoopActive) "Bucle de Playlist Activado" else "Bucle Desactivado", Toast.LENGTH_SHORT).show()
         }
+
         btnCrossfade.setOnClickListener {
             isCrossfadeActive = !isCrossfadeActive
             btnCrossfade.setColorFilter(if (isCrossfadeActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
             playbackService?.atsEngine?.crossfadeSeconds = if (isCrossfadeActive) 3 else 0
             Toast.makeText(this, if (isCrossfadeActive) "Crossfade 3s Activo" else "Crossfade 0s", Toast.LENGTH_SHORT).show()
         }
+
         playerSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
@@ -291,7 +345,11 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) { isUserTrackingSeekBar = true }
+
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                isUserTrackingSeekBar = true
+            }
+
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 isUserTrackingSeekBar = false
                 val duration = playbackService?.player?.duration ?: 0L
@@ -308,22 +366,27 @@ class MainActivity : AppCompatActivity() {
             filterTracks("all")
             drawerLayout.closeDrawers()
         }
+
         findViewById<View>(R.id.drawerItemFavorites).setOnClickListener {
             filterTracks("favorites")
             drawerLayout.closeDrawers()
         }
+
         findViewById<View>(R.id.drawerItemHistory).setOnClickListener {
             filterTracks("history")
             drawerLayout.closeDrawers()
         }
+
         findViewById<View>(R.id.drawerItemFolders).setOnClickListener {
             Toast.makeText(this, "Explorador de carpetas activo", Toast.LENGTH_SHORT).show()
             drawerLayout.closeDrawers()
         }
+
         findViewById<View>(R.id.drawerExportM3U8).setOnClickListener {
             exportM3U8Launcher.launch("SjbZ_Playlist_${System.currentTimeMillis()}.m3u8")
             drawerLayout.closeDrawers()
         }
+
         findViewById<View>(R.id.drawerImportM3U8).setOnClickListener {
             Toast.makeText(this, "Importador M3U8 listo para abrir listas", Toast.LENGTH_SHORT).show()
             drawerLayout.closeDrawers()
@@ -375,6 +438,7 @@ class MainActivity : AppCompatActivity() {
         val updated = track.copy(isFavorite = newFav)
         currentDisplayList[position] = updated
         playlistAdapter.notifyItemChanged(position)
+
         lifecycleScope.launch(Dispatchers.IO) {
             database.trackDao().setFavorite(track.id, newFav)
         }
@@ -398,9 +462,11 @@ class MainActivity : AppCompatActivity() {
         } else {
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
+
         val needed = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
+
         if (needed.isEmpty()) {
             scanAudioStorage()
         } else {
@@ -408,6 +474,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Scans MediaStore for audio files (FLAC, MP3, WAV, APE, OPUS, OGG, M4A).
+     */
     private fun scanAudioStorage() {
         lifecycleScope.launch {
             val scannedTracks = withContext(Dispatchers.IO) {
@@ -422,6 +491,7 @@ class MainActivity : AppCompatActivity() {
                     MediaStore.Audio.Media.DATA
                 )
                 val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+
                 var cursor: Cursor? = null
                 try {
                     cursor = contentResolver.query(uri, projection, selection, null, "${MediaStore.Audio.Media.TITLE} ASC")
@@ -432,6 +502,7 @@ class MainActivity : AppCompatActivity() {
                         val albumCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                         val durationCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                         val dataCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+
                         var order = 0
                         while (c.moveToNext()) {
                             val id = c.getLong(idCol)
@@ -440,8 +511,10 @@ class MainActivity : AppCompatActivity() {
                             val album = c.getString(albumCol) ?: "Unknown Album"
                             val duration = c.getLong(durationCol)
                             val path = c.getString(dataCol) ?: ""
+
                             val contentUri = ContentUris.withAppendedId(uri, id).toString()
                             val format = detectFormat(path)
+
                             tracks.add(
                                 Track(
                                     id = id,
@@ -465,19 +538,25 @@ class MainActivity : AppCompatActivity() {
                 } finally {
                     cursor?.close()
                 }
+
+                // If device has no local music files in emulator, seed high-fidelity demo items
                 if (tracks.isEmpty()) {
                     tracks.addAll(createDemoTracks())
                 }
+
                 database.trackDao().clearTracks()
                 database.trackDao().insertTracks(tracks)
                 tracks
             }
+
             allTracksList.clear()
             allTracksList.addAll(scannedTracks)
             currentDisplayList.clear()
             currentDisplayList.addAll(allTracksList)
+
             playlistAdapter.updateData(currentDisplayList)
             updateTrackCount()
+
             playbackService?.setPlaylist(currentDisplayList, 0, startPlaying = false)
         }
     }
@@ -498,10 +577,58 @@ class MainActivity : AppCompatActivity() {
 
     private fun createDemoTracks(): List<Track> {
         return listOf(
-            Track(id = 1, title = "SjbZ Studio Bass Master Reference", artist = "ATS2835P Hi-Res Studio", album = "Audiophile Acoustic Tests 2026", duration = 248000L, uri = "asset:///demo_track_1.mp3", format = "FLAC", bitrate = 1411, sampleRate = 96000, bitDepth = 24, orderIndex = 0),
-            Track(id = 2, title = "Cybernetic Pulse - MDRC Dynamic Test", artist = "Actions Semiconductor DSP Labs", album = "Hardware Reference Curves", duration = 195000L, uri = "asset:///demo_track_2.mp3", format = "FLAC", bitrate = 9216, sampleRate = 192000, bitDepth = 24, orderIndex = 1),
-            Track(id = 3, title = "Vocal Clarity & Acoustic Resonance", artist = "SjbZ Master Engineers", album = "Hi-Fi Stereo Demonstrations", duration = 212000L, uri = "asset:///demo_track_3.mp3", format = "WAV", bitrate = 2304, sampleRate = 48000, bitDepth = 24, orderIndex = 2),
-            Track(id = 4, title = "Sub-Bass 20Hz - 120Hz Excursion Sweep", artist = "Frequency Sweep Generator", album = "Subwoofer Calibration", duration = 180000L, uri = "asset:///demo_track_4.mp3", format = "FLAC", bitrate = 1411, sampleRate = 96000, bitDepth = 24, orderIndex = 3)
+            Track(
+                id = 1,
+                title = "SjbZ Studio Bass Master Reference",
+                artist = "ATS2835P Hi-Res Studio",
+                album = "Audiophile Acoustic Tests 2026",
+                duration = 248000L,
+                uri = "asset:///demo_track_1.mp3",
+                format = "FLAC",
+                bitrate = 1411,
+                sampleRate = 96000,
+                bitDepth = 24,
+                orderIndex = 0
+            ),
+            Track(
+                id = 2,
+                title = "Cybernetic Pulse - MDRC Dynamic Test",
+                artist = "Actions Semiconductor DSP Labs",
+                album = "Hardware Reference Curves",
+                duration = 195000L,
+                uri = "asset:///demo_track_2.mp3",
+                format = "FLAC",
+                bitrate = 9216,
+                sampleRate = 192000,
+                bitDepth = 24,
+                orderIndex = 1
+            ),
+            Track(
+                id = 3,
+                title = "Vocal Clarity & Acoustic Resonance",
+                artist = "SjbZ Master Engineers",
+                album = "Hi-Fi Stereo Demonstrations",
+                duration = 212000L,
+                uri = "asset:///demo_track_3.mp3",
+                format = "WAV",
+                bitrate = 2304,
+                sampleRate = 48000,
+                bitDepth = 24,
+                orderIndex = 2
+            ),
+            Track(
+                id = 4,
+                title = "Sub-Bass 20Hz - 120Hz Excursion Sweep",
+                artist = "Frequency Sweep Generator",
+                album = "Subwoofer Calibration",
+                duration = 180000L,
+                uri = "asset:///demo_track_4.mp3",
+                format = "FLAC",
+                bitrate = 1411,
+                sampleRate = 96000,
+                bitDepth = 24,
+                orderIndex = 3
+            )
         )
     }
 
@@ -518,6 +645,7 @@ class MainActivity : AppCompatActivity() {
             tvPlayerTechSpecs.text = "24-bit • 192kHz • ATS2835P"
             return
         }
+
         tvPlayerTitle.text = track.title
         tvPlayerArtist.text = track.artist
         tvPlayerTechSpecs.text = track.getTechInfo()
@@ -527,21 +655,28 @@ class MainActivity : AppCompatActivity() {
     private fun updatePlaybackProgressAndVUMeters() {
         val srv = playbackService ?: return
         val player = srv.player
+
         val isPlaying = player.isPlaying
         val duration = player.duration
         val position = player.currentPosition
+
         if (!isUserTrackingSeekBar && duration > 0) {
             val progress = (position.toFloat() / duration * 1000).toInt()
             playerSeekBar.progress = progress
             tvElapsedTime.text = formatTime(position)
             tvRemainingTime.text = "-" + formatTime((duration - position).coerceAtLeast(0L))
         }
+
+        // Update AIMP Stereo VU Meters in real time
         val fraction = if (duration > 0) position.toFloat() / duration else 0f
         srv.audioChain.updateVUMeters(isPlaying, fraction)
+
         val leftLevel = (srv.audioChain.vuMeterLeft * 100).toInt()
         val rightLevel = (srv.audioChain.vuMeterRight * 100).toInt()
+
         vuMeterLeftBar.progress = leftLevel
         vuMeterRightBar.progress = rightLevel
+
         val peakDb = if (isPlaying) String.format("%.1f dB", -12.0f + (leftLevel / 100.0f) * 11.7f) else "-inf dB"
         tvVuPeakText.text = peakDb
     }

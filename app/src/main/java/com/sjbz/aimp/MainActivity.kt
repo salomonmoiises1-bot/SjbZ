@@ -190,7 +190,7 @@ class MainActivity : AppCompatActivity() {
                     val targetIndex = if (savedIndex in currentDisplayList.indices) savedIndex else 0
                     srv.setPlaylist(currentDisplayList, targetIndex, startPlaying = false)
                     if (savedPos > 0L) {
-                        srv.seekTo(savedPos)
+                        srv.player.seekTo(savedPos)
                     }
                 }
             }

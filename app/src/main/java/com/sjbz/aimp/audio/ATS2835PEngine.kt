@@ -31,6 +31,7 @@ class ATS2835PEngine(
     val mdrc = MDRCProcessor()
     val limiter = LimiterProcessor()
     val crossover = CrossoverProcessor()
+    val bassBoost = BassBoostProcessor()
     val dynamicsHelper = DynamicsProcessingHelper()
 
     // DSP Parameters
@@ -43,6 +44,10 @@ class ATS2835PEngine(
         private set
 
     init {
+        equalizer.bassBoostProcessor = bassBoost
+        bassBoost.onParametersChanged = {
+            updateBassBoost()
+        }
         if (audioSessionId > 0) {
             attachAudioSession(audioSessionId)
         }
@@ -51,14 +56,20 @@ class ATS2835PEngine(
     fun attachAudioSession(sessionId: Int) {
         if (sessionId <= 0) return
         this.audioSessionId = sessionId
-        dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter)
+        dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter, bassBoost)
+        bassBoost.attachToSession(sessionId)
     }
 
     fun applyPreset(preset: EqPreset) {
         equalizer.loadFromPreset(preset)
         mdrc.loadFromSettings(preset.mdrcSettings)
+        if (preset.name == "Bass Boost") {
+            bassBoost.isEnabled = true
+            bassBoost.strength = 800.toShort()
+        }
         updateEqualizer()
         updateMDRC()
+        updateBassBoost()
     }
 
     fun onBluetoothStatusChanged(connected: Boolean) {
@@ -72,7 +83,7 @@ class ATS2835PEngine(
     }
 
     fun updateEqualizer() {
-        dynamicsHelper.applyEqualizer(equalizer)
+        dynamicsHelper.applyEqualizer(equalizer, bassBoost)
     }
 
     fun updateMDRC() {
@@ -83,7 +94,15 @@ class ATS2835PEngine(
         dynamicsHelper.applyLimiter(limiter)
     }
 
+    fun updateBassBoost() {
+        // 1. Primary DSP: DynamicsProcessing 32-band PreEq (guaranteed to work on Android 12+)
+        dynamicsHelper.applyEqualizer(equalizer, bassBoost)
+        // 2. Secondary layer: Native AudioEffect BassBoost
+        bassBoost.updateNativeEffect()
+    }
+
     fun release() {
         dynamicsHelper.release()
+        bassBoost.release()
     }
 }

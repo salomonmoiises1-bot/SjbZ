@@ -13,14 +13,14 @@ class EqualizerProcessor {
         const val BAND_COUNT = 32
 
         val ISO_FREQUENCIES = floatArrayOf(
-            20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f,
+            20f, 25f, 31.5f, 40f, 50f, 63f, 85f, 100f,
             125f, 160f, 200f, 250f, 315f, 400f, 500f, 630f,
             800f, 1000f, 1250f, 1600f, 2000f, 2500f, 3150f, 4000f,
             5000f, 6300f, 8000f, 10000f, 12500f, 16000f, 18000f, 20000f
         )
 
         val BAND_LABELS = arrayOf(
-            "20", "25", "31.5", "40", "50", "63", "80", "100",
+            "20", "25", "31.5", "40", "50", "63", "85", "100",
             "125", "160", "200", "250", "315", "400", "500", "630",
             "800", "1k", "1.25k", "1.6k", "2k", "2.5k", "3.15k", "4k",
             "5k", "6.3k", "8k", "10k", "12.5k", "16k", "18k", "20k"
@@ -69,11 +69,19 @@ class EqualizerProcessor {
         }
     }
 
-    fun getEffectiveGain(index: Int): Float {
+    var bassBoostProcessor: BassBoostProcessor? = null
+
+    fun getEffectiveGain(index: Int, bassBoost: BassBoostProcessor? = null): Float {
         if (index !in 0 until BAND_COUNT) return 0f
         val userGain = bandGains[index]
         val hwOffset = if (ats2835pProfileEnabled) ATS2835P_HARDWARE_OFFSETS.getOrElse(index) { 0f } else 0f
-        return (userGain + preampDb + hwOffset).coerceIn(-12.0f, 12.0f)
+        val bb = bassBoost ?: bassBoostProcessor
+        val bbBoost = if (bb != null && bb.isEnabled) {
+            bb.getBoostGainForFrequency(ISO_FREQUENCIES[index])
+        } else {
+            0.0f
+        }
+        return (userGain + preampDb + hwOffset + bbBoost).coerceIn(-12.0f, 15.0f)
     }
 
     fun applyPreset(presetName: String) {

@@ -84,13 +84,15 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
     private fun startGlobalMix() {
         try {
             if (globalMixHelper == null) {
+                cachedEqualizer.bassBoostProcessor = cachedBassBoost
                 val helper = DynamicsProcessingHelper()
-                helper.attachToSession(0, cachedEqualizer, cachedMdrc, cachedLimiter)
+                helper.attachToSession(0, cachedEqualizer, cachedMdrc, cachedLimiter, cachedBassBoost)
                 globalMixHelper = helper
 
                 val bb = BassBoostProcessor(0)
                 bb.isEnabled = cachedBassBoost.isEnabled
                 bb.strength = cachedBassBoost.strength
+                bb.centerFrequencyHz = cachedBassBoost.centerFrequencyHz
                 globalBassBoost = bb
 
                 sessionAppNames[0] = "Audio Global de Android (Mezclador Maestro #0)"
@@ -121,13 +123,15 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
             activeSessions[sessionId]?.release()
             activeBassBoosts[sessionId]?.release()
 
+            cachedEqualizer.bassBoostProcessor = cachedBassBoost
             val helper = DynamicsProcessingHelper()
-            helper.attachToSession(sessionId, cachedEqualizer, cachedMdrc, cachedLimiter)
+            helper.attachToSession(sessionId, cachedEqualizer, cachedMdrc, cachedLimiter, cachedBassBoost)
             activeSessions[sessionId] = helper
 
             val bb = BassBoostProcessor(sessionId)
             bb.isEnabled = cachedBassBoost.isEnabled
             bb.strength = cachedBassBoost.strength
+            bb.centerFrequencyHz = cachedBassBoost.centerFrequencyHz
             activeBassBoosts[sessionId] = bb
 
             Log.i(TAG, "Attached ATS2835P DSP & BassBoost to external session $sessionId for $appLabel")
@@ -167,11 +171,12 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
             cachedBassBoost.strength = bassBoost.strength
             cachedBassBoost.centerFrequencyHz = bassBoost.centerFrequencyHz
         }
+        cachedEqualizer.bassBoostProcessor = cachedBassBoost
 
         // 1. Sync Global Output Mix
         globalMixHelper?.let { helper ->
             try {
-                helper.applyEqualizer(equalizer)
+                helper.applyEqualizer(equalizer, cachedBassBoost)
                 helper.applyMDRC(mdrc)
                 helper.applyLimiter(limiter)
             } catch (t: Throwable) {
@@ -181,12 +186,15 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         globalBassBoost?.let { bb ->
             bb.isEnabled = cachedBassBoost.isEnabled
             bb.strength = cachedBassBoost.strength
+            bb.centerFrequencyHz = cachedBassBoost.centerFrequencyHz
+            bb.updateNativeEffect()
         }
 
         // 2. Sync all external app sessions
         for ((sessionId, helper) in activeSessions) {
             try {
-                helper.applyEqualizer(equalizer)
+                val sessionBb = activeBassBoosts[sessionId] ?: cachedBassBoost
+                helper.applyEqualizer(equalizer, sessionBb)
                 helper.applyMDRC(mdrc)
                 helper.applyLimiter(limiter)
             } catch (t: Throwable) {
@@ -196,6 +204,8 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
         for ((_, bb) in activeBassBoosts) {
             bb.isEnabled = cachedBassBoost.isEnabled
             bb.strength = cachedBassBoost.strength
+            bb.centerFrequencyHz = cachedBassBoost.centerFrequencyHz
+            bb.updateNativeEffect()
         }
     }
 

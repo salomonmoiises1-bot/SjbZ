@@ -37,12 +37,16 @@ class DynamicsProcessingHelper {
         audioSessionId: Int,
         equalizerProcessor: EqualizerProcessor,
         mdrcProcessor: MDRCProcessor,
-        limiterProcessor: LimiterProcessor
+        limiterProcessor: LimiterProcessor,
+        bassBoostProcessor: BassBoostProcessor? = null
     ) {
         if (audioSessionId < 0) return
         
         // CRITICAL ANTI-ANR: If already attached to this audioSessionId, never recreate heavy HAL effect
         if (currentSessionId == audioSessionId && (dynamicsProcessing != null || legacyEqualizer != null)) {
+            applyEqualizer(equalizerProcessor, bassBoostProcessor)
+            applyMDRC(mdrcProcessor)
+            applyLimiter(limiterProcessor)
             return
         }
 
@@ -66,13 +70,22 @@ class DynamicsProcessingHelper {
                     limiterProcessor.isEffectivelyActive() // limiterInUse
                 )
 
+                // Pre-configure all 32 ISO PreEq bands with strictly ascending cutoff frequencies
+                // including parametric psychoacoustic bass boost (Android 12+ DSP synthesis)
+                for (b in 0 until preEqBandCount) {
+                    val cutoff = EqualizerProcessor.ISO_FREQUENCIES[b]
+                    val gain = equalizerProcessor.getEffectiveGain(b, bassBoostProcessor)
+                    val eqBand = DynamicsProcessing.EqBand(equalizerProcessor.isEnabled, cutoff, gain)
+                    configBuilder.setPreEqBandAllChannelsTo(b, eqBand)
+                }
+
                 val config = configBuilder.build()
                 dynamicsProcessing = DynamicsProcessing(0, audioSessionId, config).apply {
                     enabled = true
                 }
 
                 // Apply initial parameters
-                applyEqualizer(equalizerProcessor)
+                applyEqualizer(equalizerProcessor, bassBoostProcessor)
                 applyMDRC(mdrcProcessor)
                 applyLimiter(limiterProcessor)
 
@@ -88,15 +101,19 @@ class DynamicsProcessingHelper {
         }
 
         // Safe Fallback to legacy Equalizer
-        fallbackToLegacyEqualizer(audioSessionId, equalizerProcessor)
+        fallbackToLegacyEqualizer(audioSessionId, equalizerProcessor, bassBoostProcessor)
     }
 
-    private fun fallbackToLegacyEqualizer(audioSessionId: Int, equalizerProcessor: EqualizerProcessor) {
+    private fun fallbackToLegacyEqualizer(
+        audioSessionId: Int,
+        equalizerProcessor: EqualizerProcessor,
+        bassBoostProcessor: BassBoostProcessor? = null
+    ) {
         try {
             legacyEqualizer = Equalizer(0, audioSessionId).apply {
                 enabled = equalizerProcessor.isEnabled
             }
-            applyLegacyEqualizer(equalizerProcessor)
+            applyLegacyEqualizer(equalizerProcessor, bassBoostProcessor)
             isLegacyFallbackActive = true
             isHardwareDspActive = false
             Log.i(TAG, "Legacy Equalizer attached safely to session $audioSessionId")
@@ -108,27 +125,26 @@ class DynamicsProcessingHelper {
     }
 
     /**
-     * Updates the 32 PreEq bands on both stereo channels (0 and 1).
+     * Updates the 32 PreEq bands across all channels atomically, including DSP Bass Boost.
      */
-    fun applyEqualizer(equalizerProcessor: EqualizerProcessor) {
+    fun applyEqualizer(
+        equalizerProcessor: EqualizerProcessor,
+        bassBoostProcessor: BassBoostProcessor? = null
+    ) {
         val dp = dynamicsProcessing
+        val effectiveBb = bassBoostProcessor ?: equalizerProcessor.bassBoostProcessor
         if (dp != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 val bandCount = EqualizerProcessor.BAND_COUNT
-                val preamp = equalizerProcessor.preampDb
-
-                for (ch in 0..1) {
-                    for (b in 0 until bandCount) {
-                        val cutoff = EqualizerProcessor.ISO_FREQUENCIES[b]
-                        val gain = if (equalizerProcessor.isEnabled) {
-                            equalizerProcessor.getEffectiveGain(b)
-                        } else {
-                            0.0f
-                        }
-
-                        val eqBand = DynamicsProcessing.EqBand(equalizerProcessor.isEnabled, cutoff, gain)
-                        dp.setPreEqBandByChannelIndex(ch, b, eqBand)
+                for (b in 0 until bandCount) {
+                    val cutoff = EqualizerProcessor.ISO_FREQUENCIES[b]
+                    val gain = if (equalizerProcessor.isEnabled) {
+                        equalizerProcessor.getEffectiveGain(b, effectiveBb)
+                    } else {
+                        0.0f
                     }
+                    val eqBand = DynamicsProcessing.EqBand(equalizerProcessor.isEnabled, cutoff, gain)
+                    dp.setPreEqBandAllChannelsTo(b, eqBand)
                 }
             } catch (t: Throwable) {
                 Log.w(TAG, "Error updating DynamicsProcessing PreEq: ${t.message}")
@@ -139,11 +155,14 @@ class DynamicsProcessingHelper {
         // Legacy fallback
         val eq = legacyEqualizer
         if (eq != null) {
-            applyLegacyEqualizer(equalizerProcessor)
+            applyLegacyEqualizer(equalizerProcessor, effectiveBb)
         }
     }
 
-    private fun applyLegacyEqualizer(equalizerProcessor: EqualizerProcessor) {
+    private fun applyLegacyEqualizer(
+        equalizerProcessor: EqualizerProcessor,
+        bassBoostProcessor: BassBoostProcessor? = null
+    ) {
         val eq = legacyEqualizer ?: return
         try {
             eq.enabled = equalizerProcessor.isEnabled
@@ -153,26 +172,30 @@ class DynamicsProcessingHelper {
             val maxLevel = range[1]
 
             val isoFreqs = EqualizerProcessor.ISO_FREQUENCIES
+            val effectiveBb = bassBoostProcessor ?: equalizerProcessor.bassBoostProcessor
 
             for (b in 0 until numBands) {
                 val centerFreqHz = eq.getCenterFreq(b.toShort()) / 1000.0f
 
-                // Find closest band among 32 ISO frequencies using log distance
-                var closestIdx = 0
-                var minDiff = Float.MAX_VALUE
+                // Smooth log-distance Gaussian-weighted gain across all 32 bands.
+                // Ensures that 25, 31.5, 40, 63, 85, 100, 125, 200 Hz directly and
+                // powerfully influence the hardware legacy equalizer's low bands!
+                var weightSum = 0.0
+                var weightedGainSum = 0.0
+
                 for (i in isoFreqs.indices) {
-                    val diff = abs(log10(isoFreqs[i]) - log10(centerFreqHz))
-                    if (diff < minDiff) {
-                        minDiff = diff
-                        closestIdx = i
+                    val logDist = kotlin.math.abs(kotlin.math.log10(isoFreqs[i].toDouble()) - kotlin.math.log10(centerFreqHz.toDouble()))
+                    val weight = 1.0 / (1.0 + (logDist / 0.35) * (logDist / 0.35))
+                    val g = if (equalizerProcessor.isEnabled) {
+                        equalizerProcessor.getEffectiveGain(i, effectiveBb).toDouble()
+                    } else {
+                        0.0
                     }
+                    weightedGainSum += g * weight
+                    weightSum += weight
                 }
 
-                val targetDb = if (equalizerProcessor.isEnabled) {
-                    equalizerProcessor.getEffectiveGain(closestIdx)
-                } else {
-                    0.0f
-                }
+                val targetDb = if (weightSum > 0.0) (weightedGainSum / weightSum).toFloat() else 0.0f
                 val milliBels = (targetDb * 100.0f).toInt().coerceIn(minLevel.toInt(), maxLevel.toInt()).toShort()
                 eq.setBandLevel(b.toShort(), milliBels)
             }

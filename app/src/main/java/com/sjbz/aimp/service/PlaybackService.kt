@@ -259,9 +259,9 @@ class PlaybackService : MediaSessionService() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .addAction(R.drawable.ic_previous, "Anterior", prevIntent)
+            .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
             .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-            .addAction(R.drawable.ic_next, "Siguiente", nextIntent)
+            .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
             .addAction(R.drawable.ic_stop, "Detener", stopIntent)
             .build()
     }

@@ -31,7 +31,6 @@ class ATS2835PEngine(
     val mdrc = MDRCProcessor()
     val limiter = LimiterProcessor()
     val crossover = CrossoverProcessor()
-    val bassBoost = BassBoostProcessor()
     val dynamicsHelper = DynamicsProcessingHelper()
 
     // DSP Parameters
@@ -53,19 +52,13 @@ class ATS2835PEngine(
         if (sessionId <= 0) return
         this.audioSessionId = sessionId
         dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter)
-        bassBoost.attachToSession(sessionId)
     }
 
     fun applyPreset(preset: EqPreset) {
         equalizer.loadFromPreset(preset)
         mdrc.loadFromSettings(preset.mdrcSettings)
-        if (preset.name == "Bass Boost") {
-            bassBoost.isEnabled = true
-            bassBoost.strength = 800.toShort()
-        }
         updateEqualizer()
         updateMDRC()
-        updateBassBoost()
     }
 
     fun onBluetoothStatusChanged(connected: Boolean) {
@@ -90,12 +83,7 @@ class ATS2835PEngine(
         dynamicsHelper.applyLimiter(limiter)
     }
 
-    fun updateBassBoost() {
-        bassBoost.updateNativeEffect()
-    }
-
     fun release() {
         dynamicsHelper.release()
-        bassBoost.release()
     }
 }

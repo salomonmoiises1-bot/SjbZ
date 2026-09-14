@@ -460,19 +460,6 @@ class PlaybackService : MediaSessionService() {
 
     fun getCurrentIndex(): Int = currentTrackIndex
 
-        fun seekTo(positionMs: Long) {
-        player.seekTo(positionMs)
-        savePlaybackSession()
-    }
-
-    fun getDuration(): Long {
-        return player.duration
-    }
-
-    fun getCurrentPosition(): Long {
-        return player.currentPosition
-    }
-
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Keep service alive in foreground when user closes or swipes away the activity
         updateNotification(player.isPlaying)

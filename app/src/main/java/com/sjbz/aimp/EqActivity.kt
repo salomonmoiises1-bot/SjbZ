@@ -22,7 +22,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
-import com.sjbz.aimp.audio.BassBoostProcessor
+import com.sjbz/aimp.audio.BassBoostProcessor
 import com.sjbz.aimp.audio.EqualizerProcessor
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
 import com.sjbz.aimp.audio.LimiterProcessor

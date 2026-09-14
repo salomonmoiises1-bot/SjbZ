@@ -34,6 +34,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.sjbz.aimp.adapter.PlaylistAdapter
@@ -137,6 +140,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Player.Listener for Media3 ExoPlayer state tracking
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            runOnUiThread {
+                val isPlaying = playbackService?.player?.isPlaying == true
+                btnPlayPause.setImageResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            runOnUiThread {
+                btnPlayPause.setImageResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
+            }
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            runOnUiThread {
+                val track = playbackService?.getCurrentTrack()
+                val index = playbackService?.getCurrentIndex() ?: 0
+                updatePlayerUi(track, index)
+            }
+        }
+    }
+
     // Service Connection to PlaybackService
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -145,6 +172,7 @@ class MainActivity : AppCompatActivity() {
             isServiceBound = true
 
             playbackService?.let { srv ->
+                srv.player.addListener(playerListener)
                 srv.isLoopPlaylistEnabled = isRepeatLoopActive
                 srv.onTrackChangedListener = { track, index ->
                     runOnUiThread {
@@ -169,6 +197,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            playbackService?.player?.removeListener(playerListener)
             playbackService = null
             isServiceBound = false
         }
@@ -309,7 +338,7 @@ class MainActivity : AppCompatActivity() {
 
         btnShuffle.setOnClickListener {
             isShuffleActive = !isShuffleActive
-            btnShuffle.setColorFilter(if (isShuffleActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
+            btnShuffle.setColorFilter(if (isShuffleActive) ContextCompat.getColor(this, R.color.studio_cyan) else ContextCompat.getColor(this, R.color.text_muted))
             if (isShuffleActive) {
                 currentDisplayList.shuffle()
                 playlistAdapter.updateData(currentDisplayList)
@@ -324,13 +353,13 @@ class MainActivity : AppCompatActivity() {
         btnRepeat.setOnClickListener {
             isRepeatLoopActive = !isRepeatLoopActive
             playbackService?.isLoopPlaylistEnabled = isRepeatLoopActive
-            btnRepeat.setColorFilter(if (isRepeatLoopActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
+            btnRepeat.setColorFilter(if (isRepeatLoopActive) ContextCompat.getColor(this, R.color.studio_cyan) else ContextCompat.getColor(this, R.color.text_muted))
             Toast.makeText(this, if (isRepeatLoopActive) "Bucle de Playlist Activado" else "Bucle Desactivado", Toast.LENGTH_SHORT).show()
         }
 
         btnCrossfade.setOnClickListener {
             isCrossfadeActive = !isCrossfadeActive
-            btnCrossfade.setColorFilter(if (isCrossfadeActive) ContextCompat.getColor(this, R.color.aimp_orange) else ContextCompat.getColor(this, R.color.text_muted))
+            btnCrossfade.setColorFilter(if (isCrossfadeActive) ContextCompat.getColor(this, R.color.studio_cyan) else ContextCompat.getColor(this, R.color.text_muted))
             playbackService?.atsEngine?.crossfadeSeconds = if (isCrossfadeActive) 3 else 0
             Toast.makeText(this, if (isCrossfadeActive) "Crossfade 3s Activo" else "Crossfade 0s", Toast.LENGTH_SHORT).show()
         }
@@ -338,9 +367,9 @@ class MainActivity : AppCompatActivity() {
         playerSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    val duration = playbackService?.player?.duration ?: 0L
-                    if (duration > 0) {
-                        val seekPos = (progress / 1000.0f * duration).toLong()
+                    val duration: Long = playbackService?.player?.duration ?: 0L
+                    if (duration > 0L) {
+                        val seekPos: Long = (progress / 1000.0f * duration).toLong()
                         tvElapsedTime.text = formatTime(seekPos)
                     }
                 }
@@ -352,10 +381,11 @@ class MainActivity : AppCompatActivity() {
 
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 isUserTrackingSeekBar = false
-                val duration = playbackService?.player?.duration ?: 0L
-                if (duration > 0 && sb != null) {
-                    val targetPos = (sb.progress / 1000.0f * duration).toLong()
-                    playbackService?.player?.seekTo(targetPos)
+                val player: ExoPlayer? = playbackService?.player
+                val duration: Long = player?.duration ?: 0L
+                if (duration > 0L && sb != null) {
+                    val targetPos: Long = (sb.progress / 1000.0f * duration).toLong()
+                    player?.seekTo(targetPos)
                 }
             }
         })
@@ -706,6 +736,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        uiHandler.removeCallbacks(uiUpdateRunnable)
+        playbackService?.player?.removeListener(playerListener)
         if (isServiceBound) {
             unbindService(serviceConnection)
             isServiceBound = false

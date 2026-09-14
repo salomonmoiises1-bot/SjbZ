@@ -22,7 +22,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
-import com.sjbz.aimp.audio.BassBoostProcessor
+import com.sjbz/aimp.audio.BassBoostProcessor
 import com.sjbz.aimp.audio.EqualizerProcessor
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
 import com.sjbz.aimp.audio.LimiterProcessor
@@ -136,6 +136,7 @@ class EqActivity : AppCompatActivity() {
         equalizerProcessor = liveEngine?.equalizer ?: EqualizerProcessor()
         mdrcProcessor = liveEngine?.mdrc ?: MDRCProcessor()
         bassBoostProcessor = liveEngine?.bassBoost ?: BassBoostProcessor()
+        equalizerProcessor.bassBoostProcessor = bassBoostProcessor
 
         initViews()
         setupToolbar()
@@ -456,7 +457,9 @@ class EqActivity : AppCompatActivity() {
             bassBoostProcessor.isEnabled = isChecked
             seekBarBassBoost.isEnabled = isChecked
             updateBassBoostLabel()
+            PlaybackService.instance?.atsEngine?.bassBoost?.isEnabled = isChecked
             PlaybackService.instance?.atsEngine?.updateBassBoost()
+            PlaybackService.instance?.atsEngine?.updateEqualizer()
             syncAllEffects()
         }
 
@@ -465,7 +468,9 @@ class EqActivity : AppCompatActivity() {
                 if (fromUser && !isUpdatingUiFromPreset) {
                     bassBoostProcessor.strength = progress.toShort()
                     updateBassBoostLabel()
+                    PlaybackService.instance?.atsEngine?.bassBoost?.strength = progress.toShort()
                     PlaybackService.instance?.atsEngine?.updateBassBoost()
+                    PlaybackService.instance?.atsEngine?.updateEqualizer()
                     syncAllEffects()
                 }
             }
@@ -475,7 +480,9 @@ class EqActivity : AppCompatActivity() {
 
         fun selectFrequency(freq: Int) {
             bassBoostProcessor.centerFrequencyHz = freq
+            PlaybackService.instance?.atsEngine?.bassBoost?.centerFrequencyHz = freq
             PlaybackService.instance?.atsEngine?.updateBassBoost()
+            PlaybackService.instance?.atsEngine?.updateEqualizer()
             syncAllEffects()
             val activeColor = currentThemeColor
             val inactiveColor = ContextCompat.getColor(this, R.color.aimp_charcoal)
@@ -498,7 +505,12 @@ class EqActivity : AppCompatActivity() {
             bassBoostProcessor.setStrengthDb(db)
             seekBarBassBoost.progress = bassBoostProcessor.strength.toInt()
             updateBassBoostLabel()
+            PlaybackService.instance?.atsEngine?.bassBoost?.let { bb ->
+                bb.isEnabled = enabled
+                bb.setStrengthDb(db)
+            }
             PlaybackService.instance?.atsEngine?.updateBassBoost()
+            PlaybackService.instance?.atsEngine?.updateEqualizer()
             syncAllEffects()
         }
 

@@ -115,7 +115,6 @@ class EqActivity : AppCompatActivity() {
                     restoreAllDspParameters()
                 }
             }, 300)
-            // bind mínimo para no crashear
             setupMasterControls()
             setupEmuControls()
             setupPresetControls()
@@ -405,7 +404,6 @@ class EqActivity : AppCompatActivity() {
                 rotation = 270f
                 max = 240
                 progress = 120
-                isSplitTrack = false
                 progressTintList = ColorStateList.valueOf(cyanColor)
                 thumbTintList = ColorStateList.valueOf(cyanColor)
             }

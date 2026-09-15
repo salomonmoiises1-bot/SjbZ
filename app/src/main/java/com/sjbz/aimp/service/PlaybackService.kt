@@ -21,8 +21,6 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import androidx.media3.session.SessionResult
-import com.google.common.util.concurrent.ListenableFuture
 import com.sjbz.aimp.MainActivity
 import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.ATS2835PEngine
@@ -63,7 +61,6 @@ class PlaybackService : MediaSessionService() {
     var onTrackChangedListener: ((Track?, Int) -> Unit)? = null
     var onPlaybackStateChangedListener: ((Boolean) -> Unit)? = null
 
-    // PATCH #3: evita triple attach que recrea DynamicsProcessing y causa micro-cortes
     private var lastAttachedAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
 
     fun getAudioSessionId(): Int {
@@ -79,15 +76,15 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildMediaItem(track: Track): MediaItem {
         val metadata = MediaMetadata.Builder()
-          .setTitle(track.title)
-          .setArtist(track.artist)
-          .setAlbumTitle(track.album)
-          .build()
+         .setTitle(track.title)
+         .setArtist(track.artist)
+         .setAlbumTitle(track.album)
+         .build()
         return MediaItem.Builder()
-          .setUri(track.uri)
-          .setMediaId(track.id.toString())
-          .setMediaMetadata(metadata)
-          .build()
+         .setUri(track.uri)
+         .setMediaId(track.id.toString())
+         .setMediaMetadata(metadata)
+         .build()
     }
 
     override fun onCreate() {
@@ -110,15 +107,15 @@ class PlaybackService : MediaSessionService() {
         bluetoothDetector.start()
 
         val audioAttributes = AudioAttributes.Builder()
-       .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-       .setUsage(C.USAGE_MEDIA)
-       .build()
+      .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+      .setUsage(C.USAGE_MEDIA)
+      .build()
 
         player = ExoPlayer.Builder(this)
-       .setAudioAttributes(audioAttributes, true)
-       .setHandleAudioBecomingNoisy(true)
-       .setWakeMode(C.WAKE_MODE_LOCAL)
-       .build()
+      .setAudioAttributes(audioAttributes, true)
+      .setHandleAudioBecomingNoisy(true)
+      .setWakeMode(C.WAKE_MODE_LOCAL)
+      .build()
 
         audioChain.bindPlayer(player)
 
@@ -157,30 +154,16 @@ class PlaybackService : MediaSessionService() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        // PATCH #7: callback completo para QS / Android Auto / reloj
+        // FIX CI: MediaSession.Callback de media3 no tiene onSkipToNext/onSkipToPrevious/onPlay/onPause
+        // con esas firmas. Esos "overrides nothing" rompían el build. Se usa callback por defecto;
+        // play/next/prev se manejan vía Player (ExoPlayer) y via intents ACTION_*.
+        // Si necesitas interceptar comandos, hazlo con onConnect/onPlaybackResumption o Player.Listener.
         val callback = object : MediaSession.Callback {
-            override fun onSkipToNext(session: MediaSession, controller: MediaSession.ControllerInfo): Int {
-                playNext()
-                return SessionResult.RESULT_SUCCESS
-            }
-            override fun onSkipToPrevious(session: MediaSession, controller: MediaSession.ControllerInfo): Int {
-                playPrevious()
-                return SessionResult.RESULT_SUCCESS
-            }
-            override fun onPlay(session: MediaSession, controller: MediaSession.ControllerInfo): ListenableFuture<SessionResult> {
-                play()
-                audioChain.startFadeIn()
-                return super.onPlay(session, controller)
-            }
-            override fun onPause(session: MediaSession, controller: MediaSession.ControllerInfo): ListenableFuture<SessionResult> {
-                pause()
-                return super.onPause(session, controller)
-            }
         }
         mediaSession = MediaSession.Builder(this, player)
-       .setSessionActivity(sessionActivityPendingIntent)
-       .setCallback(callback)
-       .build()
+      .setSessionActivity(sessionActivityPendingIntent)
+      .setCallback(callback)
+      .build()
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
     }
@@ -196,7 +179,6 @@ class PlaybackService : MediaSessionService() {
         return START_STICKY
     }
 
-    // PATCH #6: WakeLock sin timeout fijo de 2h que drenaba batería
     private fun handleWakeLockState(isPlaying: Boolean) {
         try {
             if (isPlaying) {
@@ -229,18 +211,18 @@ class PlaybackService : MediaSessionService() {
         val stopIntent = PendingIntent.getService(this, 4, Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
         return NotificationCompat.Builder(this, CHANNEL_ID)
-       .setContentTitle(title).setContentText(artist)
-       .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
-       .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
-       .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-       .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-       .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
-           .setMediaSession(mediaSession?.sessionCompatToken)
-           .setShowActionsInCompactView(0, 1, 2))
-       .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
-       .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-       .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
-       .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
+      .setContentTitle(title).setContentText(artist)
+      .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
+      .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
+      .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+      .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+          .setMediaSession(mediaSession?.sessionCompatToken)
+          .setShowActionsInCompactView(0, 1, 2))
+      .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
+      .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+      .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
+      .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -263,7 +245,6 @@ class PlaybackService : MediaSessionService() {
     fun setPlaylist(tracks: List<Track>, startIndex: Int = 0, startPlaying: Boolean = true) {
         if (tracks.isEmpty()) return
         val isSameList = playlist.size == tracks.size && playlist.indices.all { playlist[it].id == tracks[it].id }
-        // PATCH #5: si es la misma lista y mismo índice y ya está sonando, no reiniciar
         if (isSameList) {
             if (startIndex in playlist.indices) {
                 if (startIndex == currentTrackIndex && player.isPlaying) return
@@ -276,7 +257,6 @@ class PlaybackService : MediaSessionService() {
         for (track in playlist) mediaItems.add(buildMediaItem(track))
         val targetIndex = if (startIndex in playlist.indices) startIndex else 0
         player.setMediaItems(mediaItems, targetIndex, 0L); player.prepare()
-        // PATCH #1: restaura posición guardada si coincide con la lista nueva
         val (savedIndex, savedPos) = restorePlaybackSession()
         if (savedIndex in playlist.indices && playlist[savedIndex].id == playlist[targetIndex].id && savedPos > 5000) {
             player.seekTo(targetIndex, savedPos)
@@ -288,7 +268,6 @@ class PlaybackService : MediaSessionService() {
     fun setPlaylist(tracks: List<Track>, startIndex: Int) { setPlaylist(tracks, startIndex, true) }
     fun setPlaybackSpeed(speed: Float) { player.playbackParameters = PlaybackParameters(speed) }
 
-    // PATCH #1: aplica la sesión guardada después de que la UI ya cargó la playlist
     fun applyRestoredSession() {
         val (savedIndex, savedPos) = restorePlaybackSession()
         if (savedIndex in playlist.indices) {
@@ -336,7 +315,6 @@ class PlaybackService : MediaSessionService() {
     fun stopPlayback() {
         player.stop(); player.seekTo(0); handleWakeLockState(false); updateNotification(false)
     }
-    // PATCH #2: stop() saca el foreground para no dejar notificación huérfana
     fun stop() {
         stopPlayback()
         try {
@@ -373,7 +351,6 @@ class PlaybackService : MediaSessionService() {
     }
     fun getPlaylist(): List<Track> = playlist
     fun getCurrentIndex(): Int = currentTrackIndex
-    // PATCH #4: si se desliza la app y no está sonando, limpia foreground; si está sonando, mantiene servicio
     override fun onTaskRemoved(rootIntent: Intent?) {
         if (!player.isPlaying) {
             try {

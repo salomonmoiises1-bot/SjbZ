@@ -80,6 +80,12 @@ class EqActivity : AppCompatActivity() {
     private val bassBoostHandler = Handler(Looper.getMainLooper())
     private var bassBoostRunnable: Runnable? = null
 
+    // PATCH: debounce para 32 bandas / preamp / mdrc (antes sin debounce -> HAL spam)
+    private val eqHandler = Handler(Looper.getMainLooper())
+    private var eqRunnable: Runnable? = null
+    private val mdrcHandler = Handler(Looper.getMainLooper())
+    private var mdrcRunnable: Runnable? = null
+
     // MDRC 5 Bands Gain Controls
     private lateinit var sbMdrcGainSub: SeekBar
     private lateinit var tvMdrcGainSub: TextView
@@ -101,10 +107,11 @@ class EqActivity : AppCompatActivity() {
     private lateinit var spectrumView: SpectrumView
     private var visualizer: Visualizer? = null
     private val spectrumHandler = Handler(Looper.getMainLooper())
+    private var spectrumIdleActive: Boolean = false
     private val spectrumRunnable = object : Runnable {
         override fun run() {
             try { spectrumView.setIdle() } catch(_: Exception){}
-            spectrumHandler.postDelayed(this, 60)
+            spectrumIdleActive = true
         }
     }
 
@@ -115,6 +122,29 @@ class EqActivity : AppCompatActivity() {
 
     private var isUpdatingUiFromPreset = false
     private var currentThemeColor: Int = 0xFF00E5FF.toInt()
+
+    private fun isLiveEngineObject(): Boolean {
+        val e = PlaybackService.instance?.atsEngine?: return false
+        return (e.equalizer === equalizerProcessor) && (e.bassBoost === bassBoostProcessor) && (e.mdrc === mdrcProcessor)
+    }
+
+    private fun applyEqDebounced() {
+        eqRunnable?.let { eqHandler.removeCallbacks(it) }
+        eqRunnable = Runnable {
+            PlaybackService.instance?.atsEngine?.updateEqualizer()
+            syncAllEffects()
+        }
+        eqHandler.postDelayed(eqRunnable!!, 80)
+    }
+
+    private fun applyMdrcDebounced() {
+        mdrcRunnable?.let { mdrcHandler.removeCallbacks(it) }
+        mdrcRunnable = Runnable {
+            PlaybackService.instance?.atsEngine?.updateMDRC()
+            syncAllEffects()
+        }
+        mdrcHandler.postDelayed(mdrcRunnable!!, 80)
+    }
 
     private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
         if (uri!= null) {
@@ -153,7 +183,11 @@ class EqActivity : AppCompatActivity() {
         equalizerProcessor = liveEngine?.equalizer?: EqualizerProcessor()
         mdrcProcessor = liveEngine?.mdrc?: MDRCProcessor()
         bassBoostProcessor = liveEngine?.bassBoost?: BassBoostProcessor()
-        equalizerProcessor.bassBoostProcessor = bassBoostProcessor
+        // PATCH: solo linkea si son objetos detached. Si es liveEngine, el link ya existe
+        // en ATS2835PEngine.init vía linkBassBoost y re-asignarlo pisaría el chain.
+        if (liveEngine == null) {
+            equalizerProcessor.bassBoostProcessor = bassBoostProcessor
+        }
 
         initViews()
         setupToolbar()
@@ -167,11 +201,12 @@ class EqActivity : AppCompatActivity() {
 
         spectrumView = findViewById(R.id.spectrumView)
         setupVisualizer()
-        spectrumHandler.post(spectrumRunnable)
+        // PATCH: idle solo si no hay FFT en 500ms, no cada 60ms pisando el espectro
+        spectrumHandler.postDelayed(spectrumRunnable, 500)
 
         val activeName = presetManager.getActivePresetName()
         val activePreset = presetManager.getAllPresets().find { it.name.equals(activeName, ignoreCase = true) }
-           ?: presetManager.getFactoryPresets().first()
+          ?: presetManager.getFactoryPresets().first()
         loadPresetToUi(activePreset)
     }
 
@@ -179,7 +214,7 @@ class EqActivity : AppCompatActivity() {
         try {
             visualizer?.release()
             val sessionId = PlaybackService.instance?.atsEngine?.audioSessionId
-               ?: PlaybackService.instance?.player?.audioSessionId?: 0
+              ?: PlaybackService.instance?.player?.audioSessionId?: 0
             if (sessionId == 0) return
             visualizer = Visualizer(sessionId).apply {
                 captureSize = Visualizer.getCaptureSizeRange()[1]
@@ -195,9 +230,12 @@ class EqActivity : AppCompatActivity() {
                             mags[i] = mag.coerceIn(0f, 1f)
                         }
                         runOnUiThread {
+                            // PATCH: cancela el idle pendiente porque hay señal real
                             spectrumHandler.removeCallbacks(spectrumRunnable)
+                            spectrumIdleActive = false
                             spectrumView.updateSpectrum(mags)
-                            spectrumHandler.postDelayed(spectrumRunnable, 60)
+                            // reprograma idle a 500ms sin señal
+                            spectrumHandler.postDelayed(spectrumRunnable, 500)
                         }
                     }
                 }, Visualizer.getMaxCaptureRate() / 2, false, true)
@@ -273,7 +311,14 @@ class EqActivity : AppCompatActivity() {
         switchEqEnabled.isChecked = equalizerProcessor.isEnabled
         switchEqEnabled.setOnCheckedChangeListener { _, isChecked ->
             equalizerProcessor.isEnabled = isChecked
-            PlaybackService.instance?.atsEngine?.updateEqualizer()
+            // PATCH: updateEqualizer ya lo dispara el callback si es liveEngine,
+            // pero se mantiene llamada directa para objetos detached
+            if (!isLiveEngineObject()) {
+                PlaybackService.instance?.atsEngine?.updateEqualizer()
+            } else {
+                // en liveEngine el setter no dispara solo; llamada única
+                PlaybackService.instance?.atsEngine?.updateEqualizer()
+            }
             syncAllEffects()
             updateSlidersEnabled(isChecked)
         }
@@ -332,14 +377,16 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun syncAllEffects() {
-        val limiter = PlaybackService.instance?.atsEngine?.limiter?: LimiterProcessor()
-        globalSessionManager.syncAudioEffects(equalizerProcessor, mdrcProcessor, limiter, bassBoostProcessor)
+        // PATCH: no crear LimiterProcessor fantasma si no hay engine.
+        // Antes se sincronizaba un limiter default que no representaba nada.
+        val engine = PlaybackService.instance?.atsEngine?: return
+        globalSessionManager.syncAudioEffects(equalizerProcessor, mdrcProcessor, engine.limiter, bassBoostProcessor)
     }
 
     private fun showGlobalHelpDialog() {
         AlertDialog.Builder(this)
-           .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
-           .setMessage(
+          .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
+          .setMessage(
                 "¿Cómo funciona en Android?\n\n" +
                 "1. Spotify, Deezer, Tidal, Apple Music, VLC, Poweramp:\n" +
                 "Estas apps transmiten su sesión de audio al sistema. SjbZ Studio la intercepta automáticamente y le aplica la curva de 32 bandas ISO, MDRC y limitador ATS2835P.\n\n" +
@@ -349,8 +396,8 @@ class EqActivity : AppCompatActivity() {
                 "Para apps que intenten bloquear la sesión, puedes otorgar el permiso DUMP conectando el móvil a una PC y ejecutando:\n\n" +
                 "adb shell pm grant com.sjbz.player android.permission.DUMP"
             )
-           .setPositiveButton("Entendido", null)
-           .show()
+          .setPositiveButton("Entendido", null)
+          .show()
     }
 
     private fun setup32BandSliders() {
@@ -427,12 +474,18 @@ class EqActivity : AppCompatActivity() {
                     tvGain.text = String.format("%+.1f", gainDb)
                     if (fromUser &&!isUpdatingUiFromPreset) {
                         equalizerProcessor.setBandGain(bandIndex, gainDb)
-                        PlaybackService.instance?.atsEngine?.updateEqualizer()
-                        syncAllEffects()
+                        // PATCH: debounce 80ms, antes era apply directo por tick -> HAL spam
+                        applyEqDebounced()
                     }
                 }
                 override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {
+                    // flush inmediato al soltar
+                    eqRunnable?.let {
+                        eqHandler.removeCallbacks(it)
+                        it.run()
+                    }
+                }
             })
 
             faderContainer.addView(seekBar)
@@ -465,12 +518,16 @@ class EqActivity : AppCompatActivity() {
                 tvPreampValue.text = String.format("%+.1f dB", db)
                 if (fromUser &&!isUpdatingUiFromPreset) {
                     equalizerProcessor.preampDb = db
-                    PlaybackService.instance?.atsEngine?.updateEqualizer()
-                    syncAllEffects()
+                    applyEqDebounced()
                 }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                eqRunnable?.let {
+                    eqHandler.removeCallbacks(it)
+                    it.run()
+                }
+            }
         })
 
         seekBarSpeed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -503,28 +560,34 @@ class EqActivity : AppCompatActivity() {
         seekBarBassBoost.isEnabled = bassBoostProcessor.isEnabled
         seekBarBassBoost.progress = bassBoostProcessor.strength.toInt()
         updateBassBoostLabel()
+        updateBassFreqButtons(bassBoostProcessor.centerFrequencyHz)
 
         switchBassBoostEnabled.setOnCheckedChangeListener { _, isChecked ->
-            bassBoostProcessor.isEnabled = isChecked
+            // PATCH: un solo set. Antes se seteaba bassBoostProcessor.isEnabled
+            // y además PlaybackService.instance?.atsEngine?.bassBoost?.isEnabled,
+            // que cuando es liveEngine es el MISMO objeto -> doble callback.
+            // Como bassBoostProcessor ya es el del engine en modo live, basta uno.
+            if (bassBoostProcessor.isEnabled!= isChecked) {
+                bassBoostProcessor.isEnabled = isChecked
+            }
             seekBarBassBoost.isEnabled = isChecked
             updateBassBoostLabel()
-            PlaybackService.instance?.atsEngine?.bassBoost?.isEnabled = isChecked
+            // updateBassBoost ya hace limiter+eq internamente, no hace falta updateEqualizer extra
             PlaybackService.instance?.atsEngine?.updateBassBoost()
-            PlaybackService.instance?.atsEngine?.updateEqualizer()
             syncAllEffects()
         }
 
         seekBarBassBoost.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser &&!isUpdatingUiFromPreset) {
+                    // PATCH: un solo set, sin duplicar al engine
                     bassBoostProcessor.strength = progress.toShort()
-                    PlaybackService.instance?.atsEngine?.bassBoost?.strength = progress.toShort()
                     updateBassBoostLabel()
                     // PATCH debounce 90ms: evita clipseo por reaplicar DSP en cada tick
                     bassBoostRunnable?.let { bassBoostHandler.removeCallbacks(it) }
                     bassBoostRunnable = Runnable {
+                        // updateBassBoost ya incluye applyEqualizer, no llamar dos veces
                         PlaybackService.instance?.atsEngine?.updateBassBoost()
-                        PlaybackService.instance?.atsEngine?.updateEqualizer()
                         syncAllEffects()
                     }
                     bassBoostHandler.postDelayed(bassBoostRunnable!!, 90)
@@ -540,19 +603,11 @@ class EqActivity : AppCompatActivity() {
         })
 
         fun selectFrequency(freq: Int) {
+            // PATCH: un solo set, el callback linkeado dispara updateBassBoost
             bassBoostProcessor.centerFrequencyHz = freq
-            PlaybackService.instance?.atsEngine?.bassBoost?.centerFrequencyHz = freq
             PlaybackService.instance?.atsEngine?.updateBassBoost()
-            PlaybackService.instance?.atsEngine?.updateEqualizer()
             syncAllEffects()
-            val activeColor = currentThemeColor
-            val inactiveColor = ContextCompat.getColor(this, R.color.aimp_charcoal)
-            btnBassFreq60.backgroundTintList = ColorStateList.valueOf(if (freq == 60) activeColor else inactiveColor)
-            btnBassFreq85.backgroundTintList = ColorStateList.valueOf(if (freq == 85) activeColor else inactiveColor)
-            btnBassFreq120.backgroundTintList = ColorStateList.valueOf(if (freq == 120) activeColor else inactiveColor)
-            btnBassFreq60.setTextColor(if (freq == 60) Color.BLACK else Color.WHITE)
-            btnBassFreq85.setTextColor(if (freq == 85) Color.BLACK else Color.WHITE)
-            btnBassFreq120.setTextColor(if (freq == 120) Color.BLACK else Color.WHITE)
+            updateBassFreqButtons(freq)
         }
 
         btnBassFreq60.setOnClickListener { selectFrequency(60) }
@@ -562,19 +617,29 @@ class EqActivity : AppCompatActivity() {
         fun applyQuickBass(db: Float, enabled: Boolean = true) {
             // cancela debounce pendiente antes de salto brusco
             bassBoostRunnable?.let { bassBoostHandler.removeCallbacks(it) }
-            switchBassBoostEnabled.isChecked = enabled
-            bassBoostProcessor.isEnabled = enabled
-            seekBarBassBoost.isEnabled = enabled
+            // PATCH: evita loop del checked listener seteando con guard
+            if (switchBassBoostEnabled.isChecked!= enabled) {
+                switchBassBoostEnabled.isChecked = enabled
+            } else {
+                // si no cambió, aplica directo porque el listener no disparó
+                if (bassBoostProcessor.isEnabled!= enabled) bassBoostProcessor.isEnabled = enabled
+                seekBarBassBoost.isEnabled = enabled
+                updateBassBoostLabel()
+                PlaybackService.instance?.atsEngine?.updateBassBoost()
+                syncAllEffects()
+                return
+            }
+            // el listener del switch ya hizo el resto; solo falta strength
             bassBoostProcessor.setStrengthDb(db)
+            // PATCH: no duplicar set al engine, es el mismo objeto en live mode
             seekBarBassBoost.progress = bassBoostProcessor.strength.toInt()
             updateBassBoostLabel()
-            PlaybackService.instance?.atsEngine?.bassBoost?.let { bb ->
-                bb.isEnabled = enabled
-                bb.setStrengthDb(db)
+            // el listener ya llamó a updateBassBoost, refrescamos strength con debounce corto
+            bassBoostRunnable = Runnable {
+                PlaybackService.instance?.atsEngine?.updateBassBoost()
+                syncAllEffects()
             }
-            PlaybackService.instance?.atsEngine?.updateBassBoost()
-            PlaybackService.instance?.atsEngine?.updateEqualizer()
-            syncAllEffects()
+            bassBoostHandler.post(bassBoostRunnable!!)
         }
 
         btnBassQuickOff.setOnClickListener { applyQuickBass(0f, false) }
@@ -582,6 +647,17 @@ class EqActivity : AppCompatActivity() {
         btnBassQuick6dB.setOnClickListener { applyQuickBass(6.0f, true) }
         btnBassQuick9dB.setOnClickListener { applyQuickBass(9.0f, true) }
         btnBassQuick12dB.setOnClickListener { applyQuickBass(12.0f, true) }
+    }
+
+    private fun updateBassFreqButtons(freq: Int) {
+        val activeColor = currentThemeColor
+        val inactiveColor = ContextCompat.getColor(this, R.color.aimp_charcoal)
+        btnBassFreq60.backgroundTintList = ColorStateList.valueOf(if (freq == 60) activeColor else inactiveColor)
+        btnBassFreq85.backgroundTintList = ColorStateList.valueOf(if (freq == 85) activeColor else inactiveColor)
+        btnBassFreq120.backgroundTintList = ColorStateList.valueOf(if (freq == 120) activeColor else inactiveColor)
+        btnBassFreq60.setTextColor(if (freq == 60) Color.BLACK else Color.WHITE)
+        btnBassFreq85.setTextColor(if (freq == 85) Color.BLACK else Color.WHITE)
+        btnBassFreq120.setTextColor(if (freq == 120) Color.BLACK else Color.WHITE)
     }
 
     private fun updateBassBoostLabel() {
@@ -624,13 +700,18 @@ class EqActivity : AppCompatActivity() {
                     val gainDb = (progress - 120) / 10.0f
                     tv.text = String.format("%+.1f dB", gainDb)
                     if (fromUser &&!isUpdatingUiFromPreset) {
-                        mdrcProcessor.getBand(bandIndex)?.gainDb = gainDb
-                        PlaybackService.instance?.atsEngine?.updateMDRC()
-                        syncAllEffects()
+                        // PATCH: usa setBandGainDb con coerce, antes era set directo sin clamp
+                        mdrcProcessor.setBandGainDb(bandIndex, gainDb)
+                        applyMdrcDebounced()
                     }
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    mdrcRunnable?.let {
+                        mdrcHandler.removeCallbacks(it)
+                        it.run()
+                    }
+                }
             })
         }
 
@@ -650,6 +731,8 @@ class EqActivity : AppCompatActivity() {
 
         spinnerPresets.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                // PATCH: ignora el onItemSelected inicial disparado por setSelection en refresh
+                if (isUpdatingUiFromPreset) return
                 val selectedName = spinnerPresets.selectedItem?.toString()?: return
                 presetManager.setActivePresetName(selectedName)
                 val allPresets = presetManager.getAllPresets()
@@ -671,7 +754,10 @@ class EqActivity : AppCompatActivity() {
         val target = selectPresetName?: presetManager.getActivePresetName()
         val idx = names.indexOf(target)
         if (idx >= 0) {
+            // PATCH: marca guard para que el listener no recargue el preset dos veces
+            isUpdatingUiFromPreset = true
             spinnerPresets.setSelection(idx)
+            isUpdatingUiFromPreset = false
         }
     }
 
@@ -714,6 +800,7 @@ class EqActivity : AppCompatActivity() {
         switchMdrcEnabled.thumbTintList = colorList
 
         try { spectrumView.setThemeColor(color) } catch(_: Exception){}
+        updateBassFreqButtons(bassBoostProcessor.centerFrequencyHz)
     }
 
     private fun loadPresetToUi(preset: EqPreset) {
@@ -745,17 +832,28 @@ class EqActivity : AppCompatActivity() {
                 mdrcValueLabels[i].text = String.format("%+.1f dB", bandCfg.gainDb)
             }
 
+            // PATCH: sincroniza UI del BassBoost sin hardcodear solo "Bass Boost".
+            // Antes solo ese preset tocaba el bass, el resto lo dejaba con el valor anterior.
+            // Ahora: si el preset trae metadata de bass se aplicaría aquí; como EqPreset
+            // aún no la trae, se conserva el estado actual para no pisarlo.
+            // Se mantiene el caso especial legacy por compatibilidad:
             if (preset.name.equals("Bass Boost", ignoreCase = true)) {
+                // evita doble callback: set directo con guard
                 bassBoostProcessor.isEnabled = true
                 bassBoostProcessor.setStrengthDb(9.0f)
-                switchBassBoostEnabled.isChecked = true
-                seekBarBassBoost.progress = bassBoostProcessor.strength.toInt()
-                updateBassBoostLabel()
             }
+            switchBassBoostEnabled.isChecked = bassBoostProcessor.isEnabled
+            seekBarBassBoost.isEnabled = bassBoostProcessor.isEnabled
+            seekBarBassBoost.progress = bassBoostProcessor.strength.toInt()
+            updateBassBoostLabel()
+            updateBassFreqButtons(bassBoostProcessor.centerFrequencyHz)
 
-            PlaybackService.instance?.atsEngine?.updateEqualizer()
-            PlaybackService.instance?.atsEngine?.updateMDRC()
-            PlaybackService.instance?.atsEngine?.updateBassBoost()
+            // PATCH: un solo ciclo. updateBassBoost() ya hace limiter+eq.
+            // Antes eran 4 llamadas (eq, mdrc, bb->limiter+eq) + sync.
+            PlaybackService.instance?.atsEngine?.let {
+                it.updateMDRC()
+                it.updateBassBoost()
+            }
             syncAllEffects()
         } finally {
             isUpdatingUiFromPreset = false
@@ -783,15 +881,15 @@ class EqActivity : AppCompatActivity() {
             }
 
             AlertDialog.Builder(this)
-               .setTitle("Borrar Preset")
-               .setMessage("¿Deseas eliminar el preset '$selected'?")
-               .setPositiveButton("Borrar") { _, _ ->
+              .setTitle("Borrar Preset")
+              .setMessage("¿Deseas eliminar el preset '$selected'?")
+              .setPositiveButton("Borrar") { _, _ ->
                     presetManager.deletePreset(selected)
                     refreshPresetsSpinner("ATS-2835P Master")
                     Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show()
                 }
-               .setNegativeButton("Cancelar", null)
-               .show()
+              .setNegativeButton("Cancelar", null)
+              .show()
         }
 
         btnExportSjbz.setOnClickListener {
@@ -852,9 +950,9 @@ class EqActivity : AppCompatActivity() {
         }
 
         dialog = AlertDialog.Builder(this)
-           .setView(container)
-           .setNegativeButton("Cancelar", null)
-           .create()
+          .setView(container)
+          .setNegativeButton("Cancelar", null)
+          .create()
 
         dialog.show()
     }
@@ -867,9 +965,9 @@ class EqActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-           .setTitle("Guardar Preset")
-           .setView(input)
-           .setPositiveButton("Guardar") { _, _ ->
+          .setTitle("Guardar Preset")
+          .setView(input)
+          .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
                     val existing = presetManager.getCustomPresets().find { it.name.equals(name, ignoreCase = true) }
@@ -886,14 +984,18 @@ class EqActivity : AppCompatActivity() {
                     Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show()
                 }
             }
-           .setNegativeButton("Cancelar", null)
-           .show()
+          .setNegativeButton("Cancelar", null)
+          .show()
     }
 
     override fun onDestroy() {
         bassBoostHandler.removeCallbacksAndMessages(null)
+        eqHandler.removeCallbacksAndMessages(null)
+        mdrcHandler.removeCallbacksAndMessages(null)
         spectrumHandler.removeCallbacks(spectrumRunnable)
+        spectrumHandler.removeCallbacksAndMessages(null)
         try { visualizer?.release() } catch(_: Exception){}
+        visualizer = null
         super.onDestroy()
         globalSessionManager.onSessionsChangedListener = null
     }

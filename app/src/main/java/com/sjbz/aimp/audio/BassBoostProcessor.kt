@@ -1,34 +1,27 @@
 package com.sjbz.aimp.audio
 
 import android.media.audiofx.BassBoost
-import android.os.Build
 import android.util.Log
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.log2
 
 /**
- * Bass Boost Processor modeled for SjbZ.
+ * Bass Boost Processor para SjbZ / ATS2835P.
  *
- * ANDROID 12+ COMPATIBILITY:
- * In Android 12+ (API 31+), android.media.audiofx.BassBoost was deprecated for global sessions,
- * and many OEMs (Pixel, Samsung, Xiaomi, Motorola) completely disabled or bypassed legacy
- * AudioFX effects when DynamicsProcessing is active.
- *
- * To guarantee 100% audible, punchy, distortion-free BassBoost on ALL Android versions
- * (including Android 12, 13, 14, 15):
- * 1. Primary Engine: ATS2835P DSP-Synthesized Parametric PreEq filter injected into
- *    DynamicsProcessing (hardware accelerated on API 28+).
- * 2. Secondary Layer: Legacy android.media.audiofx.BassBoost attached with try/catch
- *    where supported by hardware vendor HALs.
+ * Motor principal: DSP sintetizado vía DynamicsProcessing PreEq (funciona 100% en Android 12+).
+ * Motor secundario: legacy BassBoost donde el HAL lo permite.
+ * Curva psicoacústica plana en sub-graves para que las 32 bandas (20-125Hz) respondan.
  */
 class BassBoostProcessor(var audioSessionId: Int = 0) {
 
     companion object {
         private const val TAG = "BassBoostProcessor"
         const val MAX_STRENGTH: Short = 1000
-        const val DEFAULT_STRENGTH: Short = 600 // ~60% (+9.0 dB)
-        const val DEFAULT_FREQ_HZ = 85
+        const val DEFAULT_STRENGTH: Short = 600 // ~60% (+7.2 dB)
+        const val DEFAULT_FREQ_HZ = 60
+        const val MIN_FREQ_HZ = 20
+        const val MAX_FREQ_HZ = 150
     }
 
     var onParametersChanged: (() -> Unit)? = null
@@ -49,7 +42,7 @@ class BassBoostProcessor(var audioSessionId: Int = 0) {
 
     var centerFrequencyHz: Int = DEFAULT_FREQ_HZ
         set(value) {
-            field = value
+            field = value.coerceIn(MIN_FREQ_HZ, MAX_FREQ_HZ)
             updateNativeEffect()
             onParametersChanged?.invoke()
         }
@@ -63,43 +56,42 @@ class BassBoostProcessor(var audioSessionId: Int = 0) {
     }
 
     /**
-     * Calculates the exact gain boost in dB added to a given frequency (in Hz)
-     * based on ATS2835P sub-bass psychoacoustic curves (60 Hz Sub, 85 Hz Punch, 120 Hz Mid-Bass).
-     *
-     * Injected directly into DynamicsProcessing PreEQ, ensuring 100% reliable operation on Android 12+.
+     * Ganancia en dB para una frecuencia dada.
+     * Shelf plano hacia abajo (20Hz mantiene 85%+), roll-off suave hacia arriba
+     * para no colorear voces. Así las 8 bandas bajas (25-125) sí suenan.
      */
     fun getBoostGainForFrequency(freqHz: Float): Float {
         if (!isEnabled || strength <= 0) return 0.0f
-        // Map 0 - 1000 strength to 0 - 12.0 dB boost
         val maxGainDb = (strength.toFloat() / MAX_STRENGTH.toFloat()) * 12.0f
         val f0 = centerFrequencyHz.toFloat()
-
         if (freqHz <= 0f || f0 <= 0f) return 0.0f
 
-        // Octave distance
         val octDiff = abs(log2((freqHz / f0).toDouble())).toFloat()
 
-        // Asymmetrical Q curve:
-        // Below center frequency: resonant shelf plateau maintaining energy down to 20Hz
-        // Above center frequency: steep psychoacoustic roll-off so vocals and mids remain uncolored
         val factor = if (freqHz <= f0) {
-            (1.0f - (octDiff * 0.12f)).coerceIn(0.70f, 1.0f)
+            // PARCHE 32 bandas: de 0.70 -> 0.85 mínimo, de 0.12 -> 0.08 pendiente
+            (1.0f - (octDiff * 0.08f)).coerceIn(0.85f, 1.0f)
         } else {
-            exp(-(octDiff * octDiff) / 0.85f).coerceIn(0.0f, 1.0f)
+            // Roll-off más abierto para no matar 100-200Hz
+            exp(-(octDiff * octDiff) / 1.2f).coerceIn(0.0f, 1.0f)
         }
-
         return (maxGainDb * factor).coerceIn(0.0f, 14.0f)
+    }
+
+    /**
+     * Curva completa de 32 bandas lista para inyectar al DynamicsProcessing.
+     */
+    fun getFull32BandCurve(isoFreqs: FloatArray): FloatArray {
+        return FloatArray(isoFreqs.size) { i -> getBoostGainForFrequency(isoFreqs[i]) }
     }
 
     fun attachToSession(sessionId: Int) {
         release()
         audioSessionId = sessionId
         if (sessionId <= 0) {
-            // Android 12+ completely disallows legacy AudioFX on session 0
-            Log.i(TAG, "Session $sessionId: Native BassBoost bypassed (handled via DynamicsProcessing on Android 12+)")
+            Log.i(TAG, "Session $sessionId: bypass nativo, solo DSP (Android 12+ safe)")
             return
         }
-
         try {
             nativeBassBoost = BassBoost(0, sessionId).apply {
                 enabled = this@BassBoostProcessor.isEnabled
@@ -107,9 +99,9 @@ class BassBoostProcessor(var audioSessionId: Int = 0) {
                     setStrength(this@BassBoostProcessor.strength)
                 }
             }
-            Log.i(TAG, "Hardware BassBoost attached to session $sessionId (strength=${strength}/1000, enabled=$isEnabled)")
+            Log.i(TAG, "BassBoost nativo en sesión $sessionId strength=$strength")
         } catch (t: Throwable) {
-            Log.w(TAG, "Legacy BassBoost unavailable on session $sessionId (Android 12+ HAL restriction): ${t.message}. Operating via DynamicsProcessing DSP.")
+            Log.w(TAG, "BassBoost nativo no disponible: ${t.message}, usando DSP")
             nativeBassBoost = null
         }
     }
@@ -123,32 +115,25 @@ class BassBoostProcessor(var audioSessionId: Int = 0) {
                 }
             }
         } catch (t: Throwable) {
-            Log.w(TAG, "Error updating native BassBoost: ${t.message}")
+            Log.w(TAG, "Error actualizando BassBoost nativo: ${t.message}")
         }
     }
 
-    fun getStrengthPercent(): Int {
-        return (strength.toInt() / 10).coerceIn(0, 100)
-    }
-
+    fun getStrengthPercent(): Int = (strength.toInt() / 10).coerceIn(0, 100)
     fun setStrengthPercent(percent: Int) {
-        strength = ((percent.coerceIn(0, 100) * 10)).toShort()
+        strength = (percent.coerceIn(0, 100) * 10).toShort()
     }
 
-    fun getStrengthDb(): Float {
-        return (strength.toFloat() / MAX_STRENGTH.toFloat()) * 15.0f
-    }
-
+    fun getStrengthDb(): Float = (strength.toFloat() / MAX_STRENGTH.toFloat()) * 15.0f
     fun setStrengthDb(db: Float) {
         val clamped = db.coerceIn(0.0f, 15.0f)
         strength = ((clamped / 15.0f) * MAX_STRENGTH.toFloat()).toInt().toShort()
     }
 
+    fun isNativeActive(): Boolean = nativeBassBoost!= null
+
     fun release() {
-        try {
-            nativeBassBoost?.release()
-        } catch (_: Throwable) {}
+        try { nativeBassBoost?.release() } catch (_: Throwable) {}
         nativeBassBoost = null
     }
 }
-

@@ -561,12 +561,11 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Scans MediaStore for audio files (FLAC, MP3, WAV, APE, OPUS, OGG, M4A).
+     * PARCHADO: usa DISPLAY_NAME + MIME_TYPE para detectar formato real.
      */
     private fun scanAudioStorage() {
         lifecycleScope.launch {
             val scannedTracks = withContext(Dispatchers.IO) {
-                // FIX CI: preserva favoritos sin llamar a trackDao().isFavorite(id) que no existe.
-                // Era la línea 618 que rompía el build: Unresolved reference: isFavorite
                 val favMap: Map<Long, Boolean> = try {
                     database.trackDao().getAllTracks().associate { t ->
                         val key = if (t.mediaStoreId != 0L) t.mediaStoreId else t.id
@@ -579,10 +578,11 @@ class MainActivity : AppCompatActivity() {
                 val projection = arrayOf(
                     MediaStore.Audio.Media._ID,
                     MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.DISPLAY_NAME,
+                    MediaStore.Audio.Media.MIME_TYPE,
                     MediaStore.Audio.Media.ARTIST,
                     MediaStore.Audio.Media.ALBUM,
-                    MediaStore.Audio.Media.DURATION,
-                    MediaStore.Audio.Media.RELATIVE_PATH
+                    MediaStore.Audio.Media.DURATION
                 )
                 val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
 
@@ -592,28 +592,28 @@ class MainActivity : AppCompatActivity() {
                     cursor?.let { c ->
                         val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                         val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                        val displayNameCol = c.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
+                        val mimeCol = c.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
                         val artistCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
                         val albumCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                         val durationCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                        val pathCol = c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH)
 
                         var order = 0
                         while (c.moveToNext()) {
                             val msId = c.getLong(idCol)
                             val title = c.getString(titleCol) ?: "Audio Track"
+                            val displayName = try { if (displayNameCol >= 0) c.getString(displayNameCol) ?: "" else "" } catch (_: Exception) { "" }
+                            val mimeType = try { if (mimeCol >= 0) c.getString(mimeCol) ?: "" else "" } catch (_: Exception) { "" }
                             val artist = c.getString(artistCol) ?: "Unknown Artist"
                             val album = c.getString(albumCol) ?: "Unknown Album"
                             val duration = try { c.getLong(durationCol) } catch (_: Exception) { 0L }
-                            val relPath = try { if (pathCol >= 0) c.getString(pathCol) ?: "" else "" } catch (_: Exception) { "" }
 
                             val contentUri = ContentUris.withAppendedId(uri, msId).toString()
-                            val format = detectFormat(title + relPath)
+                            val format = detectFormat(displayName.ifEmpty { title }, mimeType)
                             val prevFav = favMap[msId] ?: false
 
                             tracks.add(
                                 Track(
-                                    // FIX CI: id autogenerado por Room (0), mediaStoreId = msId.
-                                    // Antes se hacía id = msId con autoGenerate=true -> colisión.
                                     id = 0,
                                     mediaStoreId = msId,
                                     title = title,
@@ -671,16 +671,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun detectFormat(path: String): String {
-        val lower = path.lowercase()
-        return when {
-            lower.endsWith(".flac") -> "FLAC"
-            lower.endsWith(".wav") -> "WAV"
-            lower.endsWith(".ape") -> "APE"
-            lower.endsWith(".opus") -> "OPUS"
-            lower.endsWith(".ogg") -> "OGG"
-            lower.endsWith(".m4a") -> "M4A"
-            lower.endsWith(".aac") -> "AAC"
+    private fun detectFormat(fileName: String, mimeType: String = ""): String {
+        val lower = fileName.lowercase()
+        when {
+            lower.endsWith(".flac") -> return "FLAC"
+            lower.endsWith(".wav") -> return "WAV"
+            lower.endsWith(".ape") -> return "APE"
+            lower.endsWith(".opus") -> return "OPUS"
+            lower.endsWith(".ogg") -> return "OGG"
+            lower.endsWith(".m4a") -> return "M4A"
+            lower.endsWith(".aac") -> return "AAC"
+            lower.endsWith(".mp3") -> return "MP3"
+            lower.endsWith(".wma") -> return "WMA"
+        }
+        return when (mimeType.lowercase()) {
+            "audio/flac", "audio/x-flac" -> "FLAC"
+            "audio/wav", "audio/x-wav", "audio/wave" -> "WAV"
+            "audio/mpeg", "audio/mp3" -> "MP3"
+            "audio/mp4", "audio/x-m4a" -> "M4A"
+            "audio/aac" -> "AAC"
+            "audio/ogg" -> if (lower.contains("opus")) "OPUS" else "OGG"
             else -> "MP3"
         }
     }

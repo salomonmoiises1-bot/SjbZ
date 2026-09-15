@@ -1,437 +1,417 @@
 package com.sjbz.aimp
 
-import android.app.AlertDialog
+import android.content.Context
+import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.media.audiofx.Visualizer
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
-import androidx.core.content.ContextCompat
-import com.sjbz.aimp.audio.BassBoostProcessor
 import com.sjbz.aimp.audio.EqualizerProcessor
-import com.sjbz.aimp.audio.GlobalAudioSessionManager
-import com.sjbz.aimp.audio.LimiterProcessor
-import com.sjbz.aimp.audio.MDRCProcessor
 import com.sjbz.aimp.audio.PresetManager
-import com.sjbz.aimp.audio.SpectrumView
+import com.sjbz.aimp.audio.SjbzDspProcessor
 import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.service.PlaybackService
+import com.sjbz.aimp.ui.AudioSpectrumVisualizerView
 
 /**
- * 32-Band Equalizer Activity for SjbZ.
- * Displays 32 precision frequency faders, Preamp (-12dB to +12dB),
- * ATS2835P Psychoacoustic BassBoost, 5-band MDRC compression gain controls (-12dB to +12dB),
- * vibrant 10-color dynamic theming, and preset management with.sjbz file support.
+ * EqActivity PRO - Professional 32-Band ISO Equalizer Studio.
+ *
+ * Implements:
+ * - HorizontalScrollView with 32 vertical ISO sliders (-12 dB to +12 dB) with 60ms debounce.
+ * - Persistent preferences under "sjbz_dsp_pro".
+ * - Bass Boost low-shelf RBJ: Spinner (60/85/120Hz) + Slider (0-12 dB) + Enable switch.
+ * - Master DSP switch.
+ * - Quick preset buttons: Flat, Bass, Rock, Vocal + Genre-adaptive auto EQ.
+ * - Real-time 60fps Spectrum Analyzer with 2048 mono FFT streaming.
  */
 class EqActivity : AppCompatActivity() {
 
-    private lateinit var presetManager: PresetManager
-    private lateinit var equalizerProcessor: EqualizerProcessor
-    private lateinit var mdrcProcessor: MDRCProcessor
-    private lateinit var bassBoostProcessor: BassBoostProcessor
-    private lateinit var globalSessionManager: GlobalAudioSessionManager
-
-    private lateinit var switchEqEnabled: SwitchCompat
-    private lateinit var switchMdrcEnabled: SwitchCompat
-    private lateinit var switchGlobalSystemEq: SwitchCompat
-    private lateinit var tvActiveSessionsStatus: TextView
-    private lateinit var btnGlobalHelp: Button
-    private lateinit var spinnerPresets: Spinner
-    private lateinit var seekBarPreamp: SeekBar
-    private lateinit var tvPreampValue: TextView
-    private lateinit var seekBarSpeed: SeekBar
-    private lateinit var tvSpeedValue: TextView
-    private lateinit var seekBarCrossfade: SeekBar
-    private lateinit var tvCrossfadeValue: TextView
-    private lateinit var container32Bands: LinearLayout
-
-    // BASS BOOST Controls (ATS2835P Hardware)
-    private lateinit var switchBassBoostEnabled: SwitchCompat
-    private lateinit var seekBarBassBoost: SeekBar
-    private lateinit var tvBassBoostValue: TextView
-    private lateinit var btnBassFreq60: Button
-    private lateinit var btnBassFreq85: Button
-    private lateinit var btnBassFreq120: Button
-    private lateinit var btnBassQuickOff: Button
-    private lateinit var btnBassQuick3dB: Button
-    private lateinit var btnBassQuick6dB: Button
-    private lateinit var btnBassQuick9dB: Button
-    private lateinit var btnBassQuick12dB: Button
-
-    // PATCH: debounce BassBoost para evitar clipseo al mover fader
-    private val bassBoostHandler = Handler(Looper.getMainLooper())
-    private var bassBoostRunnable: Runnable? = null
-
-    // PATCH: debounce para 32 bandas / preamp / mdrc (antes sin debounce -> HAL spam)
-    private val eqHandler = Handler(Looper.getMainLooper())
-    private var eqRunnable: Runnable? = null
-    private val mdrcHandler = Handler(Looper.getMainLooper())
-    private var mdrcRunnable: Runnable? = null
-
-    // MDRC 5 Bands Gain Controls
-    private lateinit var sbMdrcGainSub: SeekBar
-    private lateinit var tvMdrcGainSub: TextView
-    private lateinit var sbMdrcGainLow: SeekBar
-    private lateinit var tvMdrcGainLow: TextView
-    private lateinit var sbMdrcGainMid: SeekBar
-    private lateinit var tvMdrcGainMid: TextView
-    private lateinit var sbMdrcGainHigh: SeekBar
-    private lateinit var tvMdrcGainHigh: TextView
-    private lateinit var sbMdrcGainAir: SeekBar
-    private lateinit var tvMdrcGainAir: TextView
-
-    private lateinit var btnSavePreset: Button
-    private lateinit var btnDeletePreset: Button
-    private lateinit var btnExportSjbz: Button
-    private lateinit var btnImportSjbz: Button
-
-    // Spectrum Analyzer
-    private lateinit var spectrumView: SpectrumView
-    private var visualizer: Visualizer? = null
-    private val spectrumHandler = Handler(Looper.getMainLooper())
-    private var spectrumIdleActive: Boolean = false
-    private val spectrumRunnable = object : Runnable {
-        override fun run() {
-            try { spectrumView.setIdle() } catch(_: Exception){}
-            spectrumIdleActive = true
-        }
+    companion object {
+        private const val PREFS_NAME = "sjbz_dsp_pro"
+        private const val DEBOUNCE_MS = 60L
     }
 
+    private lateinit var prefs: SharedPreferences
+    private lateinit var presetManager: PresetManager
+    private var dspProcessor: SjbzDspProcessor? = null
+
+    // UI Widgets
+    private lateinit var toolbar: Toolbar
+    private lateinit var switchMasterDsp: SwitchCompat
+    private lateinit var visualizerView: AudioSpectrumVisualizerView
+    private lateinit var tvRecognizedGenre: TextView
+    private lateinit var tvGenreTrackInfo: TextView
+    private lateinit var btnAutoEqGenre: Button
+
+    // Quick Presets
+    private lateinit var btnPresetFlat: Button
+    private lateinit var btnPresetBass: Button
+    private lateinit var btnPresetRock: Button
+    private lateinit var btnPresetVocal: Button
+    private lateinit var spinnerPresets: Spinner
+    private lateinit var btnSavePreset: ImageButton
+    private lateinit var btnExportPreset: ImageButton
+
+    // Master Controls
+    private lateinit var tvPreampValue: TextView
+    private lateinit var seekBarPreamp: SeekBar
+    private lateinit var switchBassBoost: SwitchCompat
+    private lateinit var tvBassBoostValue: TextView
+    private lateinit var spinnerBassFreq: Spinner
+    private lateinit var seekBarBassBoost: SeekBar
+
+    // ATS2835P Hardware Emulation Controls
+    private lateinit var switchEmu: SwitchCompat
+    private lateinit var tvEmuStatus: TextView
+    private lateinit var tvEmuAmountValue: TextView
+    private lateinit var seekBarEmuAmount: SeekBar
+    private lateinit var switchBtAutoBypass: SwitchCompat
+    private lateinit var tvBtBypassStatus: TextView
+
+    // 32-Band EQ container & faders
+    private lateinit var llEqBandsContainer: LinearLayout
+    private lateinit var btnResetEq: Button
     private val bandSeekBars = ArrayList<SeekBar>()
     private val bandValueLabels = ArrayList<TextView>()
-    private val mdrcSeekBars = ArrayList<SeekBar>()
-    private val mdrcValueLabels = ArrayList<TextView>()
 
-    private var isUpdatingUiFromPreset = false
-    private var currentThemeColor: Int = 0xFF00E5FF.toInt()
+    // 60ms Debounce Handler & Runnables
+    private val debounceHandler = Handler(Looper.getMainLooper())
+    private val bandDebounceRunnables = arrayOfNulls<Runnable>(EqualizerProcessor.BAND_COUNT)
+    private var preampDebounceRunnable: Runnable? = null
+    private var bassDebounceRunnable: Runnable? = null
+    private var emuDebounceRunnable: Runnable? = null
 
-    private fun isLiveEngineObject(): Boolean {
-        val e = PlaybackService.instance?.atsEngine?: return false
-        return (e.equalizer === equalizerProcessor) && (e.bassBoost === bassBoostProcessor) && (e.mdrc === mdrcProcessor)
-    }
-
-    private fun applyEqDebounced() {
-        eqRunnable?.let { eqHandler.removeCallbacks(it) }
-        eqRunnable = Runnable {
-            PlaybackService.instance?.atsEngine?.updateEqualizer()
-            syncAllEffects()
-        }
-        eqHandler.postDelayed(eqRunnable!!, 80)
-    }
-
-    private fun applyMdrcDebounced() {
-        mdrcRunnable?.let { mdrcHandler.removeCallbacks(it) }
-        mdrcRunnable = Runnable {
-            PlaybackService.instance?.atsEngine?.updateMDRC()
-            syncAllEffects()
-        }
-        mdrcHandler.postDelayed(mdrcRunnable!!, 80)
-    }
-
-    private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
-        if (uri!= null) {
-            val currentPresetName = spinnerPresets.selectedItem?.toString()?: "SjbZ_Preset"
-            val preset = equalizerProcessor.toEqPreset(
-                name = currentPresetName,
-                isCustom = true,
-                mdrcSettings = mdrcProcessor.toMDRCSettings(),
-                color = currentThemeColor
-            )
-            val success = presetManager.exportPresetToSjbz(preset, uri)
-            Toast.makeText(this, if (success) "Exportado a.sjbz con éxito" else "Error al exportar", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private val importSjbzLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri!= null) {
-            val imported = presetManager.importPresetFromSjbz(uri)
-            if (imported!= null) {
-                Toast.makeText(this, "Preset '${imported.name}' importado", Toast.LENGTH_SHORT).show()
-                refreshPresetsSpinner(imported.name)
-                loadPresetToUi(imported)
-            } else {
-                Toast.makeText(this, "Error al importar archivo.sjbz", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
+    private var isUpdatingUiFromCode = false
+    private val cyanColor = Color.parseColor("#00E5FF")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_eq)
 
+        prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         presetManager = PresetManager(this)
 
-        val liveEngine = PlaybackService.instance?.atsEngine
-        equalizerProcessor = liveEngine?.equalizer?: EqualizerProcessor()
-        mdrcProcessor = liveEngine?.mdrc?: MDRCProcessor()
-        bassBoostProcessor = liveEngine?.bassBoost?: BassBoostProcessor()
-        // PATCH: solo linkea si son objetos detached. Si es liveEngine, el link ya existe
-        // en ATS2835PEngine.init vía linkBassBoost y re-asignarlo pisaría el chain.
-        if (liveEngine == null) {
-            equalizerProcessor.bassBoostProcessor = bassBoostProcessor
-        }
+        // Acquire DSP processor reference from running PlaybackService or fallback
+        dspProcessor = PlaybackService.instance?.getDsp() ?: SjbzDspProcessor()
 
-        initViews()
+        bindViews()
         setupToolbar()
-        setupGlobalSystemEq()
-        setup32BandSliders()
-        setupPreampAndControls()
-        setupBassBoostControls()
-        setupMdrcGainControls()
-        setupPresetsSpinner()
-        setupButtons()
+        setupSpectrumVisualizer()
+        setupGenreRecognition()
+        setupMasterControls()
+        setupEmuControls()
+        setupPresetControls()
+        build32BandSliders()
 
-        spectrumView = findViewById(R.id.spectrumView)
-        setupVisualizer()
-        // PATCH: idle solo si no hay FFT en 500ms, no cada 60ms pisando el espectro
-        spectrumHandler.postDelayed(spectrumRunnable, 500)
-
-        val activeName = presetManager.getActivePresetName()
-        val activePreset = presetManager.getAllPresets().find { it.name.equals(activeName, ignoreCase = true) }
-          ?: presetManager.getFactoryPresets().first()
-        loadPresetToUi(activePreset)
+        // Restore all parameters from sjbz_dsp_pro
+        restoreAllDspParameters()
     }
 
-    private fun setupVisualizer() {
-        try {
-            visualizer?.release()
-            val sessionId = PlaybackService.instance?.atsEngine?.audioSessionId
-              ?: PlaybackService.instance?.player?.audioSessionId?: 0
-            if (sessionId == 0) return
-            visualizer = Visualizer(sessionId).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[1]
-                setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(v: Visualizer?, wave: ByteArray?, rate: Int) {}
-                    override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, rate: Int) {
-                        if (fft == null) return
-                        val mags = FloatArray(fft.size / 2)
-                        for (i in mags.indices) {
-                            val r = fft[i*2].toInt()
-                            val im = fft[i*2+1].toInt()
-                            var mag = kotlin.math.sqrt((r*r + im*im).toFloat()) / 128f
-                            mags[i] = mag.coerceIn(0f, 1f)
-                        }
-                        runOnUiThread {
-                            // PATCH: cancela el idle pendiente porque hay señal real
-                            spectrumHandler.removeCallbacks(spectrumRunnable)
-                            spectrumIdleActive = false
-                            spectrumView.updateSpectrum(mags)
-                            // reprograma idle a 500ms sin señal
-                            spectrumHandler.postDelayed(spectrumRunnable, 500)
-                        }
-                    }
-                }, Visualizer.getMaxCaptureRate() / 2, false, true)
-                enabled = true
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
+    private fun bindViews() {
+        toolbar = findViewById(R.id.eqToolbar)
+        switchMasterDsp = findViewById(R.id.switchMasterDsp)
+        visualizerView = findViewById(R.id.visualizerView)
+        tvRecognizedGenre = findViewById(R.id.tvRecognizedGenre)
+        tvGenreTrackInfo = findViewById(R.id.tvGenreTrackInfo)
+        btnAutoEqGenre = findViewById(R.id.btnAutoEqGenre)
 
-    override fun onResume() {
-        super.onResume()
-        try { visualizer?.enabled = true } catch(_: Exception){}
-    }
+        btnPresetFlat = findViewById(R.id.btnPresetFlat)
+        btnPresetBass = findViewById(R.id.btnPresetBass)
+        btnPresetRock = findViewById(R.id.btnPresetRock)
+        btnPresetVocal = findViewById(R.id.btnPresetVocal)
+        spinnerPresets = findViewById(R.id.spinnerPresets)
+        btnSavePreset = findViewById(R.id.btnSavePreset)
+        btnExportPreset = findViewById(R.id.btnExportPreset)
 
-    override fun onPause() {
-        super.onPause()
-        try { visualizer?.enabled = false } catch(_: Exception){}
+        tvPreampValue = findViewById(R.id.tvPreampValue)
+        seekBarPreamp = findViewById(R.id.seekBarPreamp)
+        switchBassBoost = findViewById(R.id.switchBassBoost)
+        tvBassBoostValue = findViewById(R.id.tvBassBoostValue)
+        spinnerBassFreq = findViewById(R.id.spinnerBassFreq)
+        seekBarBassBoost = findViewById(R.id.seekBarBassBoost)
+
+        switchEmu = findViewById(R.id.switchEmu)
+        tvEmuStatus = findViewById(R.id.tvEmuStatus)
+        tvEmuAmountValue = findViewById(R.id.tvEmuAmountValue)
+        seekBarEmuAmount = findViewById(R.id.seekBarEmuAmount)
+        switchBtAutoBypass = findViewById(R.id.switchBtAutoBypass)
+        tvBtBypassStatus = findViewById(R.id.tvBtBypassStatus)
+
+        llEqBandsContainer = findViewById(R.id.llEqBandsContainer)
+        btnResetEq = findViewById(R.id.btnResetEq)
     }
 
     private fun setupToolbar() {
-        val toolbar: Toolbar = findViewById(R.id.eqToolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
+        supportActionBar?.setDisplayShowTitleEnabled(false)
+
+        switchMasterDsp.setOnCheckedChangeListener { _, isChecked ->
+            dspProcessor?.masterEnabled = isChecked
+            prefs.edit().putBoolean("master_enabled", isChecked).apply()
+            updateControlsAlpha(isChecked)
+        }
     }
 
-    private fun initViews() {
-        switchEqEnabled = findViewById(R.id.switchEqEnabled)
-        switchMdrcEnabled = findViewById(R.id.switchMdrcEnabled)
-        switchGlobalSystemEq = findViewById(R.id.switchGlobalSystemEq)
-        tvActiveSessionsStatus = findViewById(R.id.tvActiveSessionsStatus)
-        btnGlobalHelp = findViewById(R.id.btnGlobalHelp)
-        globalSessionManager = GlobalAudioSessionManager.getInstance(this)
+    private fun setupSpectrumVisualizer() {
+        // Connect real-time 60fps mono 2048 FFT listener
+        dspProcessor?.fftListener = { samples ->
+            visualizerView.onAudioData(samples)
+        }
+    }
 
-        spinnerPresets = findViewById(R.id.spinnerPresets)
-        seekBarPreamp = findViewById(R.id.seekBarPreamp)
-        tvPreampValue = findViewById(R.id.tvPreampValue)
-        seekBarSpeed = findViewById(R.id.seekBarSpeed)
-        tvSpeedValue = findViewById(R.id.tvSpeedValue)
-        seekBarCrossfade = findViewById(R.id.seekBarCrossfade)
-        tvCrossfadeValue = findViewById(R.id.tvCrossfadeValue)
-        container32Bands = findViewById(R.id.container32Bands)
+    private fun setupGenreRecognition() {
+        val currentTrack = PlaybackService.instance?.getCurrentTrack()
+        val genre = currentTrack?.genre ?: "Studio"
+        val title = currentTrack?.title ?: "Reproducción activa"
 
-        switchBassBoostEnabled = findViewById(R.id.switchBassBoostEnabled)
-        seekBarBassBoost = findViewById(R.id.seekBarBassBoost)
-        tvBassBoostValue = findViewById(R.id.tvBassBoostValue)
-        btnBassFreq60 = findViewById(R.id.btnBassFreq60)
-        btnBassFreq85 = findViewById(R.id.btnBassFreq85)
-        btnBassFreq120 = findViewById(R.id.btnBassFreq120)
-        btnBassQuickOff = findViewById(R.id.btnBassQuickOff)
-        btnBassQuick3dB = findViewById(R.id.btnBassQuick3dB)
-        btnBassQuick6dB = findViewById(R.id.btnBassQuick6dB)
-        btnBassQuick9dB = findViewById(R.id.btnBassQuick9dB)
-        btnBassQuick12dB = findViewById(R.id.btnBassQuick12dB)
+        tvRecognizedGenre.text = genre
+        tvGenreTrackInfo.text = "$title • Adaptación DSP disponible"
 
-        sbMdrcGainSub = findViewById(R.id.sbMdrcGainSub)
-        tvMdrcGainSub = findViewById(R.id.tvMdrcGainSub)
-        sbMdrcGainLow = findViewById(R.id.sbMdrcGainLow)
-        tvMdrcGainLow = findViewById(R.id.tvMdrcGainLow)
-        sbMdrcGainMid = findViewById(R.id.sbMdrcGainMid)
-        tvMdrcGainMid = findViewById(R.id.tvMdrcGainMid)
-        sbMdrcGainHigh = findViewById(R.id.sbMdrcGainHigh)
-        tvMdrcGainHigh = findViewById(R.id.tvMdrcGainHigh)
-        sbMdrcGainAir = findViewById(R.id.sbMdrcGainAir)
-        tvMdrcGainAir = findViewById(R.id.tvMdrcGainAir)
+        btnAutoEqGenre.setOnClickListener {
+            applyGenrePreset(genre)
+            Toast.makeText(this, "EQ adaptado al género: $genre", Toast.LENGTH_SHORT).show()
+        }
+    }
 
-        btnSavePreset = findViewById(R.id.btnSavePreset)
-        btnDeletePreset = findViewById(R.id.btnDeletePreset)
-        btnExportSjbz = findViewById(R.id.btnExportSjbz)
-        btnImportSjbz = findViewById(R.id.btnImportSjbz)
+    private fun setupMasterControls() {
+        // 1. Preamp Slider (-12 dB to +12 dB, 120 is 0 dB)
+        seekBarPreamp.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                val db = (progress - 120) / 10.0f
+                tvPreampValue.text = String.format("%+.1f dB", db)
 
-        switchEqEnabled.isChecked = equalizerProcessor.isEnabled
-        switchEqEnabled.setOnCheckedChangeListener { _, isChecked ->
-            equalizerProcessor.isEnabled = isChecked
-            // PATCH: updateEqualizer ya lo dispara el callback si es liveEngine,
-            // pero se mantiene llamada directa para objetos detached
-            if (!isLiveEngineObject()) {
-                PlaybackService.instance?.atsEngine?.updateEqualizer()
-            } else {
-                // en liveEngine el setter no dispara solo; llamada única
-                PlaybackService.instance?.atsEngine?.updateEqualizer()
+                if (fromUser && !isUpdatingUiFromCode) {
+                    preampDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
+                    val r = Runnable {
+                        dspProcessor?.setPreamp(db)
+                        prefs.edit().putFloat("preamp_db", db).apply()
+                    }
+                    preampDebounceRunnable = r
+                    debounceHandler.postDelayed(r, DEBOUNCE_MS)
+                }
             }
-            syncAllEffects()
-            updateSlidersEnabled(isChecked)
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        // 2. Bass Boost Frequency Spinner (60 Hz, 85 Hz, 120 Hz)
+        val freqOptions = arrayOf("60 Hz (Sub Bass)", "85 Hz (Punch Bass)", "120 Hz (Mid Bass)")
+        val freqAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, freqOptions).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
-    }
+        spinnerBassFreq.adapter = freqAdapter
 
-    private fun updateSlidersEnabled(enabled: Boolean) {
-        seekBarPreamp.isEnabled = enabled
-        for (sb in bandSeekBars) {
-            sb.isEnabled = enabled
-        }
-    }
-
-    private fun setupGlobalSystemEq() {
-        switchGlobalSystemEq.isChecked = globalSessionManager.isGlobalModeEnabled
-        updateGlobalSessionsUi()
-
-        switchGlobalSystemEq.setOnCheckedChangeListener { _, isChecked ->
-            globalSessionManager.enableGlobalMode(isChecked, this)
-            syncAllEffects()
-            updateGlobalSessionsUi()
-            val msg = if (isChecked) {
-                "Modo Global Activado: Ecualizando audio de Android y apps externas"
-            } else {
-                "Modo Global Desactivado: Solo reproductor local SjbZ Studio"
+        spinnerBassFreq.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (isUpdatingUiFromCode) return
+                val freq = when (position) {
+                    0 -> 60.0f
+                    1 -> 85.0f
+                    else -> 120.0f
+                }
+                val enabled = switchBassBoost.isChecked
+                val gain = seekBarBassBoost.progress / 10.0f
+                dspProcessor?.setBassBoost(enabled, freq, gain)
+                prefs.edit().putFloat("bass_freq", freq).apply()
             }
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        globalSessionManager.onSessionsChangedListener = {
-            updateGlobalSessionsUi()
+        // 3. Bass Boost Enable Switch
+        switchBassBoost.setOnCheckedChangeListener { _, isChecked ->
+            val freq = getSelectedBassFreq()
+            val gain = seekBarBassBoost.progress / 10.0f
+            dspProcessor?.setBassBoost(isChecked, freq, gain)
+            prefs.edit().putBoolean("bass_enabled", isChecked).apply()
+            seekBarBassBoost.isEnabled = isChecked
+            spinnerBassFreq.isEnabled = isChecked
         }
 
-        btnGlobalHelp.setOnClickListener {
-            showGlobalHelpDialog()
-        }
-    }
+        // 4. Bass Boost Gain Slider (0 to 12 dB, 120 is 12 dB)
+        seekBarBassBoost.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                val db = progress / 10.0f
+                tvBassBoostValue.text = String.format("+%.1f dB", db)
 
-    private fun updateGlobalSessionsUi() {
-        if (!globalSessionManager.isGlobalModeEnabled) {
-            tvActiveSessionsStatus.text = "Estado: Modo local SjbZ Studio (Desactivado para apps externas)"
-            tvActiveSessionsStatus.setTextColor(Color.parseColor("#A0A0A0"))
-            return
-        }
-
-        val sessions = globalSessionManager.getActiveSessionsSummary()
-        val text = buildString {
-            append("● Modo Global ACTIVO (DSP ATS2835P para el Sistema)\n")
-            if (sessions.isEmpty()) {
-                append("Esperando reproducción de audio...")
-            } else {
-                sessions.forEach { append(it).append("\n") }
+                if (fromUser && !isUpdatingUiFromCode) {
+                    bassDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
+                    val r = Runnable {
+                        val enabled = switchBassBoost.isChecked
+                        val freq = getSelectedBassFreq()
+                        dspProcessor?.setBassBoost(enabled, freq, db)
+                        prefs.edit().putFloat("bass_gain", db).apply()
+                    }
+                    bassDebounceRunnable = r
+                    debounceHandler.postDelayed(r, DEBOUNCE_MS)
+                }
             }
-        }.trimEnd()
-        tvActiveSessionsStatus.text = text
-        tvActiveSessionsStatus.setTextColor(Color.parseColor("#00E676"))
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        // Reset EQ Button (0 dB on all 32 bands)
+        btnResetEq.setOnClickListener {
+            resetAllBandsToZero()
+        }
     }
 
-    private fun syncAllEffects() {
-        // PATCH: no crear LimiterProcessor fantasma si no hay engine.
-        // Antes se sincronizaba un limiter default que no representaba nada.
-        val engine = PlaybackService.instance?.atsEngine?: return
-        globalSessionManager.syncAudioEffects(equalizerProcessor, mdrcProcessor, engine.limiter, bassBoostProcessor)
+    private fun setupEmuControls() {
+        switchEmu.setOnCheckedChangeListener { _, isChecked ->
+            dspProcessor?.setEmulationEnabled(isChecked)
+            prefs.edit().putBoolean("emu_enabled", isChecked).apply()
+            val masterActive = dspProcessor?.masterEnabled != false
+            seekBarEmuAmount.isEnabled = isChecked && masterActive
+            updateEmuStatus()
+        }
+
+        seekBarEmuAmount.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                val amount = progress / 100.0f
+                tvEmuAmountValue.text = "$progress%"
+
+                if (fromUser && !isUpdatingUiFromCode) {
+                    emuDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
+                    val r = Runnable {
+                        dspProcessor?.setEmulationAmount(amount)
+                        prefs.edit().putFloat("emu_amount", amount).apply()
+                    }
+                    emuDebounceRunnable = r
+                    debounceHandler.postDelayed(r, DEBOUNCE_MS)
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        switchBtAutoBypass.setOnCheckedChangeListener { _, isChecked ->
+            dspProcessor?.setBluetoothAutoBypass(isChecked)
+            prefs.edit().putBoolean("bt_auto_bypass", isChecked).apply()
+            updateEmuStatus()
+        }
     }
 
-    private fun showGlobalHelpDialog() {
-        AlertDialog.Builder(this)
-          .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
-          .setMessage(
-                "¿Cómo funciona en Android?\n\n" +
-                "1. Spotify, Deezer, Tidal, Apple Music, VLC, Poweramp:\n" +
-                "Estas apps transmiten su sesión de audio al sistema. SjbZ Studio la intercepta automáticamente y le aplica la curva de 32 bandas ISO, MDRC y limitador ATS2835P.\n\n" +
-                "2. YouTube, Chrome, TikTok, Juegos:\n" +
-                "Al activar el interruptor, SjbZ Studio se enlaza al Mezclador Global #0 de Android para procesar el audio del sistema.\n\n" +
-                "3. Detección Avanzada (Opcional vía ADB):\n" +
-                "Para apps que intenten bloquear la sesión, puedes otorgar el permiso DUMP conectando el móvil a una PC y ejecutando:\n\n" +
-                "adb shell pm grant com.sjbz.player android.permission.DUMP"
-            )
-          .setPositiveButton("Entendido", null)
-          .show()
+    private fun updateEmuStatus() {
+        val dsp = dspProcessor ?: return
+        val isBt = dsp.isBluetoothConnected()
+        val isAutoBypass = dsp.isBluetoothAutoBypass()
+        val isEnabled = dsp.isEmulationEnabled()
+
+        if (isBt && isAutoBypass) {
+            tvEmuStatus.text = "Auto-Bypass activo (Dispositivo Bluetooth detectado)"
+            tvEmuStatus.setTextColor(Color.parseColor("#F59E0B"))
+            tvBtBypassStatus.text = "Bluetooth A2DP conectado: Emu omitido para evitar doble procesado"
+        } else if (isEnabled) {
+            tvEmuStatus.text = "Activo (4 Biquads + Limiter -6dB + Wet/Dry Mix)"
+            tvEmuStatus.setTextColor(cyanColor)
+            tvBtBypassStatus.text = if (isBt) "Bluetooth conectado (Bypass desactivado)" else "Listo para auto-bypass al conectar BT"
+        } else {
+            tvEmuStatus.text = "Desactivado (Bypass manual)"
+            tvEmuStatus.setTextColor(Color.parseColor("#94A3B8"))
+            tvBtBypassStatus.text = "Evita doble procesado al conectar auriculares BT"
+        }
     }
 
-    private fun setup32BandSliders() {
-        container32Bands.removeAllViews()
+    private fun getSelectedBassFreq(): Float {
+        return when (spinnerBassFreq.selectedItemPosition) {
+            0 -> 60.0f
+            1 -> 85.0f
+            else -> 120.0f
+        }
+    }
+
+    private fun setupPresetControls() {
+        btnPresetFlat.setOnClickListener { applyPresetByName("Flat") }
+        btnPresetBass.setOnClickListener { applyPresetByName("Bass") }
+        btnPresetRock.setOnClickListener { applyPresetByName("Rock") }
+        btnPresetVocal.setOnClickListener { applyPresetByName("Vocal") }
+
+        refreshPresetSpinner()
+
+        spinnerPresets.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (isUpdatingUiFromCode) return
+                val allPresets = presetManager.getAllPresets()
+                if (position in allPresets.indices) {
+                    loadPresetIntoUi(allPresets[position])
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        btnSavePreset.setOnClickListener {
+            saveCurrentAsCustomPreset()
+        }
+
+        btnExportPreset.setOnClickListener {
+            Toast.makeText(this, "Presets guardados en memoria sjbz_dsp_pro", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun refreshPresetSpinner() {
+        val names = presetManager.getAllPresets().map { it.name }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, names).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        spinnerPresets.adapter = adapter
+    }
+
+    /**
+     * Builds 32 vertical sliders in HorizontalScrollView for the 32 ISO center frequencies.
+     * Implements 60ms debounce for high-performance zero-lag updates.
+     */
+    private fun build32BandSliders() {
+        llEqBandsContainer.removeAllViews()
         bandSeekBars.clear()
         bandValueLabels.clear()
 
         val bandCount = EqualizerProcessor.BAND_COUNT
         val labels = EqualizerProcessor.BAND_LABELS
+        val density = resources.displayMetrics.density
 
         for (i in 0 until bandCount) {
             val bandCol = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
-                    (resources.displayMetrics.density * 54).toInt(),
+                    (density * 52).toInt(),
                     LinearLayout.LayoutParams.MATCH_PARENT
                 )
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(4, 8, 4, 8)
+                setPadding(2, 6, 2, 6)
             }
 
+            // Top: Gain value label (+3.5 dB, 0.0 dB, etc.)
             val tvGain = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
                 text = "0.0"
-                textSize = 10f
-                setTextColor(currentThemeColor)
+                textSize = 9.5f
+                setTextColor(cyanColor)
                 gravity = Gravity.CENTER
             }
             bandCol.addView(tvGain)
             bandValueLabels.add(tvGain)
 
+            // Middle: Vertical fader container with rotated SeekBar
             val faderContainer = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -443,19 +423,18 @@ class EqActivity : AppCompatActivity() {
 
             val seekBar = SeekBar(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
-                    (resources.displayMetrics.density * 160).toInt(),
-                    (resources.displayMetrics.density * 36).toInt()
+                    (density * 150).toInt(),
+                    (density * 34).toInt()
                 )
                 rotation = 270f
-                max = 240
-                val currentG = equalizerProcessor.getBandGain(i)
-                progress = (currentG * 10.0f + 120).toInt().coerceIn(0, 240)
-                progressTintList = ColorStateList.valueOf(currentThemeColor)
-                thumbTintList = ColorStateList.valueOf(currentThemeColor)
+                max = 240 // -12.0 dB to +12.0 dB (120 is 0 dB)
+                progress = 120
+                progressTintList = ColorStateList.valueOf(cyanColor)
+                thumbTintList = ColorStateList.valueOf(cyanColor)
             }
-            tvGain.text = String.format("%+.1f", equalizerProcessor.getBandGain(i))
 
             val bandIndex = i
+            // Disallow parent HorizontalScrollView intercepting touch while sliding vertical fader
             seekBar.setOnTouchListener { v, event ->
                 when (event.action) {
                     MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
@@ -472,26 +451,26 @@ class EqActivity : AppCompatActivity() {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     val gainDb = (progress - 120) / 10.0f
                     tvGain.text = String.format("%+.1f", gainDb)
-                    if (fromUser &&!isUpdatingUiFromPreset) {
-                        equalizerProcessor.setBandGain(bandIndex, gainDb)
-                        // PATCH: debounce 80ms, antes era apply directo por tick -> HAL spam
-                        applyEqDebounced()
+
+                    if (fromUser && !isUpdatingUiFromCode) {
+                        bandDebounceRunnables[bandIndex]?.let { debounceHandler.removeCallbacks(it) }
+                        val r = Runnable {
+                            dspProcessor?.setBandGain(bandIndex, gainDb)
+                            prefs.edit().putFloat("band_gain_$bandIndex", gainDb).apply()
+                        }
+                        bandDebounceRunnables[bandIndex] = r
+                        debounceHandler.postDelayed(r, DEBOUNCE_MS)
                     }
                 }
                 override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {
-                    // flush inmediato al soltar
-                    eqRunnable?.let {
-                        eqHandler.removeCallbacks(it)
-                        it.run()
-                    }
-                }
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
             })
 
             faderContainer.addView(seekBar)
             bandCol.addView(faderContainer)
             bandSeekBars.add(seekBar)
 
+            // Bottom: Frequency Label (e.g. "20", "31", "1k", "20k")
             val tvFreq = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -499,504 +478,222 @@ class EqActivity : AppCompatActivity() {
                 )
                 text = labels[i]
                 textSize = 9.5f
-                setTextColor(Color.parseColor("#CCCCCC"))
+                setTextColor(Color.parseColor("#94A3B8"))
                 gravity = Gravity.CENTER
             }
             bandCol.addView(tvFreq)
 
-            container32Bands.addView(bandCol)
+            llEqBandsContainer.addView(bandCol)
         }
     }
 
-    private fun setupPreampAndControls() {
-        seekBarPreamp.progress = (equalizerProcessor.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
-        tvPreampValue.text = String.format("%+.1f dB", equalizerProcessor.preampDb)
-
-        seekBarPreamp.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val db = (progress - 120) / 10.0f
-                tvPreampValue.text = String.format("%+.1f dB", db)
-                if (fromUser &&!isUpdatingUiFromPreset) {
-                    equalizerProcessor.preampDb = db
-                    applyEqDebounced()
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {
-                eqRunnable?.let {
-                    eqHandler.removeCallbacks(it)
-                    it.run()
-                }
-            }
-        })
-
-        seekBarSpeed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val factor = 0.5f + (progress / 100.0f)
-                tvSpeedValue.text = String.format("%.2fx", factor)
-                if (fromUser) {
-                    PlaybackService.instance?.setPlaybackSpeed(factor)
-                    PlaybackService.instance?.audioChain?.setPlaybackParameters(factor, factor)
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
-        })
-
-        seekBarCrossfade.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                tvCrossfadeValue.text = "${progress}s"
-                if (fromUser) {
-                    PlaybackService.instance?.atsEngine?.crossfadeSeconds = progress
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
-        })
-    }
-
-    private fun setupBassBoostControls() {
-        switchBassBoostEnabled.isChecked = bassBoostProcessor.isEnabled
-        seekBarBassBoost.isEnabled = bassBoostProcessor.isEnabled
-        seekBarBassBoost.progress = bassBoostProcessor.strength.toInt()
-        updateBassBoostLabel()
-        updateBassFreqButtons(bassBoostProcessor.centerFrequencyHz)
-
-        switchBassBoostEnabled.setOnCheckedChangeListener { _, isChecked ->
-            // PATCH: un solo set. Antes se seteaba bassBoostProcessor.isEnabled
-            // y además PlaybackService.instance?.atsEngine?.bassBoost?.isEnabled,
-            // que cuando es liveEngine es el MISMO objeto -> doble callback.
-            // Como bassBoostProcessor ya es el del engine en modo live, basta uno.
-            if (bassBoostProcessor.isEnabled!= isChecked) {
-                bassBoostProcessor.isEnabled = isChecked
-            }
-            seekBarBassBoost.isEnabled = isChecked
-            updateBassBoostLabel()
-            // updateBassBoost ya hace limiter+eq internamente, no hace falta updateEqualizer extra
-            PlaybackService.instance?.atsEngine?.updateBassBoost()
-            syncAllEffects()
-        }
-
-        seekBarBassBoost.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser &&!isUpdatingUiFromPreset) {
-                    // PATCH: un solo set, sin duplicar al engine
-                    bassBoostProcessor.strength = progress.toShort()
-                    updateBassBoostLabel()
-                    // PATCH debounce 90ms: evita clipseo por reaplicar DSP en cada tick
-                    bassBoostRunnable?.let { bassBoostHandler.removeCallbacks(it) }
-                    bassBoostRunnable = Runnable {
-                        // updateBassBoost ya incluye applyEqualizer, no llamar dos veces
-                        PlaybackService.instance?.atsEngine?.updateBassBoost()
-                        syncAllEffects()
-                    }
-                    bassBoostHandler.postDelayed(bassBoostRunnable!!, 90)
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {
-                bassBoostRunnable?.let {
-                    bassBoostHandler.removeCallbacks(it)
-                    it.run()
-                }
-            }
-        })
-
-        fun selectFrequency(freq: Int) {
-            // PATCH: un solo set, el callback linkeado dispara updateBassBoost
-            bassBoostProcessor.centerFrequencyHz = freq
-            PlaybackService.instance?.atsEngine?.updateBassBoost()
-            syncAllEffects()
-            updateBassFreqButtons(freq)
-        }
-
-        btnBassFreq60.setOnClickListener { selectFrequency(60) }
-        btnBassFreq85.setOnClickListener { selectFrequency(85) }
-        btnBassFreq120.setOnClickListener { selectFrequency(120) }
-
-        fun applyQuickBass(db: Float, enabled: Boolean = true) {
-            // cancela debounce pendiente antes de salto brusco
-            bassBoostRunnable?.let { bassBoostHandler.removeCallbacks(it) }
-            // PATCH: evita loop del checked listener seteando con guard
-            if (switchBassBoostEnabled.isChecked!= enabled) {
-                switchBassBoostEnabled.isChecked = enabled
-            } else {
-                // si no cambió, aplica directo porque el listener no disparó
-                if (bassBoostProcessor.isEnabled!= enabled) bassBoostProcessor.isEnabled = enabled
-                seekBarBassBoost.isEnabled = enabled
-                updateBassBoostLabel()
-                PlaybackService.instance?.atsEngine?.updateBassBoost()
-                syncAllEffects()
-                return
-            }
-            // el listener del switch ya hizo el resto; solo falta strength
-            bassBoostProcessor.setStrengthDb(db)
-            // PATCH: no duplicar set al engine, es el mismo objeto en live mode
-            seekBarBassBoost.progress = bassBoostProcessor.strength.toInt()
-            updateBassBoostLabel()
-            // el listener ya llamó a updateBassBoost, refrescamos strength con debounce corto
-            bassBoostRunnable = Runnable {
-                PlaybackService.instance?.atsEngine?.updateBassBoost()
-                syncAllEffects()
-            }
-            bassBoostHandler.post(bassBoostRunnable!!)
-        }
-
-        btnBassQuickOff.setOnClickListener { applyQuickBass(0f, false) }
-        btnBassQuick3dB.setOnClickListener { applyQuickBass(3.0f, true) }
-        btnBassQuick6dB.setOnClickListener { applyQuickBass(6.0f, true) }
-        btnBassQuick9dB.setOnClickListener { applyQuickBass(9.0f, true) }
-        btnBassQuick12dB.setOnClickListener { applyQuickBass(12.0f, true) }
-    }
-
-    private fun updateBassFreqButtons(freq: Int) {
-        val activeColor = currentThemeColor
-        val inactiveColor = ContextCompat.getColor(this, R.color.aimp_charcoal)
-        btnBassFreq60.backgroundTintList = ColorStateList.valueOf(if (freq == 60) activeColor else inactiveColor)
-        btnBassFreq85.backgroundTintList = ColorStateList.valueOf(if (freq == 85) activeColor else inactiveColor)
-        btnBassFreq120.backgroundTintList = ColorStateList.valueOf(if (freq == 120) activeColor else inactiveColor)
-        btnBassFreq60.setTextColor(if (freq == 60) Color.BLACK else Color.WHITE)
-        btnBassFreq85.setTextColor(if (freq == 85) Color.BLACK else Color.WHITE)
-        btnBassFreq120.setTextColor(if (freq == 120) Color.BLACK else Color.WHITE)
-    }
-
-    private fun updateBassBoostLabel() {
-        val db = bassBoostProcessor.getStrengthDb()
-        val pct = bassBoostProcessor.getStrengthPercent()
-        tvBassBoostValue.text = if (bassBoostProcessor.isEnabled) {
-            String.format("+%.1f dB (%d%%)", db, pct)
-        } else {
-            "Bypass (0%)"
-        }
-    }
-
-    private fun setupMdrcGainControls() {
-        mdrcSeekBars.clear()
-        mdrcValueLabels.clear()
-
-        mdrcSeekBars.add(sbMdrcGainSub)
-        mdrcSeekBars.add(sbMdrcGainLow)
-        mdrcSeekBars.add(sbMdrcGainMid)
-        mdrcSeekBars.add(sbMdrcGainHigh)
-        mdrcSeekBars.add(sbMdrcGainAir)
-
-        mdrcValueLabels.add(tvMdrcGainSub)
-        mdrcValueLabels.add(tvMdrcGainLow)
-        mdrcValueLabels.add(tvMdrcGainMid)
-        mdrcValueLabels.add(tvMdrcGainHigh)
-        mdrcValueLabels.add(tvMdrcGainAir)
-
-        for (i in 0 until 5) {
-            val sb = mdrcSeekBars[i]
-            val tv = mdrcValueLabels[i]
-            val bandIndex = i
-            val band = mdrcProcessor.getBand(bandIndex)
-            val currentGain = band?.gainDb?: 0.0f
-            sb.progress = (currentGain * 10.0f + 120).toInt().coerceIn(0, 240)
-            tv.text = String.format("%+.1f dB", currentGain)
-
-            sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val gainDb = (progress - 120) / 10.0f
-                    tv.text = String.format("%+.1f dB", gainDb)
-                    if (fromUser &&!isUpdatingUiFromPreset) {
-                        // PATCH: usa setBandGainDb con coerce, antes era set directo sin clamp
-                        mdrcProcessor.setBandGainDb(bandIndex, gainDb)
-                        applyMdrcDebounced()
-                    }
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                    mdrcRunnable?.let {
-                        mdrcHandler.removeCallbacks(it)
-                        it.run()
-                    }
-                }
-            })
-        }
-
-        switchMdrcEnabled.isChecked = mdrcProcessor.isEnabled
-        switchMdrcEnabled.setOnCheckedChangeListener { _, isChecked ->
-            mdrcProcessor.isEnabled = isChecked
-            PlaybackService.instance?.atsEngine?.updateMDRC()
-            syncAllEffects()
-            for (sb in mdrcSeekBars) {
-                sb.isEnabled = isChecked
-            }
-        }
-    }
-
-    private fun setupPresetsSpinner() {
-        refreshPresetsSpinner(presetManager.getActivePresetName())
-
-        spinnerPresets.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                // PATCH: ignora el onItemSelected inicial disparado por setSelection en refresh
-                if (isUpdatingUiFromPreset) return
-                val selectedName = spinnerPresets.selectedItem?.toString()?: return
-                presetManager.setActivePresetName(selectedName)
-                val allPresets = presetManager.getAllPresets()
-                val targetPreset = allPresets.find { it.name.equals(selectedName, ignoreCase = true) }
-                if (targetPreset!= null) {
-                    loadPresetToUi(targetPreset)
-                }
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-    }
-
-    private fun refreshPresetsSpinner(selectPresetName: String? = null) {
-        val allPresets = presetManager.getAllPresets()
-        val names = allPresets.map { it.name }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
-        spinnerPresets.adapter = adapter
-
-        val target = selectPresetName?: presetManager.getActivePresetName()
-        val idx = names.indexOf(target)
-        if (idx >= 0) {
-            // PATCH: marca guard para que el listener no recargue el preset dos veces
-            isUpdatingUiFromPreset = true
-            spinnerPresets.setSelection(idx)
-            isUpdatingUiFromPreset = false
-        }
-    }
-
-    private fun applyPresetColor(color: Int) {
-        currentThemeColor = color
-        val colorList = ColorStateList.valueOf(color)
-
-        seekBarPreamp.progressTintList = colorList
-        seekBarPreamp.thumbTintList = colorList
-        tvPreampValue.setTextColor(color)
-
-        seekBarSpeed.progressTintList = colorList
-        seekBarSpeed.thumbTintList = colorList
-        seekBarCrossfade.progressTintList = colorList
-        seekBarCrossfade.thumbTintList = colorList
-
-        for (sb in bandSeekBars) {
-            sb.progressTintList = colorList
-            sb.thumbTintList = colorList
-        }
-        for (tv in bandValueLabels) {
-            tv.setTextColor(color)
-        }
-
-        for (sb in mdrcSeekBars) {
-            sb.progressTintList = colorList
-            sb.thumbTintList = colorList
-        }
-        for (tv in mdrcValueLabels) {
-            tv.setTextColor(color)
-        }
-
-        seekBarBassBoost.progressTintList = colorList
-        seekBarBassBoost.thumbTintList = colorList
-        tvBassBoostValue.setTextColor(color)
-        switchBassBoostEnabled.thumbTintList = colorList
-
-        btnSavePreset.setTextColor(color)
-        switchEqEnabled.thumbTintList = colorList
-        switchMdrcEnabled.thumbTintList = colorList
-
-        try { spectrumView.setThemeColor(color) } catch(_: Exception){}
-        updateBassFreqButtons(bassBoostProcessor.centerFrequencyHz)
-    }
-
-    private fun loadPresetToUi(preset: EqPreset) {
-        isUpdatingUiFromPreset = true
+    /**
+     * Restores all settings from sjbz_dsp_pro SharedPreferences.
+     */
+    private fun restoreAllDspParameters() {
+        isUpdatingUiFromCode = true
         try {
-            equalizerProcessor.loadFromPreset(preset)
-            applyPresetColor(preset.color)
+            val masterEnabled = prefs.getBoolean("master_enabled", true)
+            switchMasterDsp.isChecked = masterEnabled
+            dspProcessor?.masterEnabled = masterEnabled
+            updateControlsAlpha(masterEnabled)
 
-            val preampProgress = (preset.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
+            val preampDb = prefs.getFloat("preamp_db", 0.0f)
+            val preampProgress = (preampDb * 10f + 120).toInt().coerceIn(0, 240)
             seekBarPreamp.progress = preampProgress
-            tvPreampValue.text = String.format("%+.1f dB", preset.preampDb)
+            tvPreampValue.text = String.format("%+.1f dB", preampDb)
+            dspProcessor?.setPreamp(preampDb)
 
-            val gains = preset.bandGains
-            for (i in 0 until minOf(gains.size, bandSeekBars.size)) {
-                val g = gains[i]
-                val p = (g * 10.0f + 120).toInt().coerceIn(0, 240)
-                bandSeekBars[i].progress = p
-                bandValueLabels[i].text = String.format("%+.1f", g)
+            val bassEnabled = prefs.getBoolean("bass_enabled", true)
+            val bassFreq = prefs.getFloat("bass_freq", 85.0f)
+            val bassGain = prefs.getFloat("bass_gain", 4.0f)
+
+            switchBassBoost.isChecked = bassEnabled
+            val freqPos = when (bassFreq) {
+                60.0f -> 0
+                85.0f -> 1
+                else -> 2
+            }
+            spinnerBassFreq.setSelection(freqPos)
+            val bassProgress = (bassGain * 10f).toInt().coerceIn(0, 120)
+            seekBarBassBoost.progress = bassProgress
+            tvBassBoostValue.text = String.format("+%.1f dB", bassGain)
+            dspProcessor?.setBassBoost(bassEnabled, bassFreq, bassGain)
+
+            for (i in 0 until EqualizerProcessor.BAND_COUNT) {
+                val gainDb = prefs.getFloat("band_gain_$i", 0.0f)
+                val prog = (gainDb * 10f + 120).toInt().coerceIn(0, 240)
+                bandSeekBars.getOrNull(i)?.progress = prog
+                bandValueLabels.getOrNull(i)?.text = String.format("%+.1f", gainDb)
+                dspProcessor?.setBandGain(i, gainDb)
             }
 
-            val mdrcSettings = preset.mdrcSettings
-            mdrcProcessor.loadFromSettings(mdrcSettings)
-            switchMdrcEnabled.isChecked = mdrcSettings.enabled
+            // Restore ATS2835P Emulation Mode settings
+            val emuEnabled = prefs.getBoolean("emu_enabled", true)
+            val emuAmount = prefs.getFloat("emu_amount", 1.0f)
+            val btAutoBypass = prefs.getBoolean("bt_auto_bypass", true)
 
-            for (i in 0 until minOf(5, mdrcSettings.bands.size, mdrcSeekBars.size)) {
-                val bandCfg = mdrcSettings.bands[i]
-                val p = (bandCfg.gainDb * 10.0f + 120).toInt().coerceIn(0, 240)
-                mdrcSeekBars[i].progress = p
-                mdrcValueLabels[i].text = String.format("%+.1f dB", bandCfg.gainDb)
-            }
+            switchEmu.isChecked = emuEnabled
+            val emuProgress = (emuAmount * 100f).toInt().coerceIn(0, 100)
+            seekBarEmuAmount.progress = emuProgress
+            tvEmuAmountValue.text = "$emuProgress%"
+            switchBtAutoBypass.isChecked = btAutoBypass
 
-            // PATCH: sincroniza UI del BassBoost sin hardcodear solo "Bass Boost".
-            // Antes solo ese preset tocaba el bass, el resto lo dejaba con el valor anterior.
-            // Ahora: si el preset trae metadata de bass se aplicaría aquí; como EqPreset
-            // aún no la trae, se conserva el estado actual para no pisarlo.
-            // Se mantiene el caso especial legacy por compatibilidad:
-            if (preset.name.equals("Bass Boost", ignoreCase = true)) {
-                // evita doble callback: set directo con guard
-                bassBoostProcessor.isEnabled = true
-                bassBoostProcessor.setStrengthDb(9.0f)
-            }
-            switchBassBoostEnabled.isChecked = bassBoostProcessor.isEnabled
-            seekBarBassBoost.isEnabled = bassBoostProcessor.isEnabled
-            seekBarBassBoost.progress = bassBoostProcessor.strength.toInt()
-            updateBassBoostLabel()
-            updateBassFreqButtons(bassBoostProcessor.centerFrequencyHz)
-
-            // PATCH: un solo ciclo. updateBassBoost() ya hace limiter+eq.
-            // Antes eran 4 llamadas (eq, mdrc, bb->limiter+eq) + sync.
-            PlaybackService.instance?.atsEngine?.let {
-                it.updateMDRC()
-                it.updateBassBoost()
-            }
-            syncAllEffects()
+            dspProcessor?.setEmulationEnabled(emuEnabled)
+            dspProcessor?.setEmulationAmount(emuAmount)
+            dspProcessor?.setBluetoothAutoBypass(btAutoBypass)
+            updateEmuStatus()
         } finally {
-            isUpdatingUiFromPreset = false
+            isUpdatingUiFromCode = false
         }
     }
 
-    private fun setupButtons() {
-        btnSavePreset.setOnClickListener {
-            showSavePresetDialog()
-        }
-
-        btnSavePreset.setOnLongClickListener {
-            showColorPicker { chosenColor ->
-                applyPresetColor(chosenColor)
-                Toast.makeText(this, "Color de preset actualizado", Toast.LENGTH_SHORT).show()
-            }
-            true
-        }
-
-        btnDeletePreset.setOnClickListener {
-            val selected = spinnerPresets.selectedItem?.toString()?: return@setOnClickListener
-            if (presetManager.defaultPresetNames.contains(selected)) {
-                Toast.makeText(this, "No se pueden borrar presets de fábrica", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            AlertDialog.Builder(this)
-              .setTitle("Borrar Preset")
-              .setMessage("¿Deseas eliminar el preset '$selected'?")
-              .setPositiveButton("Borrar") { _, _ ->
-                    presetManager.deletePreset(selected)
-                    refreshPresetsSpinner("ATS-2835P Master")
-                    Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show()
-                }
-              .setNegativeButton("Cancelar", null)
-              .show()
-        }
-
-        btnExportSjbz.setOnClickListener {
-            val currentPresetName = spinnerPresets.selectedItem?.toString()?: "SjbZ_Preset"
-            exportSjbzLauncher.launch("$currentPresetName.sjbz")
-        }
-
-        btnImportSjbz.setOnClickListener {
-            importSjbzLauncher.launch(arrayOf("*/*"))
+    private fun applyPresetByName(name: String) {
+        val all = presetManager.getAllPresets()
+        val match = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        if (match != null) {
+            loadPresetIntoUi(match)
+        } else {
+            val helper = EqualizerProcessor()
+            helper.applyPreset(name)
+            val preset = helper.toEqPreset(
+                name = name,
+                bassBoostEnabled = (name == "Bass" || name == "Rock"),
+                bassBoostFreq = 85f,
+                bassBoostGain = if (name == "Bass") 8f else 4f
+            )
+            loadPresetIntoUi(preset)
         }
     }
 
-    private fun showColorPicker(onColorSelected: (Int) -> Unit) {
-        val palette = EqPreset.PALETTE
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(36, 24, 36, 24)
-            setBackgroundColor(Color.parseColor("#1E1E1E"))
-        }
+    private fun loadPresetIntoUi(preset: EqPreset) {
+        isUpdatingUiFromCode = true
+        try {
+            // 1. Preamp
+            val pProgress = (preset.preampDb * 10f + 120).toInt().coerceIn(0, 240)
+            seekBarPreamp.progress = pProgress
+            tvPreampValue.text = String.format("%+.1f dB", preset.preampDb)
+            dspProcessor?.setPreamp(preset.preampDb)
 
-        val title = TextView(this).apply {
-            text = "Elige Color para el Preset"
-            setTextColor(Color.WHITE)
-            textSize = 15f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(0, 0, 0, 16)
-            gravity = Gravity.CENTER
-        }
-        container.addView(title)
-
-        var dialog: AlertDialog? = null
-
-        for (row in 0..1) {
-            val rowLayout = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-                setPadding(0, 6, 0, 6)
+            // 2. Bass Boost
+            switchBassBoost.isChecked = preset.bassBoostEnabled
+            val freqPos = when (preset.bassBoostFreq) {
+                60.0f -> 0
+                85.0f -> 1
+                else -> 2
             }
-            for (col in 0..4) {
-                val idx = row * 5 + col
-                val c = palette[idx]
-                val btn = Button(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(
-                        (resources.displayMetrics.density * 52).toInt(),
-                        (resources.displayMetrics.density * 44).toInt()
-                    ).apply {
-                        setMargins(6, 4, 6, 4)
-                    }
-                    backgroundTintList = ColorStateList.valueOf(c)
-                    setOnClickListener {
-                        onColorSelected(c)
-                        dialog?.dismiss()
-                    }
-                }
-                rowLayout.addView(btn)
+            spinnerBassFreq.setSelection(freqPos)
+            seekBarBassBoost.progress = (preset.bassBoostGain * 10f).toInt().coerceIn(0, 120)
+            tvBassBoostValue.text = String.format("+%.1f dB", preset.bassBoostGain)
+            dspProcessor?.setBassBoost(preset.bassBoostEnabled, preset.bassBoostFreq, preset.bassBoostGain)
+
+            // 3. 32 Bands
+            val editor = prefs.edit()
+            editor.putFloat("preamp_db", preset.preampDb)
+            editor.putBoolean("bass_enabled", preset.bassBoostEnabled)
+            editor.putFloat("bass_freq", preset.bassBoostFreq)
+            editor.putFloat("bass_gain", preset.bassBoostGain)
+
+            for (i in 0 until minOf(preset.bandGains.size, bandSeekBars.size)) {
+                val gain = preset.bandGains[i]
+                val prog = (gain * 10f + 120).toInt().coerceIn(0, 240)
+                bandSeekBars[i].progress = prog
+                bandValueLabels[i].text = String.format("%+.1f", gain)
+                dspProcessor?.setBandGain(i, gain)
+                editor.putFloat("band_gain_$i", gain)
             }
-            container.addView(rowLayout)
+            editor.putString("active_preset", preset.name)
+            editor.apply()
+
+            presetManager.setActivePresetName(preset.name)
+        } finally {
+            isUpdatingUiFromCode = false
         }
-
-        dialog = AlertDialog.Builder(this)
-          .setView(container)
-          .setNegativeButton("Cancelar", null)
-          .create()
-
-        dialog.show()
     }
 
-    private fun showSavePresetDialog() {
-        val input = EditText(this).apply {
-            hint = "Nombre del Preset"
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
+    private fun applyGenrePreset(genre: String) {
+        when (genre.lowercase()) {
+            "rock", "metal" -> applyPresetByName("Rock")
+            "electronic", "bass", "hip-hop" -> applyPresetByName("Bass")
+            "vocal", "acoustic" -> applyPresetByName("Vocal")
+            "pop" -> applyPresetByName("Pop")
+            "jazz" -> applyPresetByName("Jazz")
+            "classical" -> applyPresetByName("Classical")
+            else -> applyPresetByName("Studio Master")
         }
+    }
 
-        AlertDialog.Builder(this)
-          .setTitle("Guardar Preset")
-          .setView(input)
-          .setPositiveButton("Guardar") { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    val existing = presetManager.getCustomPresets().find { it.name.equals(name, ignoreCase = true) }
-                    val colorToSave = existing?.color?: currentThemeColor
-                    val currentPreset = equalizerProcessor.toEqPreset(
-                        name = name,
-                        isCustom = true,
-                        mdrcSettings = mdrcProcessor.toMDRCSettings(),
-                        color = colorToSave
-                    )
-                    presetManager.saveCustomPreset(currentPreset)
-                    refreshPresetsSpinner(name)
-                    applyPresetColor(colorToSave)
-                    Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show()
-                }
+    private fun resetAllBandsToZero() {
+        isUpdatingUiFromCode = true
+        try {
+            val editor = prefs.edit()
+            for (i in 0 until bandSeekBars.size) {
+                bandSeekBars[i].progress = 120
+                bandValueLabels[i].text = "0.0"
+                dspProcessor?.setBandGain(i, 0.0f)
+                editor.putFloat("band_gain_$i", 0.0f)
             }
-          .setNegativeButton("Cancelar", null)
-          .show()
+            editor.apply()
+            Toast.makeText(this, "Bandas restablecidas a 0 dB", Toast.LENGTH_SHORT).show()
+        } finally {
+            isUpdatingUiFromCode = false
+        }
+    }
+
+    private fun saveCurrentAsCustomPreset() {
+        val currentGains = ArrayList<Float>()
+        for (i in 0 until bandSeekBars.size) {
+            val g = (bandSeekBars[i].progress - 120) / 10.0f
+            currentGains.add(g)
+        }
+        val preamp = (seekBarPreamp.progress - 120) / 10.0f
+        val bassEnabled = switchBassBoost.isChecked
+        val bassFreq = getSelectedBassFreq()
+        val bassGain = seekBarBassBoost.progress / 10.0f
+
+        val customName = "Custom ${System.currentTimeMillis() % 1000}"
+        val preset = EqPreset(
+            name = customName,
+            preampDb = preamp,
+            bandGains = currentGains,
+            isCustom = true,
+            bassBoostEnabled = bassEnabled,
+            bassBoostFreq = bassFreq,
+            bassBoostGain = bassGain
+        )
+        presetManager.saveCustomPreset(preset)
+        refreshPresetSpinner()
+        Toast.makeText(this, "Preset guardado: $customName", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateControlsAlpha(enabled: Boolean) {
+        val alpha = if (enabled) 1.0f else 0.4f
+        llEqBandsContainer.alpha = alpha
+        seekBarPreamp.isEnabled = enabled
+        seekBarBassBoost.isEnabled = enabled && switchBassBoost.isChecked
+        spinnerBassFreq.isEnabled = enabled && switchBassBoost.isChecked
+        switchEmu.isEnabled = enabled
+        seekBarEmuAmount.isEnabled = enabled && switchEmu.isChecked
+        switchBtAutoBypass.isEnabled = enabled
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateEmuStatus()
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) {
+            finish()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
     }
 
     override fun onDestroy() {
-        bassBoostHandler.removeCallbacksAndMessages(null)
-        eqHandler.removeCallbacksAndMessages(null)
-        mdrcHandler.removeCallbacksAndMessages(null)
-        spectrumHandler.removeCallbacks(spectrumRunnable)
-        spectrumHandler.removeCallbacksAndMessages(null)
-        try { visualizer?.release() } catch(_: Exception){}
-        visualizer = null
+        // Disconnect real-time FFT spectrum listener to avoid leaks
+        dspProcessor?.fftListener = null
+        debounceHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
-        globalSessionManager.onSessionsChangedListener = null
     }
 }

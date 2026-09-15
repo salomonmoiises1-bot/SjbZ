@@ -85,15 +85,15 @@ class PlaybackService : MediaSessionService() {
         bluetoothDetector.start()
 
         val audioAttributes = AudioAttributes.Builder()
-          .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-          .setUsage(C.USAGE_MEDIA)
-          .build()
+         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+         .setUsage(C.USAGE_MEDIA)
+         .build()
 
         player = ExoPlayer.Builder(this)
-          .setAudioAttributes(audioAttributes, true)
-          .setHandleAudioBecomingNoisy(true)
-          .setWakeMode(C.WAKE_MODE_LOCAL)
-          .build()
+         .setAudioAttributes(audioAttributes, true)
+         .setHandleAudioBecomingNoisy(true)
+         .setWakeMode(C.WAKE_MODE_LOCAL)
+         .build()
 
         audioChain.bindPlayer(player)
 
@@ -132,8 +132,8 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         mediaSession = MediaSession.Builder(this, player)
-          .setSessionActivity(sessionActivityPendingIntent)
-          .build()
+         .setSessionActivity(sessionActivityPendingIntent)
+         .build()
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
     }
@@ -181,15 +181,18 @@ class PlaybackService : MediaSessionService() {
         val stopIntent = PendingIntent.getService(this, 4, Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
         return NotificationCompat.Builder(this, CHANNEL_ID)
-          .setContentTitle(title).setContentText(artist)
-          .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
-          .setSmallIcon(R.drawable.ic_launcher_foreground).setContentIntent(openActivityIntent)
-          .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-          .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-          .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
-          .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-          .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
-          .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
+         .setContentTitle(title).setContentText(artist)
+         .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
+         .setSmallIcon(R.drawable.ic_launcher_foreground).setContentIntent(openActivityIntent)
+         .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+         .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+         .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+             .setMediaSession(mediaSession?.sessionCompatToken)
+             .setShowActionsInCompactView(0, 1, 2))
+         .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
+         .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+         .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
+         .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -204,7 +207,14 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
-    override fun onBind(intent: Intent?): IBinder { super.onBind(intent); return binder }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        val action = intent?.action
+        if (action == "androidx.media3.session.MediaSessionService" || action == "android.media.browse.MediaBrowserService") {
+            return super.onBind(intent)
+        }
+        return binder
+    }
 
     fun setPlaylist(tracks: List<Track>, startIndex: Int = 0, startPlaying: Boolean = true) {
         if (tracks.isEmpty()) return

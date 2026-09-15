@@ -15,12 +15,16 @@ class DynamicsProcessingHelper {
         private val PRE_EQ_CANDIDATES = intArrayOf(32, 16, 8)
         private const val MAX_PRE_EQ_GAIN_DB = 12.0f
         private const val MIN_PRE_EQ_GAIN_DB = -12.0f
+        private const val SLEW_MAX_DB_PER_APPLY = 3.0f
     }
 
     private val dpLock = Any()
 
     private var dynamicsProcessing: DynamicsProcessing? = null
     private var legacyEqualizer: Equalizer? = null
+
+    // PATCH anti-clipseo: memoria de ganancias para rampa suave
+    private var lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
 
     @Volatile
     private var currentSessionId: Int = 0
@@ -58,6 +62,8 @@ class DynamicsProcessingHelper {
 
             releaseLocked()
             currentSessionId = audioSessionId
+            // reset rampa al cambiar de sesión
+            lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
 
             if (bassBoostProcessor!= null) {
                 equalizerProcessor.bassBoostProcessor = bassBoostProcessor
@@ -155,8 +161,6 @@ class DynamicsProcessingHelper {
 
         if (dp!= null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
-                // Si el BassBoost nativo está activo a nivel HAL, no sumamos bbGain en software
-                // para evitar doble boost (+24dB) que mutea el HAL.
                 val nativeActive: Boolean = try {
                     effectiveBb?.isNativeActive() == true
                 } catch (_: Throwable) {
@@ -197,14 +201,14 @@ class DynamicsProcessingHelper {
                         eqOnlyGain + bbGain
                     }
 
-                    // Clamp a +/-12dB para evitar soft-mute del HAL por clipping.
                     val totalGain = rawTotal.coerceIn(MIN_PRE_EQ_GAIN_DB, MAX_PRE_EQ_GAIN_DB)
 
-                    // FIX MUTE: el EqBand siempre va enabled=true cuando el DSP está creado.
-                    // El switch de UI se maneja con gain=0 (passthrough), no deshabilitando bandas.
-                    // Deshabilitar bandas individuales (sobre todo las altas cuando solo el BB está
-                    // activo) el HAL lo interpreta como mute en muchos SoC.
-                    val eqBand = DynamicsProcessing.EqBand(true, cutoff, totalGain)
+                    // PATCH anti-clipseo: slew-rate limiter 3dB por aplicación
+                    val prev = lastGains.getOrElse(b) { 0f }
+                    val smoothed = totalGain.coerceIn(prev - SLEW_MAX_DB_PER_APPLY, prev + SLEW_MAX_DB_PER_APPLY)
+                    if (b < lastGains.size) lastGains[b] = smoothed
+
+                    val eqBand = DynamicsProcessing.EqBand(true, cutoff, smoothed)
                     try {
                         dp.setPreEqBandByChannelIndex(0, b, eqBand)
                     } catch (t: Throwable) {
@@ -365,6 +369,8 @@ class DynamicsProcessingHelper {
                 Log.w(TAG, "isEffectivelyActive falló: ${t.message}")
                 false
             }
+            // PATCH: usar postGainDb para compensación automática de headroom
+            val postGain = try { limiterProcessor.postGainDb } catch (_: Throwable) { 0f }
             for (ch in 0..1) {
                 val limiter = DynamicsProcessing.Limiter(
                     active,
@@ -374,7 +380,7 @@ class DynamicsProcessingHelper {
                     limiterProcessor.releaseMs,
                     limiterProcessor.thresholdDb,
                     limiterProcessor.ratio,
-                    0.0f
+                    postGain
                 )
                 try {
                     dp.setLimiterByChannelIndex(ch, limiter)
@@ -411,5 +417,6 @@ class DynamicsProcessingHelper {
         isHardwareDspActive = false
         isLegacyFallbackActive = false
         currentSessionId = 0
+        lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
     }
 }

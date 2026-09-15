@@ -33,10 +33,10 @@ import com.sjbz.aimp.ui.AudioSpectrumVisualizerView
 /**
  * EqActivity PRO - Professional 32-Band ISO Equalizer Studio.
  *
- * - 32 vertical ISO sliders (-12dB.. +12dB) con debounce 60ms
+ * - 32 vertical ISO sliders (-12dB..+12dB) con debounce 60ms
  * - Bass Boost RBJ low-shelf + Preamp + Master DSP
  * - Emulación ATS2835P con Wet/Dry y auto-bypass BT
- * - Spectrum 60fps vía PlaybackService.spectrumListener (no pisa fftListener del DSP)
+ * - Spectrum 60fps vía PlaybackService.spectrumListener (lambda, no pisa fftListener del DSP)
  */
 class EqActivity : AppCompatActivity() {
 
@@ -93,11 +93,9 @@ class EqActivity : AppCompatActivity() {
     private var isUpdatingUiFromCode = false
     private val cyanColor = Color.parseColor("#00E5FF")
 
-    // Spectrum bridge - se registra en PlaybackService, no en dspProcessor directamente
-    private val spectrumBridge = object : SjbzDspProcessor.FftListener {
-        override fun onAudioData(samples: FloatArray) {
-            visualizerView.onAudioData(samples)
-        }
+    // Spectrum bridge como lambda - compatible con SjbzDspProcessor.fftListener: ((FloatArray) -> Unit)?
+    private val spectrumBridge: (FloatArray) -> Unit = { samples ->
+        visualizerView.onAudioData(samples)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,7 +105,6 @@ class EqActivity : AppCompatActivity() {
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         presetManager = PresetManager(this)
 
-        // Referencia obligatoria al servicio. No se crea DSP huérfano.
         playbackService = PlaybackService.instance
         if (playbackService == null) {
             Toast.makeText(this, "Servicio de audio no disponible", Toast.LENGTH_LONG).show()
@@ -128,15 +125,13 @@ class EqActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Registrar bridge de espectro en el servicio (el servicio ya hace fftListener -> spectrumListener)
         playbackService?.setSpectrumListener(spectrumBridge)
         updateEmuStatus()
     }
 
     override fun onPause() {
         super.onPause()
-        // Desregistrar para no leakear la vista
-        if (playbackService?.spectrumListener === spectrumBridge) {
+        if (playbackService?.spectrumListener == spectrumBridge) {
             playbackService?.setSpectrumListener(null)
         }
     }
@@ -202,12 +197,9 @@ class EqActivity : AppCompatActivity() {
         val enabled = switchBassBoost.isChecked
         val freq = getSelectedBassFreq()
         val gain = seekBarBassBoost.progress / 10.0f
-        // API correcta: enabled separado de freq/gain
-        dspProcessor?.setBassBoostEnabled(enabled)
-        dspProcessor?.setBassBoost(freq, gain)
-        // También via servicio para persistencia si se requiere
-        playbackService?.setBassBoostEnabled(enabled)
-        playbackService?.setBassBoost(freq, gain)
+        // API real de SjbzDspProcessor: setBassBoost(enabled, freq, gain)
+        dspProcessor?.setBassBoost(enabled, freq, gain)
+        playbackService?.setBassBoost(enabled, freq, gain)
     }
 
     private fun setupMasterControls() {
@@ -240,8 +232,7 @@ class EqActivity : AppCompatActivity() {
                 val freq = when (position) { 0 -> 60f; 1 -> 85f; else -> 120f }
                 val gain = seekBarBassBoost.progress / 10f
                 val enabled = switchBassBoost.isChecked
-                dspProcessor?.setBassBoost(freq, gain)
-                dspProcessor?.setBassBoostEnabled(enabled)
+                dspProcessor?.setBassBoost(enabled, freq, gain)
                 prefs.edit().putFloat("bass_freq", freq).apply()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -277,7 +268,6 @@ class EqActivity : AppCompatActivity() {
 
     private fun setupEmuControls() {
         switchEmu.setOnCheckedChangeListener { _, isChecked ->
-            // Via servicio para que persista y actualice notificación
             playbackService?.setEmulationEnabled(isChecked)
                ?: dspProcessor?.setEmulationEnabled(isChecked)
             prefs.edit().putBoolean("emu_enabled", isChecked).apply()
@@ -448,8 +438,7 @@ class EqActivity : AppCompatActivity() {
             spinnerBassFreq.setSelection(when(bassFreq){60f->0;85f->1;else->2})
             seekBarBassBoost.progress = (bassGain*10f).toInt().coerceIn(0,120)
             tvBassBoostValue.text = String.format("+%.1f dB", bassGain)
-            dspProcessor?.setBassBoostEnabled(bassEnabled)
-            dspProcessor?.setBassBoost(bassFreq, bassGain)
+            dspProcessor?.setBassBoost(bassEnabled, bassFreq, bassGain)
 
             for (i in 0 until EqualizerProcessor.BAND_COUNT) {
                 val g = prefs.getFloat("band_gain_$i", 0f)
@@ -493,14 +482,26 @@ class EqActivity : AppCompatActivity() {
             spinnerBassFreq.setSelection(when(preset.bassBoostFreq){60f->0;85f->1;else->2})
             seekBarBassBoost.progress = (preset.bassBoostGain*10f).toInt().coerceIn(0,120)
             tvBassBoostValue.text = String.format("+%.1f dB", preset.bassBoostGain)
-            dspProcessor?.setBassBoostEnabled(preset.bassBoostEnabled)
-            dspProcessor?.setBassBoost(preset.bassBoostFreq, preset.bassBoostGain)
+            dspProcessor?.setBassBoost(preset.bassBoostEnabled, preset.bassBoostFreq, preset.bassBoostGain)
+
+            // Persistir estado de emulación del preset v2 si existe
+            dspProcessor?.setEmulationEnabled(preset.emuEnabled)
+            dspProcessor?.setEmulationAmount(preset.emuAmount)
+            dspProcessor?.setBluetoothAutoBypass(preset.btAutoBypass)
+            switchEmu.isChecked = preset.emuEnabled
+            seekBarEmuAmount.progress = (preset.emuAmount*100f).toInt().coerceIn(0,100)
+            tvEmuAmountValue.text = "${(preset.emuAmount*100).toInt()}%"
+            switchBtAutoBypass.isChecked = preset.btAutoBypass
+            updateEmuStatus()
 
             val editor = prefs.edit()
             editor.putFloat("preamp_db", preset.preampDb)
             editor.putBoolean("bass_enabled", preset.bassBoostEnabled)
             editor.putFloat("bass_freq", preset.bassBoostFreq)
             editor.putFloat("bass_gain", preset.bassBoostGain)
+            editor.putBoolean("emu_enabled", preset.emuEnabled)
+            editor.putFloat("emu_amount", preset.emuAmount)
+            editor.putBoolean("bt_auto_bypass", preset.btAutoBypass)
             for (i in 0 until minOf(preset.bandGains.size, bandSeekBars.size)) {
                 val g = preset.bandGains[i]
                 bandSeekBars[i].progress = (g*10f+120).toInt().coerceIn(0,240)
@@ -547,7 +548,10 @@ class EqActivity : AppCompatActivity() {
             preampDb = preamp, bandGains = gains, isCustom = true,
             bassBoostEnabled = switchBassBoost.isChecked,
             bassBoostFreq = getSelectedBassFreq(),
-            bassBoostGain = seekBarBassBoost.progress/10f
+            bassBoostGain = seekBarBassBoost.progress/10f,
+            emuEnabled = switchEmu.isChecked,
+            emuAmount = seekBarEmuAmount.progress / 100f,
+            btAutoBypass = switchBtAutoBypass.isChecked
         )
         presetManager.saveCustomPreset(preset); refreshPresetSpinner()
         Toast.makeText(this, "Preset guardado: ${preset.name}", Toast.LENGTH_SHORT).show()
@@ -570,9 +574,7 @@ class EqActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // No tocar dspProcessor.fftListener: pertenece al servicio.
-        // Solo desregistrar nuestro bridge si sigue activo.
-        if (playbackService?.spectrumListener === spectrumBridge) {
+        if (playbackService?.spectrumListener == spectrumBridge) {
             playbackService?.setSpectrumListener(null)
         }
         debounceHandler.removeCallbacksAndMessages(null)

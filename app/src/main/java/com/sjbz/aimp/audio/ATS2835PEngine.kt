@@ -43,6 +43,11 @@ class ATS2835PEngine(
     var isBluetoothConnected: Boolean = false
         private set
 
+    // PARCHE: para que EqActivity pueda llamar atsEngine.getAudioSessionId()
+    fun getAudioSessionId(): Int {
+        return audioSessionId
+    }
+
     init {
         equalizer.bassBoostProcessor = bassBoost
         bassBoost.onParametersChanged = {

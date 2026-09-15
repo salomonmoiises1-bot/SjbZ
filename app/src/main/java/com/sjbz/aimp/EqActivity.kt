@@ -170,15 +170,15 @@ class EqActivity : AppCompatActivity() {
         // Load active preset initially
         val activeName = presetManager.getActivePresetName()
         val activePreset = presetManager.getAllPresets().find { it.name.equals(activeName, ignoreCase = true) }
-           ?: presetManager.getFactoryPresets().first()
+          ?: presetManager.getFactoryPresets().first()
         loadPresetToUi(activePreset)
     }
 
     private fun setupVisualizer() {
         try {
             visualizer?.release()
-            val sessionId = PlaybackService.instance?.atsEngine?.getAudioSessionId()
-               ?: PlaybackService.instance?.player?.audioSessionId?: 0
+            val sessionId = PlaybackService.instance?.atsEngine?.audioSessionId
+              ?: PlaybackService.instance?.player?.audioSessionId?: 0
             if (sessionId == 0) return
             visualizer = Visualizer(sessionId).apply {
                 captureSize = Visualizer.getCaptureSizeRange()[1]
@@ -339,8 +339,8 @@ class EqActivity : AppCompatActivity() {
 
     private fun showGlobalHelpDialog() {
         AlertDialog.Builder(this)
-           .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
-           .setMessage(
+          .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
+          .setMessage(
                 "¿Cómo funciona en Android?\n\n" +
                 "1. Spotify, Deezer, Tidal, Apple Music, VLC, Poweramp:\n" +
                 "Estas apps transmiten su sesión de audio al sistema. SjbZ Studio la intercepta automáticamente y le aplica la curva de 32 bandas ISO, MDRC y limitador ATS2835P.\n\n" +
@@ -350,8 +350,8 @@ class EqActivity : AppCompatActivity() {
                 "Para apps que intenten bloquear la sesión, puedes otorgar el permiso DUMP conectando el móvil a una PC y ejecutando:\n\n" +
                 "adb shell pm grant com.sjbz.player android.permission.DUMP"
             )
-           .setPositiveButton("Entendido", null)
-           .show()
+          .setPositiveButton("Entendido", null)
+          .show()
     }
 
     /**
@@ -800,15 +800,15 @@ class EqActivity : AppCompatActivity() {
             }
 
             AlertDialog.Builder(this)
-               .setTitle("Borrar Preset")
-               .setMessage("¿Deseas eliminar el preset '$selected'?")
-               .setPositiveButton("Borrar") { _, _ ->
+              .setTitle("Borrar Preset")
+              .setMessage("¿Deseas eliminar el preset '$selected'?")
+              .setPositiveButton("Borrar") { _, _ ->
                     presetManager.deletePreset(selected)
                     refreshPresetsSpinner("ATS-2835P Master")
                     Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show()
                 }
-               .setNegativeButton("Cancelar", null)
-               .show()
+              .setNegativeButton("Cancelar", null)
+              .show()
         }
 
         btnExportSjbz.setOnClickListener {
@@ -870,9 +870,9 @@ class EqActivity : AppCompatActivity() {
         }
 
         dialog = AlertDialog.Builder(this)
-           .setView(container)
-           .setNegativeButton("Cancelar", null)
-           .create()
+          .setView(container)
+          .setNegativeButton("Cancelar", null)
+          .create()
 
         dialog.show()
     }
@@ -885,9 +885,9 @@ class EqActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-           .setTitle("Guardar Preset")
-           .setView(input)
-           .setPositiveButton("Guardar") { _, _ ->
+          .setTitle("Guardar Preset")
+          .setView(input)
+          .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
                     // Preserve color if preset already exists, else use currentThemeColor
@@ -905,8 +905,8 @@ class EqActivity : AppCompatActivity() {
                     Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show()
                 }
             }
-           .setNegativeButton("Cancelar", null)
-           .show()
+          .setNegativeButton("Cancelar", null)
+          .show()
     }
 
     override fun onDestroy() {

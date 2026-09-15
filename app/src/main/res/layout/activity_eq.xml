@@ -521,7 +521,435 @@
 
             </LinearLayout>
 
-            <!-- 6. 32-Band ISO Equalizer with HorizontalScrollView -->
+            <!-- 6. Control de Audio del Sistema (Global FX) Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:background="@drawable/bg_studio_card"
+                android:orientation="vertical"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="Audio del Sistema (Global FX)"
+                            android:textColor="@color/text_primary"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvGlobalAudioStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Procesa Spotify, YouTube, Chrome y apps del sistema"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvActiveSessionsCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Inactivo"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchGlobalAudio"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false"
+                        app:thumbTint="@color/studio_cyan"
+                        app:trackTint="@color/studio_cyan_alpha" />
+                </LinearLayout>
+
+                <!-- System Media Volume Slider -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Volumen Multimedia:"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarSystemVolume"
+                        android:layout_width="0dp"
+                        android:layout_height="32dp"
+                        android:layout_marginHorizontal="6dp"
+                        android:layout_weight="1"
+                        android:max="15"
+                        android:progress="10"
+                        android:progressTint="@color/studio_cyan"
+                        android:thumbTint="@color/studio_cyan" />
+
+                    <TextView
+                        android:id="@+id/tvSystemVolumeValue"
+                        android:layout_width="38dp"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-bold"
+                        android:gravity="end"
+                        android:text="67%"
+                        android:textColor="@color/studio_cyan"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 7. Compresor Multi-Banda MDRC (5 Bandas ATS2835P) Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:background="@drawable/bg_studio_card"
+                android:orientation="vertical"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="Compresor Multi-Banda MDRC"
+                            android:textColor="@color/text_primary"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvMdrcStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Crossover 5 Vías + Dinámica ATS2835P"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvMdrcGainReduction"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="GR: 0.0 dB"
+                        android:textColor="@color/studio_cyan"
+                        android:textSize="11sp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchMdrc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        app:thumbTint="@color/studio_cyan"
+                        app:trackTint="@color/studio_cyan_alpha" />
+                </LinearLayout>
+
+                <!-- MDRC Global Dynamics: Threshold & Ratio -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <!-- Threshold -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Threshold"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="10sp" />
+
+                            <TextView
+                                android:id="@+id/tvMdrcThresholdValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="sans-serif-bold"
+                                android:text="-14 dB"
+                                android:textColor="@color/studio_cyan"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekBarMdrcThreshold"
+                            android:layout_width="match_parent"
+                            android:layout_height="28dp"
+                            android:max="36"
+                            android:progress="22"
+                            android:progressTint="@color/studio_cyan"
+                            android:thumbTint="@color/studio_cyan" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="12dp"
+                        android:layout_height="1dp" />
+
+                    <!-- Ratio -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Ratio"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="10sp" />
+
+                            <TextView
+                                android:id="@+id/tvMdrcRatioValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="sans-serif-bold"
+                                android:text="3.0:1"
+                                android:textColor="@color/studio_cyan"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekBarMdrcRatio"
+                            android:layout_width="match_parent"
+                            android:layout_height="28dp"
+                            android:max="70"
+                            android:progress="20"
+                            android:progressTint="@color/studio_cyan"
+                            android:thumbTint="@color/studio_cyan" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 5 Crossover Bands Gains -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Ganancia por Banda (Makeup Gain):"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="10.5sp" />
+
+                <!-- Band 0: Sub (<120Hz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="88dp"
+                        android:layout_height="wrap_content"
+                        android:text="1. Sub (&lt;120Hz)"
+                        android:textColor="@color/text_muted"
+                        android:textSize="9.5sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarMdrcBand0"
+                        android:layout_width="0dp"
+                        android:layout_height="24dp"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="120"
+                        android:progressTint="@color/studio_cyan"
+                        android:thumbTint="@color/studio_cyan" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcBand0Value"
+                        android:layout_width="38dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="0.0 dB"
+                        android:textColor="@color/text_primary"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <!-- Band 1: Low (120-500Hz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="88dp"
+                        android:layout_height="wrap_content"
+                        android:text="2. Low (120-500)"
+                        android:textColor="@color/text_muted"
+                        android:textSize="9.5sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarMdrcBand1"
+                        android:layout_width="0dp"
+                        android:layout_height="24dp"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="120"
+                        android:progressTint="@color/studio_cyan"
+                        android:thumbTint="@color/studio_cyan" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcBand1Value"
+                        android:layout_width="38dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="0.0 dB"
+                        android:textColor="@color/text_primary"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <!-- Band 2: Mid (500-2kHz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="88dp"
+                        android:layout_height="wrap_content"
+                        android:text="3. Mid (500-2k)"
+                        android:textColor="@color/text_muted"
+                        android:textSize="9.5sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarMdrcBand2"
+                        android:layout_width="0dp"
+                        android:layout_height="24dp"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="120"
+                        android:progressTint="@color/studio_cyan"
+                        android:thumbTint="@color/studio_cyan" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcBand2Value"
+                        android:layout_width="38dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="0.0 dB"
+                        android:textColor="@color/text_primary"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <!-- Band 3: High (2k-8kHz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="88dp"
+                        android:layout_height="wrap_content"
+                        android:text="4. High (2k-8k)"
+                        android:textColor="@color/text_muted"
+                        android:textSize="9.5sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarMdrcBand3"
+                        android:layout_width="0dp"
+                        android:layout_height="24dp"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="120"
+                        android:progressTint="@color/studio_cyan"
+                        android:thumbTint="@color/studio_cyan" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcBand3Value"
+                        android:layout_width="38dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="0.0 dB"
+                        android:textColor="@color/text_primary"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <!-- Band 4: Air (>8kHz) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="88dp"
+                        android:layout_height="wrap_content"
+                        android:text="5. Air (&gt;8kHz)"
+                        android:textColor="@color/text_muted"
+                        android:textSize="9.5sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekBarMdrcBand4"
+                        android:layout_width="0dp"
+                        android:layout_height="24dp"
+                        android:layout_weight="1"
+                        android:max="240"
+                        android:progress="120"
+                        android:progressTint="@color/studio_cyan"
+                        android:thumbTint="@color/studio_cyan" />
+
+                    <TextView
+                        android:id="@+id/tvMdrcBand4Value"
+                        android:layout_width="38dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="0.0 dB"
+                        android:textColor="@color/text_primary"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 8. 32-Band ISO Equalizer with HorizontalScrollView -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

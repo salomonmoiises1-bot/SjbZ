@@ -22,6 +22,10 @@ class LimiterProcessor {
     var releaseMs: Float = DEFAULT_RELEASE_MS
     var ratio: Float = DEFAULT_RATIO
 
+    // PATCH anti-clipseo: compensación automática de headroom desde ATS2835PEngine.updateBassBoost()
+    // Se aplica como postGain del DynamicsProcessing.Limiter en DynamicsProcessingHelper
+    var postGainDb: Float = 0f
+
     // When Bluetooth A2DP is connected, hardware limiter on device can be bypassed
     var isBypassedForBluetooth: Boolean = false
 

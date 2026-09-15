@@ -32,8 +32,8 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         private var instance: GlobalAudioSessionManager? = null
 
         fun getInstance(context: Context): GlobalAudioSessionManager {
-            return instance ?: synchronized(this) {
-                instance ?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
+            return instance?: synchronized(this) {
+                instance?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
             }
         }
     }
@@ -54,7 +54,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     private var cachedBassGainDb = 0f
     private var cachedBassFreqHz = 85f
     private var cachedMdrcEnabled = true
-    private var cachedMdrcGains = floatArrayOf(0f, 0f, 0f, 0f, 0f)
+    private var cachedMdrcGains = floatArrayOf(0f, 0f, 0f)
     private var cachedMdrcThresholdDb = -14f
     private var cachedMdrcRatio = 3.0f
 
@@ -230,7 +230,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                 val eqBandCount = 32
 
                 val builder = DynamicsProcessing.Config.Builder(
-                    DynamicsProcessing.CONFIG_VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+                    0,
                     channelCount,
                     true, // preEqInUse
                     eqBandCount,
@@ -272,38 +272,36 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     private fun applyParamsToHolder(holder: SessionHolder) {
         // 1. DynamicsProcessing (Android 9.0+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && holder.dynamicsProcessing != null) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && holder.dynamicsProcessing!= null) {
             val dp = holder.dynamicsProcessing!!
             try {
                 // Pre-EQ 32 Bands
-                for (ch in 0 until 2) {
-                    for (i in 0 until minOf(32, cachedBandGains.size)) {
-                        val freq = SjbzDspProcessor.ISO_FREQUENCIES[i]
-                        val gain = cachedBandGains[i] + cachedPreampDb
-                        val eqBand = DynamicsProcessing.EqBand(true, freq, gain)
-                        dp.setPreEqBand(ch, i, eqBand)
-                    }
+                for (i in 0 until minOf(32, cachedBandGains.size)) {
+                    val freq = SjbzDspProcessor.ISO_FREQUENCIES[i]
+                    val gain = cachedBandGains[i] + cachedPreampDb
+                    val eqBand = DynamicsProcessing.EqBand(true, freq, gain)
+                    dp.setPreEqBandAllChannelsTo(i, eqBand)
+                }
 
-                    // 5-Band Multiband Compressor (MDRC)
-                    val mbcCutoffs = MDRCProcessor.SPLIT_FREQS
-                    for (b in 0 until 5) {
-                        val cutoff = if (b < mbcCutoffs.size) mbcCutoffs[b] else 20000f
-                        val mbcGain = if (cachedMdrcEnabled && b < cachedMdrcGains.size) cachedMdrcGains[b] else 0f
-                        val mbcBand = DynamicsProcessing.MbcBand(
-                            cachedMdrcEnabled,
-                            cutoff,
-                            10.0f,  // attackTime
-                            80.0f,  // releaseTime
-                            cachedMdrcRatio,
-                            cachedMdrcThresholdDb,
-                            4.0f,   // kneeWidth
-                            -90.0f, // noiseGateThreshold
-                            1.0f,   // expanderRatio
-                            0.0f,   // preGain
-                            mbcGain // postGain
-                        )
-                        dp.setMbcBand(ch, b, mbcBand)
-                    }
+                // 5-Band Multiband Compressor (MDRC)
+                val mbcCutoffs = MDRCProcessor.SPLIT_FREQS
+                for (b in 0 until 5) {
+                    val cutoff = if (b < mbcCutoffs.size) mbcCutoffs[b] else 20000f
+                    val mbcGain = if (cachedMdrcEnabled && b < cachedMdrcGains.size) cachedMdrcGains[b] else 0f
+                    val mbcBand = DynamicsProcessing.MbcBand(
+                        cachedMdrcEnabled,
+                        cutoff,
+                        10.0f, // attackTime
+                        80.0f, // releaseTime
+                        cachedMdrcRatio,
+                        cachedMdrcThresholdDb,
+                        4.0f, // kneeWidth
+                        -90.0f, // noiseGateThreshold
+                        1.0f, // expanderRatio
+                        0.0f, // preGain
+                        mbcGain // postGain
+                    )
+                    dp.setMbcBandAllChannelsTo(b, mbcBand)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error applying DynamicsProcessing params: ${e.message}")

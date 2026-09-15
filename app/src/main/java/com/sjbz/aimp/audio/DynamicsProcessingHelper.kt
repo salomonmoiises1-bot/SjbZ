@@ -26,6 +26,16 @@ class DynamicsProcessingHelper {
     // PATCH anti-clipseo: memoria de ganancias para rampa suave
     private var lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
 
+    // PATCH: cuenta real aceptada por el HAL (32/16/8). Antes se asumía 32 fijo
+    // en applyEqualizerLocked y crasheaba con setPreEqBand en 16..31 si el HAL
+    // solo aceptó 16 u 8.
+    private var activePreEqCount: Int = EqualizerProcessor.BAND_COUNT
+
+    // PATCH: primera aplicación después de attach salta directo al target,
+    // sin slew-rate. Antes lastGains se reseteaba a 0 y el primer apply
+    // dejaba el EQ a +3dB en vez de +9dB hasta el próximo movimiento.
+    private var isFirstApplyAfterAttach: Boolean = true
+
     @Volatile
     private var currentSessionId: Int = 0
 
@@ -64,6 +74,9 @@ class DynamicsProcessingHelper {
             currentSessionId = audioSessionId
             // reset rampa al cambiar de sesión
             lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
+            // PATCH: reset de flags de sesión nueva
+            isFirstApplyAfterAttach = true
+            activePreEqCount = EqualizerProcessor.BAND_COUNT
 
             if (bassBoostProcessor!= null) {
                 equalizerProcessor.bassBoostProcessor = bassBoostProcessor
@@ -108,6 +121,9 @@ class DynamicsProcessingHelper {
                 }
 
                 if (created) {
+                    // PATCH: guardar el count real aceptado por el HAL
+                    activePreEqCount = usedPreEqCount
+                    isFirstApplyAfterAttach = true
                     applyEqualizerLocked(equalizerProcessor, bassBoostProcessor)
                     applyMDRCLocked(mdrcProcessor)
                     applyLimiterLocked(limiterProcessor)
@@ -118,6 +134,7 @@ class DynamicsProcessingHelper {
                 } else {
                     Log.w(TAG, "Ningún candidato PreEq aceptado por HAL, cayendo a legacy")
                     dynamicsProcessing = null
+                    activePreEqCount = EqualizerProcessor.BAND_COUNT
                     isHardwareDspActive = false
                 }
             } else {
@@ -137,6 +154,9 @@ class DynamicsProcessingHelper {
             val shouldEnable = equalizerProcessor.isEnabled || (bassBoostProcessor?.isEnabled == true)
             val eq = Equalizer(0, audioSessionId).apply { enabled = shouldEnable }
             legacyEqualizer = eq
+            // PATCH: en legacy no hay PreEq variable, pero marcamos primera aplicación
+            // para que el path legacy también arranque sin rampa heredada
+            isFirstApplyAfterAttach = true
             applyLegacyEqualizerLocked(equalizerProcessor, bassBoostProcessor)
             isLegacyFallbackActive = true
             isHardwareDspActive = false
@@ -167,7 +187,8 @@ class DynamicsProcessingHelper {
                     false
                 }
 
-                val preEqCount = EqualizerProcessor.BAND_COUNT
+                // PATCH: usar el count real aceptado por el HAL, no BAND_COUNT fijo
+                val preEqCount = activePreEqCount.coerceAtMost(EqualizerProcessor.BAND_COUNT)
 
                 for (b in 0 until preEqCount) {
                     if (b >= EqualizerProcessor.ISO_FREQUENCIES.size) break
@@ -203,9 +224,14 @@ class DynamicsProcessingHelper {
 
                     val totalGain = rawTotal.coerceIn(MIN_PRE_EQ_GAIN_DB, MAX_PRE_EQ_GAIN_DB)
 
-                    // PATCH anti-clipseo: slew-rate limiter 3dB por aplicación
+                    // PATCH anti-clipseo: slew-rate limiter 3dB por aplicación,
+                    // pero la primera aplicación después de attach va directo al target
                     val prev = lastGains.getOrElse(b) { 0f }
-                    val smoothed = totalGain.coerceIn(prev - SLEW_MAX_DB_PER_APPLY, prev + SLEW_MAX_DB_PER_APPLY)
+                    val smoothed = if (isFirstApplyAfterAttach) {
+                        totalGain
+                    } else {
+                        totalGain.coerceIn(prev - SLEW_MAX_DB_PER_APPLY, prev + SLEW_MAX_DB_PER_APPLY)
+                    }
                     if (b < lastGains.size) lastGains[b] = smoothed
 
                     val eqBand = DynamicsProcessing.EqBand(true, cutoff, smoothed)
@@ -220,6 +246,8 @@ class DynamicsProcessingHelper {
                         Log.w(TAG, "setPreEqBand ch1 band=$b cutoff=$cutoff: ${t.message}")
                     }
                 }
+                // PATCH: limpiar flag de primera aplicación una vez completado el barrido
+                if (isFirstApplyAfterAttach) isFirstApplyAfterAttach = false
             } catch (t: Throwable) {
                 Log.w(TAG, "Error updating PreEq: ${t.message}", t)
             }
@@ -305,6 +333,7 @@ class DynamicsProcessingHelper {
                     Log.w(TAG, "setBandLevel($b, $milliBels) falló: ${t.message}")
                 }
             }
+            if (isFirstApplyAfterAttach) isFirstApplyAfterAttach = false
         } catch (t: Throwable) {
             Log.w(TAG, "Error updating legacy EQ: ${t.message}", t)
         }
@@ -418,5 +447,8 @@ class DynamicsProcessingHelper {
         isLegacyFallbackActive = false
         currentSessionId = 0
         lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
+        // PATCH: reset de parches de sesión
+        activePreEqCount = EqualizerProcessor.BAND_COUNT
+        isFirstApplyAfterAttach = true
     }
 }

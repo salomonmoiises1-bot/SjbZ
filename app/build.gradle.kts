@@ -75,4 +75,10 @@ dependencies {
 
     // Gson JSON Parser
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // Coil - Carga de carátulas locales
+    implementation("io.coil-kt:coil:2.5.0")
+
+    // Palette - Colores dinámicos desde carátula
+    implementation("androidx.palette:palette-ktx:1.0.0")
 }

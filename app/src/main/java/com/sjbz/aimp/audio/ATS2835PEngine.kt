@@ -71,4 +71,25 @@ class ATS2835PEngine(
     }
 
     fun isBluetoothConnected(): Boolean = dspProcessor.isBluetoothConnected()
+
+    // MDRC 5-Band Dynamics
+    fun setMdrcEnabled(enabled: Boolean) {
+        dspProcessor.setMdrcEnabled(enabled)
+    }
+
+    fun isMdrcEnabled(): Boolean = dspProcessor.isMdrcEnabled()
+
+    fun setMdrcBandGain(bandIndex: Int, gainDb: Float) {
+        dspProcessor.setMdrcBandGain(bandIndex, gainDb)
+    }
+
+    fun getMdrcBandGain(bandIndex: Int): Float = dspProcessor.getMdrcBandGain(bandIndex)
+
+    fun setMdrcDynamics(thresholdDb: Float, ratio: Float, attackMs: Float = 10f, releaseMs: Float = 80f) {
+        dspProcessor.setMdrcDynamics(thresholdDb, ratio, attackMs, releaseMs)
+    }
+
+    fun getMdrcThreshold(): Float = dspProcessor.getMdrcThreshold()
+    fun getMdrcRatio(): Float = dspProcessor.getMdrcRatio()
+    fun getMdrcGainReduction(): Float = dspProcessor.getMdrcGainReduction()
 }

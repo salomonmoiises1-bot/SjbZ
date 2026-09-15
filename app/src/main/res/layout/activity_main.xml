@@ -38,7 +38,7 @@
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:fontFamily="sans-serif-medium"
-                android:text="ATS2835P DSP • 32-Band PreEq • 5-Band MDRC • Limiter Active"
+                android:text="SB-Z DSP • 32-Band PreEq • 5-Band MDRC • Limiter Active"
                 android:textColor="@color/text_secondary"
                 android:textSize="10sp" />
 
@@ -100,7 +100,7 @@
             </LinearLayout>
         </FrameLayout>
 
-        <!-- Bottom AIMP Player Panel -->
+        <!-- Bottom SB-Z Player Panel -->
         <LinearLayout
             android:id="@+id/bottomPlayerPanel"
             android:layout_width="match_parent"
@@ -112,7 +112,7 @@
             android:paddingTop="8dp"
             android:paddingBottom="12dp">
 
-            <!-- Stereo VU Meters & Waveform Bar (AIMP style) -->
+            <!-- Stereo VU Meters & Waveform Bar (SB-Z style) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="22dp"
@@ -227,7 +227,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="1dp"
-                        android:text="24-bit • 192kHz • ATS2835P"
+                        android:text="24-bit • 192kHz • SB-Z"
                         android:textColor="@color/text_muted"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -269,7 +269,7 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <!-- AIMP Control Buttons Row: Shuffle, Prev, Stop, Play/Pause, Next, Repeat, Crossfade -->
+            <!-- SB-Z Control Buttons Row: Shuffle, Prev, Stop, Play/Pause, Next, Repeat, Crossfade -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
@@ -309,7 +309,7 @@
                     android:src="@drawable/ic_stop"
                     app:tint="@color/text_secondary" />
 
-                <!-- Play / Pause Button (Large Orange AIMP circle) -->
+                <!-- Play / Pause Button (Large Orange SB-Z circle) -->
                 <ImageButton
                     android:id="@+id/btnPlayPause"
                     android:layout_width="48dp"
@@ -384,7 +384,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Motor AIMP &amp; ATS2835P DSP"
+                android:text="Motor SB-Z &amp; SB-Z DSP"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>

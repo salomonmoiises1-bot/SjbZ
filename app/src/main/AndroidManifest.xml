@@ -2,18 +2,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions required for audio storage access -->
+    <!-- Audio storage: scoped storage (API 33+) / legacy (<=32) -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- Permissions required for background audio playback & notifications -->
+    <!-- Background playback -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.BLUETOOTH" />
+
+    <!-- Bluetooth A2DP detection for ATS2835P auto-bypass.
+         BLUETOOTH (legacy, max 30) + BLUETOOTH_CONNECT (31+) required to query
+         BluetoothAdapter / AudioDeviceInfo on Android 12+. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application
         android:allowBackup="true"
@@ -24,15 +31,12 @@
         android:theme="@style/Theme.SjbZ"
         tools:targetApi="34">
 
-        <!-- Main SB-Z Studio Player Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:showForAllUsers="true"
-            android:inheritShowWhenLocked="true"
             android:theme="@style/Theme.SjbZ">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -40,14 +44,12 @@
             </intent-filter>
         </activity>
 
-        <!-- 32-Band Equalizer Activity -->
         <activity
             android:name=".EqActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.SjbZ" />
 
-        <!-- Media3 Playback Service -->
         <service
             android:name=".service.PlaybackService"
             android:enabled="true"
@@ -55,8 +57,8 @@
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="androidx.media3.session.MediaLibraryService" />
             </intent-filter>
         </service>
     </application>
-
 </manifest>

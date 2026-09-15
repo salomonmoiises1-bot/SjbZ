@@ -32,10 +32,15 @@ class ATS2835PEngine(
     var isBluetoothConnected: Boolean = false
         private set
 
+    // PATCH anti-clipseo: evita reentradas updateBassBoost <-> onParametersChanged
+    private var isUpdatingBb = false
+
     init {
         equalizer.bassBoostProcessor = bassBoost
         bassBoost.onParametersChanged = {
-            updateBassBoost()
+            // la EqActivity ya llama a updateBassBoost con debounce,
+            // acá solo reacciona a cambios internos (presets) y evita loop
+            if (!isUpdatingBb) updateBassBoost()
         }
         if (audioSessionId > 0) {
             attachAudioSession(audioSessionId)
@@ -93,16 +98,32 @@ class ATS2835PEngine(
     }
 
     fun updateBassBoost() {
-        // FIX MUTE: solo path software. No llamar a updateNativeEffect()
-        // cuando DynamicsProcessing está activo, porque duplica +24dB.
-        if (dynamicsHelper.isHardwareDspActive) {
-            dynamicsHelper.applyEqualizer(equalizer, bassBoost)
-            // Asegurar que el nativo quede apagado
-            bassBoost.setNativeEnabled(false)
-        } else {
-            // Solo en fallback legacy sin DP, usar nativo como segunda capa
-            dynamicsHelper.applyEqualizer(equalizer, bassBoost)
-            bassBoost.updateNativeEffect()
+        if (isUpdatingBb) return
+        isUpdatingBb = true
+        try {
+            // PATCH anti-clipseo: compensación automática de headroom
+            // Por cada dB de boost, baja 0.4dB el postGain del limiter
+            val bbDb = try { bassBoost.getStrengthDb() } catch (_: Throwable) { 0f }
+            if (bassBoost.isEnabled) {
+                limiter.postGainDb = (-bbDb * 0.4f).coerceIn(-6f, 0f)
+            } else {
+                limiter.postGainDb = 0f
+            }
+            dynamicsHelper.applyLimiter(limiter)
+
+            // FIX MUTE: solo path software. No llamar a updateNativeEffect()
+            // cuando DynamicsProcessing está activo, porque duplica +24dB.
+            if (dynamicsHelper.isHardwareDspActive) {
+                dynamicsHelper.applyEqualizer(equalizer, bassBoost)
+                // Asegurar que el nativo quede apagado
+                bassBoost.setNativeEnabled(false)
+            } else {
+                // Solo en fallback legacy sin DP, usar nativo como segunda capa
+                dynamicsHelper.applyEqualizer(equalizer, bassBoost)
+                bassBoost.updateNativeEffect()
+            }
+        } finally {
+            isUpdatingBb = false
         }
     }
 

@@ -13,7 +13,7 @@ import android.os.Build
 
 /**
  * Monitors Bluetooth A2DP audio connectivity to automatically adapt
- * the ATS2835P DSP engine (gentle MDRC ratio and limiter bypass).
+ * the SB-Z Studio DSP engine.
  */
 class BluetoothDetector(
     private val context: Context,

@@ -76,6 +76,10 @@ class EqActivity : AppCompatActivity() {
     private lateinit var btnBassQuick9dB: Button
     private lateinit var btnBassQuick12dB: Button
 
+    // PATCH: debounce BassBoost para evitar clipseo al mover fader
+    private val bassBoostHandler = Handler(Looper.getMainLooper())
+    private var bassBoostRunnable: Runnable? = null
+
     // MDRC 5 Bands Gain Controls
     private lateinit var sbMdrcGainSub: SeekBar
     private lateinit var tvMdrcGainSub: TextView
@@ -110,9 +114,8 @@ class EqActivity : AppCompatActivity() {
     private val mdrcValueLabels = ArrayList<TextView>()
 
     private var isUpdatingUiFromPreset = false
-    private var currentThemeColor: Int = 0xFF00E5FF.toInt() // Default SjbZ Studio Cyan
+    private var currentThemeColor: Int = 0xFF00E5FF.toInt()
 
-    // Export.sjbz file launcher
     private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
         if (uri!= null) {
             val currentPresetName = spinnerPresets.selectedItem?.toString()?: "SjbZ_Preset"
@@ -127,7 +130,6 @@ class EqActivity : AppCompatActivity() {
         }
     }
 
-    // Import.sjbz file launcher
     private val importSjbzLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri!= null) {
             val imported = presetManager.importPresetFromSjbz(uri)
@@ -167,10 +169,9 @@ class EqActivity : AppCompatActivity() {
         setupVisualizer()
         spectrumHandler.post(spectrumRunnable)
 
-        // Load active preset initially
         val activeName = presetManager.getActivePresetName()
         val activePreset = presetManager.getAllPresets().find { it.name.equals(activeName, ignoreCase = true) }
-          ?: presetManager.getFactoryPresets().first()
+           ?: presetManager.getFactoryPresets().first()
         loadPresetToUi(activePreset)
     }
 
@@ -178,7 +179,7 @@ class EqActivity : AppCompatActivity() {
         try {
             visualizer?.release()
             val sessionId = PlaybackService.instance?.atsEngine?.audioSessionId
-              ?: PlaybackService.instance?.player?.audioSessionId?: 0
+               ?: PlaybackService.instance?.player?.audioSessionId?: 0
             if (sessionId == 0) return
             visualizer = Visualizer(sessionId).apply {
                 captureSize = Visualizer.getCaptureSizeRange()[1]
@@ -241,7 +242,6 @@ class EqActivity : AppCompatActivity() {
         tvCrossfadeValue = findViewById(R.id.tvCrossfadeValue)
         container32Bands = findViewById(R.id.container32Bands)
 
-        // BassBoost Views
         switchBassBoostEnabled = findViewById(R.id.switchBassBoostEnabled)
         seekBarBassBoost = findViewById(R.id.seekBarBassBoost)
         tvBassBoostValue = findViewById(R.id.tvBassBoostValue)
@@ -254,7 +254,6 @@ class EqActivity : AppCompatActivity() {
         btnBassQuick9dB = findViewById(R.id.btnBassQuick9dB)
         btnBassQuick12dB = findViewById(R.id.btnBassQuick12dB)
 
-        // MDRC Gain Views
         sbMdrcGainSub = findViewById(R.id.sbMdrcGainSub)
         tvMdrcGainSub = findViewById(R.id.tvMdrcGainSub)
         sbMdrcGainLow = findViewById(R.id.sbMdrcGainLow)
@@ -339,8 +338,8 @@ class EqActivity : AppCompatActivity() {
 
     private fun showGlobalHelpDialog() {
         AlertDialog.Builder(this)
-          .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
-          .setMessage(
+           .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
+           .setMessage(
                 "¿Cómo funciona en Android?\n\n" +
                 "1. Spotify, Deezer, Tidal, Apple Music, VLC, Poweramp:\n" +
                 "Estas apps transmiten su sesión de audio al sistema. SjbZ Studio la intercepta automáticamente y le aplica la curva de 32 bandas ISO, MDRC y limitador ATS2835P.\n\n" +
@@ -350,13 +349,10 @@ class EqActivity : AppCompatActivity() {
                 "Para apps que intenten bloquear la sesión, puedes otorgar el permiso DUMP conectando el móvil a una PC y ejecutando:\n\n" +
                 "adb shell pm grant com.sjbz.player android.permission.DUMP"
             )
-          .setPositiveButton("Entendido", null)
-          .show()
+           .setPositiveButton("Entendido", null)
+           .show()
     }
 
-    /**
-     * Builds the 32 vertical ISO frequency sliders dynamically.
-     */
     private fun setup32BandSliders() {
         container32Bands.removeAllViews()
         bandSeekBars.clear()
@@ -376,7 +372,6 @@ class EqActivity : AppCompatActivity() {
                 setPadding(4, 8, 4, 8)
             }
 
-            // Top: Gain value label (e.g. +3.5 dB)
             val tvGain = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -390,7 +385,6 @@ class EqActivity : AppCompatActivity() {
             bandCol.addView(tvGain)
             bandValueLabels.add(tvGain)
 
-            // Middle: Vertical fader (rotated SeekBar container)
             val faderContainer = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -406,7 +400,7 @@ class EqActivity : AppCompatActivity() {
                     (resources.displayMetrics.density * 36).toInt()
                 )
                 rotation = 270f
-                max = 240 // -12.0 dB to +12.0 dB (120 is 0 dB)
+                max = 240
                 val currentG = equalizerProcessor.getBandGain(i)
                 progress = (currentG * 10.0f + 120).toInt().coerceIn(0, 240)
                 progressTintList = ColorStateList.valueOf(currentThemeColor)
@@ -415,7 +409,6 @@ class EqActivity : AppCompatActivity() {
             tvGain.text = String.format("%+.1f", equalizerProcessor.getBandGain(i))
 
             val bandIndex = i
-            // Prevent parent ScrollView from moving when sliding EQ frequency faders
             seekBar.setOnTouchListener { v, event ->
                 when (event.action) {
                     MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
@@ -446,7 +439,6 @@ class EqActivity : AppCompatActivity() {
             bandCol.addView(faderContainer)
             bandSeekBars.add(seekBar)
 
-            // Bottom: Frequency Label (e.g. "31.5", "1k", "20k")
             val tvFreq = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -464,7 +456,6 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun setupPreampAndControls() {
-        // Preamp: -12.0dB to +12.0dB (max 240, progress 120 = 0dB)
         seekBarPreamp.progress = (equalizerProcessor.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
         tvPreampValue.text = String.format("%+.1f dB", equalizerProcessor.preampDb)
 
@@ -482,7 +473,6 @@ class EqActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // Speed / Pitch: 0.5x to 2.0x (max 150, 0 = 0.5x, 50 = 1.0x, 150 = 2.0x)
         seekBarSpeed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val factor = 0.5f + (progress / 100.0f)
@@ -496,7 +486,6 @@ class EqActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // Crossfade: 0 to 10 seconds
         seekBarCrossfade.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvCrossfadeValue.text = "${progress}s"
@@ -529,15 +518,25 @@ class EqActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser &&!isUpdatingUiFromPreset) {
                     bassBoostProcessor.strength = progress.toShort()
-                    updateBassBoostLabel()
                     PlaybackService.instance?.atsEngine?.bassBoost?.strength = progress.toShort()
-                    PlaybackService.instance?.atsEngine?.updateBassBoost()
-                    PlaybackService.instance?.atsEngine?.updateEqualizer()
-                    syncAllEffects()
+                    updateBassBoostLabel()
+                    // PATCH debounce 90ms: evita clipseo por reaplicar DSP en cada tick
+                    bassBoostRunnable?.let { bassBoostHandler.removeCallbacks(it) }
+                    bassBoostRunnable = Runnable {
+                        PlaybackService.instance?.atsEngine?.updateBassBoost()
+                        PlaybackService.instance?.atsEngine?.updateEqualizer()
+                        syncAllEffects()
+                    }
+                    bassBoostHandler.postDelayed(bassBoostRunnable!!, 90)
                 }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                bassBoostRunnable?.let {
+                    bassBoostHandler.removeCallbacks(it)
+                    it.run()
+                }
+            }
         })
 
         fun selectFrequency(freq: Int) {
@@ -561,6 +560,8 @@ class EqActivity : AppCompatActivity() {
         btnBassFreq120.setOnClickListener { selectFrequency(120) }
 
         fun applyQuickBass(db: Float, enabled: Boolean = true) {
+            // cancela debounce pendiente antes de salto brusco
+            bassBoostRunnable?.let { bassBoostHandler.removeCallbacks(it) }
             switchBassBoostEnabled.isChecked = enabled
             bassBoostProcessor.isEnabled = enabled
             seekBarBassBoost.isEnabled = enabled
@@ -593,10 +594,6 @@ class EqActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Sets up the 5 MDRC compression bands gain controls (-12dB to +12dB).
-     * Bands: Sub, Low, Mid, High, Air.
-     */
     private fun setupMdrcGainControls() {
         mdrcSeekBars.clear()
         mdrcValueLabels.clear()
@@ -682,7 +679,6 @@ class EqActivity : AppCompatActivity() {
         currentThemeColor = color
         val colorList = ColorStateList.valueOf(color)
 
-        // Preamp and master controls
         seekBarPreamp.progressTintList = colorList
         seekBarPreamp.thumbTintList = colorList
         tvPreampValue.setTextColor(color)
@@ -692,7 +688,6 @@ class EqActivity : AppCompatActivity() {
         seekBarCrossfade.progressTintList = colorList
         seekBarCrossfade.thumbTintList = colorList
 
-        // 32 Bands
         for (sb in bandSeekBars) {
             sb.progressTintList = colorList
             sb.thumbTintList = colorList
@@ -701,7 +696,6 @@ class EqActivity : AppCompatActivity() {
             tv.setTextColor(color)
         }
 
-        // 5 MDRC Bands
         for (sb in mdrcSeekBars) {
             sb.progressTintList = colorList
             sb.thumbTintList = colorList
@@ -710,18 +704,15 @@ class EqActivity : AppCompatActivity() {
             tv.setTextColor(color)
         }
 
-        // BassBoost Controls
         seekBarBassBoost.progressTintList = colorList
         seekBarBassBoost.thumbTintList = colorList
         tvBassBoostValue.setTextColor(color)
         switchBassBoostEnabled.thumbTintList = colorList
 
-        // Action buttons and switches
         btnSavePreset.setTextColor(color)
         switchEqEnabled.thumbTintList = colorList
         switchMdrcEnabled.thumbTintList = colorList
 
-        // Spectrum sigue el color del preset
         try { spectrumView.setThemeColor(color) } catch(_: Exception){}
     }
 
@@ -729,16 +720,12 @@ class EqActivity : AppCompatActivity() {
         isUpdatingUiFromPreset = true
         try {
             equalizerProcessor.loadFromPreset(preset)
-
-            // Apply color to seekbars and labels
             applyPresetColor(preset.color)
 
-            // Update Preamp
             val preampProgress = (preset.preampDb * 10.0f + 120).toInt().coerceIn(0, 240)
             seekBarPreamp.progress = preampProgress
             tvPreampValue.text = String.format("%+.1f dB", preset.preampDb)
 
-            // Update 32 Band Sliders
             val gains = preset.bandGains
             for (i in 0 until minOf(gains.size, bandSeekBars.size)) {
                 val g = gains[i]
@@ -747,7 +734,6 @@ class EqActivity : AppCompatActivity() {
                 bandValueLabels[i].text = String.format("%+.1f", g)
             }
 
-            // Update MDRC 5 Bands Gain Controls
             val mdrcSettings = preset.mdrcSettings
             mdrcProcessor.loadFromSettings(mdrcSettings)
             switchMdrcEnabled.isChecked = mdrcSettings.enabled
@@ -759,7 +745,6 @@ class EqActivity : AppCompatActivity() {
                 mdrcValueLabels[i].text = String.format("%+.1f dB", bandCfg.gainDb)
             }
 
-            // Update BassBoost on special preset
             if (preset.name.equals("Bass Boost", ignoreCase = true)) {
                 bassBoostProcessor.isEnabled = true
                 bassBoostProcessor.setStrengthDb(9.0f)
@@ -768,7 +753,6 @@ class EqActivity : AppCompatActivity() {
                 updateBassBoostLabel()
             }
 
-            // Push changes to live audio chain
             PlaybackService.instance?.atsEngine?.updateEqualizer()
             PlaybackService.instance?.atsEngine?.updateMDRC()
             PlaybackService.instance?.atsEngine?.updateBassBoost()
@@ -783,7 +767,6 @@ class EqActivity : AppCompatActivity() {
             showSavePresetDialog()
         }
 
-        // Long press on Save opens the 10-color picker palette
         btnSavePreset.setOnLongClickListener {
             showColorPicker { chosenColor ->
                 applyPresetColor(chosenColor)
@@ -800,15 +783,15 @@ class EqActivity : AppCompatActivity() {
             }
 
             AlertDialog.Builder(this)
-              .setTitle("Borrar Preset")
-              .setMessage("¿Deseas eliminar el preset '$selected'?")
-              .setPositiveButton("Borrar") { _, _ ->
+               .setTitle("Borrar Preset")
+               .setMessage("¿Deseas eliminar el preset '$selected'?")
+               .setPositiveButton("Borrar") { _, _ ->
                     presetManager.deletePreset(selected)
                     refreshPresetsSpinner("ATS-2835P Master")
                     Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show()
                 }
-              .setNegativeButton("Cancelar", null)
-              .show()
+               .setNegativeButton("Cancelar", null)
+               .show()
         }
 
         btnExportSjbz.setOnClickListener {
@@ -841,7 +824,6 @@ class EqActivity : AppCompatActivity() {
 
         var dialog: AlertDialog? = null
 
-        // 2 rows of 5 buttons for the 10 palette colors
         for (row in 0..1) {
             val rowLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -870,9 +852,9 @@ class EqActivity : AppCompatActivity() {
         }
 
         dialog = AlertDialog.Builder(this)
-          .setView(container)
-          .setNegativeButton("Cancelar", null)
-          .create()
+           .setView(container)
+           .setNegativeButton("Cancelar", null)
+           .create()
 
         dialog.show()
     }
@@ -885,12 +867,11 @@ class EqActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-          .setTitle("Guardar Preset")
-          .setView(input)
-          .setPositiveButton("Guardar") { _, _ ->
+           .setTitle("Guardar Preset")
+           .setView(input)
+           .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
-                    // Preserve color if preset already exists, else use currentThemeColor
                     val existing = presetManager.getCustomPresets().find { it.name.equals(name, ignoreCase = true) }
                     val colorToSave = existing?.color?: currentThemeColor
                     val currentPreset = equalizerProcessor.toEqPreset(
@@ -905,11 +886,12 @@ class EqActivity : AppCompatActivity() {
                     Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show()
                 }
             }
-          .setNegativeButton("Cancelar", null)
-          .show()
+           .setNegativeButton("Cancelar", null)
+           .show()
     }
 
     override fun onDestroy() {
+        bassBoostHandler.removeCallbacksAndMessages(null)
         spectrumHandler.removeCallbacks(spectrumRunnable)
         try { visualizer?.release() } catch(_: Exception){}
         super.onDestroy()

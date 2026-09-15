@@ -54,10 +54,19 @@ class ATS2835PEngine(
     }
 
     fun attachAudioSession(sessionId: Int) {
+        Log.d(TAG, "attachAudioSession: $sessionId")
         if (sessionId <= 0) return
         this.audioSessionId = sessionId
+        // 1. Primero el helper (DynamicsProcessing)
         dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter, bassBoost)
+        // 2. Después el BassBoost nativo
         bassBoost.attachToSession(sessionId)
+
+        // 3. Reaplicar todo DESPUÉS del attach, si no queda en 0
+        updateEqualizer()
+        updateMDRC()
+        updateLimiter()
+        updateBassBoost()
     }
 
     fun applyPreset(preset: EqPreset) {

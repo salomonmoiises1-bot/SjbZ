@@ -12,18 +12,6 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/**
- * SjbZ Studio Professional Audio DSP Processor.
- *
- * Chain:
- * Input -> Preamp -> Low-Shelf Bass (RBJ) -> 32-Band ISO Peaking EQ (RBJ Q=1.4) ->
- * ATS2835P Emulation (4 Biquads + Limiter -6dB + Wet/Dry) ->
- * Auto-Gain -> True-Peak Limiter (-1dB, 2ms lookahead) -> Output Float
- *
- * - Strict C.ENCODING_PCM_FLOAT
- * - Zero allocation in queueInput
- * - TDF-II per-channel states
- */
 class SjbzDspProcessor : BaseAudioProcessor() {
 
     companion object {
@@ -81,10 +69,9 @@ class SjbzDspProcessor : BaseAudioProcessor() {
 
     private var ditherSeed: Int = 123456789
 
-    // --- Mastering chain ---
     private val autoGain = AutoGain()
     private var truePeakLimiter = TruePeakLimiter(48000)
-    private val tpdfDither = TpdfDither() // bypass en float, listo para 16-bit
+    private val tpdfDither = TpdfDither()
     private var masteringScratch = FloatArray(MAX_CHANNELS * 1024)
 
     @Volatile private var isDirty: Boolean = true
@@ -203,16 +190,19 @@ class SjbzDspProcessor : BaseAudioProcessor() {
             }
         }
 
-        // --- Mastering: Auto-Gain -> True-Peak Limiter ---
         if (localMasterEnabled) {
             val compDb = autoGain.compensationDb(preampDb, bandGainsDb, bassGainDb)
             if (compDb!= 0f) autoGain.apply(masteringScratch, totalFloats, compDb)
             truePeakLimiter.process(masteringScratch, totalFloats, frames, channelCount)
         }
 
-        // Copy to output
-        outputBuffer.asFloatBuffer().put(masteringScratch, 0, totalFloats)
-        outputBuffer.position(outputBuffer.position() + remainingBytes)
+        // Copy to output - versión segura para celular
+        outputBuffer.clear()
+        for (i in 0 until totalFloats) {
+            outputBuffer.putFloat(masteringScratch[i])
+        }
+        outputBuffer.flip()
+        inputBuffer.position(inputBuffer.limit())
     }
 
     fun setPreamp(gainDb: Float) {
@@ -253,7 +243,6 @@ class SjbzDspProcessor : BaseAudioProcessor() {
     fun isBluetoothConnected(): Boolean = bluetoothConnected
     fun isEmulationActive(): Boolean = masterEnabled && emulationEnabled && (!bluetoothAutoBypass ||!bluetoothConnected)
 
-    // Exponer para AutoGain sin romper encapsulado
     fun getBandGainsCopy(): FloatArray = bandGainsDb.clone()
 
     private fun recalculateCoefficients() {

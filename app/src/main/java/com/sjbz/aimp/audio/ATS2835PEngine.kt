@@ -97,7 +97,13 @@ class ATS2835PEngine(
     }
 
     fun updateEqualizer() {
-        dynamicsHelper.applyEqualizer(equalizer, bassBoost)
+        // PATCH SjbZ32: EQ ahora en software via Sjbz32BandProcessor (ExoPlayer AudioProcessor).
+        // Ya no usamos DynamicsProcessing PreEq para EQ, solo para MDRC/Limiter.
+        try {
+            com.sjbz.aimp.service.PlaybackService.instance?.sjbzEqProcessor?.refresh()
+        } catch (t: Throwable) {
+            Log.w(TAG, "sjbzEqProcessor.refresh() falló: ${t.message}")
+        }
     }
 
     fun updateMDRC() {
@@ -123,11 +129,13 @@ class ATS2835PEngine(
             }
             dynamicsHelper.applyLimiter(limiter)
 
+            // PATCH SjbZ32: refrescar EQ software en vez de PreEq HAL
+            try {
+                com.sjbz.aimp.service.PlaybackService.instance?.sjbzEqProcessor?.refresh()
+            } catch (_: Throwable) {}
             // FIX MUTE: solo path software cuando DP está activo.
             // No llamar a updateNativeEffect() con DP activo porque duplica +24dB.
-            // setNativeEnabled(false) asegura que isNativeActive()=false y el helper
-            // inyecte el bajo vía PreEq.
-            dynamicsHelper.applyEqualizer(equalizer, bassBoost)
+            // setNativeEnabled(false) asegura que isNativeActive()=false
             if (dynamicsHelper.isHardwareDspActive) {
                 // Asegurar que el nativo quede apagado
                 bassBoost.setNativeEnabled(false)

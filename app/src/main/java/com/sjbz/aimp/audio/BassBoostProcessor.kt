@@ -42,6 +42,10 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
 
     private val nativeLock = Any()
 
+    // PATCH: flag para setNativeEnabled(false) del engine, evita estado inconsistente
+    // entre isEnabled=true y bb.enabled=false
+    private var nativeForcedDisabled: Boolean = false
+
     var isEnabled: Boolean = true
         set(value) {
             val changed = field!= value
@@ -150,6 +154,9 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
             }
 
             audioSessionId = sessionId
+            // PATCH: al cambiar de sesión se limpia el forzado del engine,
+            // la nueva sesión debe decidir su propio estado nativo
+            nativeForcedDisabled = false
 
             if (sessionId <= 0) {
                 Log.i(TAG, "Session $sessionId: bypass nativo, solo DSP (Android 12+ safe)")
@@ -182,7 +189,7 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
                 }
 
                 try {
-                    bb.enabled = isEnabled
+                    bb.enabled = isEnabled &&!nativeForcedDisabled
                 } catch (t: Throwable) {
                     Log.w(TAG, "attachToSession: setEnabled($isEnabled) falló: ${t.message}")
                 }
@@ -215,7 +222,7 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
             if (supported) {
                 bb.setStrength(if (isEnabled) strength else 0.toShort())
             }
-            bb.enabled = isEnabled
+            bb.enabled = isEnabled &&!nativeForcedDisabled
         } catch (t: Throwable) {
             Log.w(TAG, "applyNativeStateLocked: ${t.message}")
         }
@@ -230,7 +237,7 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
                 if (supported) {
                     bb.setStrength(if (isEnabled) strength else 0.toShort())
                 }
-                bb.enabled = isEnabled
+                bb.enabled = isEnabled &&!nativeForcedDisabled
             } catch (t: Throwable) {
                 Log.w(TAG, "updateNativeEffect: session=$audioSessionId enabled=$isEnabled strength=$strength error=${t.message}")
             }
@@ -250,17 +257,38 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
      */
     fun getStrengthDb(): Float = (strength.toFloat() / MAX_STRENGTH.toFloat()) * UI_MAX_DB
 
+    // PATCH: escala DSP real para compensación del limiter en ATS2835PEngine.
+    // El engine usaba getStrengthDb() (15dB UI) y sobre-compensaba 25%.
+    // 1000 -> 12.0dB DSP, 600 -> 7.2dB DSP.
+    fun getStrengthDbDsp(): Float = (strength.toFloat() / MAX_STRENGTH.toFloat()) * DSP_MAX_GAIN_DB
+
     fun setStrengthDb(db: Float) {
         val clamped = db.coerceIn(0.0f, UI_MAX_DB)
-        strength = ((clamped / UI_MAX_DB) * MAX_STRENGTH.toFloat()).toInt().toShort().coerceIn(0.toShort(), MAX_STRENGTH)
+        // PATCH: se usa round / toInt con coerceInt en vez de toShort directo
+        // para evitar truncate y drift en round-trip get/set (ej: 7.33dB)
+        val asInt = ((clamped / UI_MAX_DB) * MAX_STRENGTH.toFloat()).toInt()
+           .coerceIn(0, MAX_STRENGTH.toInt())
+        strength = asInt.toShort()
+    }
+
+    // PATCH: setter simétrico en escala DSP, para uso interno del engine si se necesita
+    fun setStrengthDbDsp(db: Float) {
+        val clamped = db.coerceIn(0.0f, DSP_MAX_GAIN_DB)
+        val asInt = ((clamped / DSP_MAX_GAIN_DB) * MAX_STRENGTH.toFloat()).toInt()
+           .coerceIn(0, MAX_STRENGTH.toInt())
+        strength = asInt.toShort()
     }
 
     /**
      * Verifica actividad real del nativo: no-nulo Y enabled=true.
      * La versión anterior solo chequeaba no-nulidad y reportaba activo
      * incluso con el efecto deshabilitado.
+     *
+     * PATCH: tiene en cuenta nativeForcedDisabled seteado por setNativeEnabled(false)
+     * desde ATS2835PEngine para evitar doble boost (+24dB).
      */
     fun isNativeActive(): Boolean {
+        if (nativeForcedDisabled) return false
         synchronized(nativeLock) {
             val bb = nativeBassBoost?: return false
             return try {
@@ -275,10 +303,17 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
      * Fuerza el estado enabled del efecto nativo sin tocar strength ni isEnabled.
      * Usado por ATS2835PEngine para evitar doble boost (+24dB) cuando
      * DynamicsProcessing ya aplica el bajo en software.
+     *
+     * PATCH: guarda nativeForcedDisabled para que isNativeActive() no mienta
+     * cuando isEnabled=true pero el nativo fue forzado a false.
      */
     fun setNativeEnabled(enabled: Boolean) {
         synchronized(nativeLock) {
-            val bb = nativeBassBoost?: return
+            nativeForcedDisabled =!enabled
+            val bb = nativeBassBoost?: run {
+                Log.d(TAG, "setNativeEnabled($enabled): sin instancia nativa, flag guardado")
+                return
+            }
             try {
                 bb.enabled = enabled
                 Log.d(TAG, "setNativeEnabled($enabled) aplicado a sesión $audioSessionId")
@@ -299,6 +334,12 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
             } finally {
                 nativeBassBoost = null
             }
+            // PATCH: se resetea también el flag de forzado
+            nativeForcedDisabled = false
         }
+        // PATCH: se resetea audioSessionId para que hasValidSession() no devuelva
+        // true después de release y el guard de attachToSession no entre en
+        // "ya attachada" con objeto nulo
+        audioSessionId = 0
     }
 }

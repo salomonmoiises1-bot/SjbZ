@@ -327,6 +327,31 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- Spectrum Analyzer Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_aimp_card"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="SPECTRUM ANALYZER"
+                    android:textColor="@color/aimp_orange"
+                    android:textSize="12sp" />
+
+                <com.sjbz.aimp.audio.SpectrumView
+                    android:id="@+id/spectrumView"
+                    android:layout_width="match_parent"
+                    android:layout_height="140dp"
+                    android:layout_marginTop="8dp"
+                    android:background="#0A1420" />
+            </LinearLayout>
+
             <!-- BASS BOOST Psicoacústico Card (ATS2835P Hardware) -->
             <LinearLayout
                 android:id="@+id/cardBassBoost"

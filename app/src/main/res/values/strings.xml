@@ -13,7 +13,7 @@
     <string name="btn_delete">Borrar</string>
     <string name="btn_export">Exportar .sjbz</string>
     <string name="btn_import">Importar .sjbz</string>
-    <string name="ats2835p_dsp_label">SB-Z ATS2835P DSP Studio</string>
+    <string name="ats2835p_dsp_label">SB-Z Studio 32-Band Pro DSP</string>
     <string name="bass_boost_60">60 Hz (Sub)</string>
     <string name="bass_boost_85">85 Hz (Punch)</string>
     <string name="bass_boost_120">120 Hz (Mid)</string>

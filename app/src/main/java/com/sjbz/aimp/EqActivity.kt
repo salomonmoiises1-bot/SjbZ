@@ -3,8 +3,11 @@ package com.sjbz.aimp
 import android.app.AlertDialog
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.media.audiofx.Visualizer
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -28,6 +31,7 @@ import com.sjbz.aimp.audio.GlobalAudioSessionManager
 import com.sjbz.aimp.audio.LimiterProcessor
 import com.sjbz.aimp.audio.MDRCProcessor
 import com.sjbz.aimp.audio.PresetManager
+import com.sjbz.aimp.audio.SpectrumView
 import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.service.PlaybackService
 
@@ -35,7 +39,7 @@ import com.sjbz.aimp.service.PlaybackService
  * 32-Band Equalizer Activity for SjbZ.
  * Displays 32 precision frequency faders, Preamp (-12dB to +12dB),
  * ATS2835P Psychoacoustic BassBoost, 5-band MDRC compression gain controls (-12dB to +12dB),
- * vibrant 10-color dynamic theming, and preset management with .sjbz file support.
+ * vibrant 10-color dynamic theming, and preset management with.sjbz file support.
  */
 class EqActivity : AppCompatActivity() {
 
@@ -89,6 +93,17 @@ class EqActivity : AppCompatActivity() {
     private lateinit var btnExportSjbz: Button
     private lateinit var btnImportSjbz: Button
 
+    // Spectrum Analyzer
+    private lateinit var spectrumView: SpectrumView
+    private var visualizer: Visualizer? = null
+    private val spectrumHandler = Handler(Looper.getMainLooper())
+    private val spectrumRunnable = object : Runnable {
+        override fun run() {
+            try { spectrumView.setIdle() } catch(_: Exception){}
+            spectrumHandler.postDelayed(this, 60)
+        }
+    }
+
     private val bandSeekBars = ArrayList<SeekBar>()
     private val bandValueLabels = ArrayList<TextView>()
     private val mdrcSeekBars = ArrayList<SeekBar>()
@@ -97,10 +112,10 @@ class EqActivity : AppCompatActivity() {
     private var isUpdatingUiFromPreset = false
     private var currentThemeColor: Int = 0xFF00E5FF.toInt() // Default SjbZ Studio Cyan
 
-    // Export .sjbz file launcher
+    // Export.sjbz file launcher
     private val exportSjbzLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
-        if (uri != null) {
-            val currentPresetName = spinnerPresets.selectedItem?.toString() ?: "SjbZ_Preset"
+        if (uri!= null) {
+            val currentPresetName = spinnerPresets.selectedItem?.toString()?: "SjbZ_Preset"
             val preset = equalizerProcessor.toEqPreset(
                 name = currentPresetName,
                 isCustom = true,
@@ -108,20 +123,20 @@ class EqActivity : AppCompatActivity() {
                 color = currentThemeColor
             )
             val success = presetManager.exportPresetToSjbz(preset, uri)
-            Toast.makeText(this, if (success) "Exportado a .sjbz con éxito" else "Error al exportar", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (success) "Exportado a.sjbz con éxito" else "Error al exportar", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Import .sjbz file launcher
+    // Import.sjbz file launcher
     private val importSjbzLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
+        if (uri!= null) {
             val imported = presetManager.importPresetFromSjbz(uri)
-            if (imported != null) {
+            if (imported!= null) {
                 Toast.makeText(this, "Preset '${imported.name}' importado", Toast.LENGTH_SHORT).show()
                 refreshPresetsSpinner(imported.name)
                 loadPresetToUi(imported)
             } else {
-                Toast.makeText(this, "Error al importar archivo .sjbz", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Error al importar archivo.sjbz", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -133,9 +148,9 @@ class EqActivity : AppCompatActivity() {
         presetManager = PresetManager(this)
 
         val liveEngine = PlaybackService.instance?.atsEngine
-        equalizerProcessor = liveEngine?.equalizer ?: EqualizerProcessor()
-        mdrcProcessor = liveEngine?.mdrc ?: MDRCProcessor()
-        bassBoostProcessor = liveEngine?.bassBoost ?: BassBoostProcessor()
+        equalizerProcessor = liveEngine?.equalizer?: EqualizerProcessor()
+        mdrcProcessor = liveEngine?.mdrc?: MDRCProcessor()
+        bassBoostProcessor = liveEngine?.bassBoost?: BassBoostProcessor()
         equalizerProcessor.bassBoostProcessor = bassBoostProcessor
 
         initViews()
@@ -148,11 +163,58 @@ class EqActivity : AppCompatActivity() {
         setupPresetsSpinner()
         setupButtons()
 
+        spectrumView = findViewById(R.id.spectrumView)
+        setupVisualizer()
+        spectrumHandler.post(spectrumRunnable)
+
         // Load active preset initially
         val activeName = presetManager.getActivePresetName()
         val activePreset = presetManager.getAllPresets().find { it.name.equals(activeName, ignoreCase = true) }
-            ?: presetManager.getFactoryPresets().first()
+           ?: presetManager.getFactoryPresets().first()
         loadPresetToUi(activePreset)
+    }
+
+    private fun setupVisualizer() {
+        try {
+            visualizer?.release()
+            val sessionId = PlaybackService.instance?.atsEngine?.getAudioSessionId()
+               ?: PlaybackService.instance?.player?.audioSessionId?: 0
+            if (sessionId == 0) return
+            visualizer = Visualizer(sessionId).apply {
+                captureSize = Visualizer.getCaptureSizeRange()[1]
+                setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                    override fun onWaveFormDataCapture(v: Visualizer?, wave: ByteArray?, rate: Int) {}
+                    override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, rate: Int) {
+                        if (fft == null) return
+                        val mags = FloatArray(fft.size / 2)
+                        for (i in mags.indices) {
+                            val r = fft[i*2].toInt()
+                            val im = fft[i*2+1].toInt()
+                            var mag = kotlin.math.sqrt((r*r + im*im).toFloat()) / 128f
+                            mags[i] = mag.coerceIn(0f, 1f)
+                        }
+                        runOnUiThread {
+                            spectrumHandler.removeCallbacks(spectrumRunnable)
+                            spectrumView.updateSpectrum(mags)
+                            spectrumHandler.postDelayed(spectrumRunnable, 60)
+                        }
+                    }
+                }, Visualizer.getMaxCaptureRate() / 2, false, true)
+                enabled = true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        try { visualizer?.enabled = true } catch(_: Exception){}
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { visualizer?.enabled = false } catch(_: Exception){}
     }
 
     private fun setupToolbar() {
@@ -271,14 +333,14 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun syncAllEffects() {
-        val limiter = PlaybackService.instance?.atsEngine?.limiter ?: LimiterProcessor()
+        val limiter = PlaybackService.instance?.atsEngine?.limiter?: LimiterProcessor()
         globalSessionManager.syncAudioEffects(equalizerProcessor, mdrcProcessor, limiter, bassBoostProcessor)
     }
 
     private fun showGlobalHelpDialog() {
         AlertDialog.Builder(this)
-            .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
-            .setMessage(
+           .setTitle("Modo Global (Estilo Wavelet / Sin Root)")
+           .setMessage(
                 "¿Cómo funciona en Android?\n\n" +
                 "1. Spotify, Deezer, Tidal, Apple Music, VLC, Poweramp:\n" +
                 "Estas apps transmiten su sesión de audio al sistema. SjbZ Studio la intercepta automáticamente y le aplica la curva de 32 bandas ISO, MDRC y limitador ATS2835P.\n\n" +
@@ -288,8 +350,8 @@ class EqActivity : AppCompatActivity() {
                 "Para apps que intenten bloquear la sesión, puedes otorgar el permiso DUMP conectando el móvil a una PC y ejecutando:\n\n" +
                 "adb shell pm grant com.sjbz.player android.permission.DUMP"
             )
-            .setPositiveButton("Entendido", null)
-            .show()
+           .setPositiveButton("Entendido", null)
+           .show()
     }
 
     /**
@@ -370,7 +432,7 @@ class EqActivity : AppCompatActivity() {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     val gainDb = (progress - 120) / 10.0f
                     tvGain.text = String.format("%+.1f", gainDb)
-                    if (fromUser && !isUpdatingUiFromPreset) {
+                    if (fromUser &&!isUpdatingUiFromPreset) {
                         equalizerProcessor.setBandGain(bandIndex, gainDb)
                         PlaybackService.instance?.atsEngine?.updateEqualizer()
                         syncAllEffects()
@@ -410,7 +472,7 @@ class EqActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val db = (progress - 120) / 10.0f
                 tvPreampValue.text = String.format("%+.1f dB", db)
-                if (fromUser && !isUpdatingUiFromPreset) {
+                if (fromUser &&!isUpdatingUiFromPreset) {
                     equalizerProcessor.preampDb = db
                     PlaybackService.instance?.atsEngine?.updateEqualizer()
                     syncAllEffects()
@@ -465,7 +527,7 @@ class EqActivity : AppCompatActivity() {
 
         seekBarBassBoost.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && !isUpdatingUiFromPreset) {
+                if (fromUser &&!isUpdatingUiFromPreset) {
                     bassBoostProcessor.strength = progress.toShort()
                     updateBassBoostLabel()
                     PlaybackService.instance?.atsEngine?.bassBoost?.strength = progress.toShort()
@@ -556,7 +618,7 @@ class EqActivity : AppCompatActivity() {
             val tv = mdrcValueLabels[i]
             val bandIndex = i
             val band = mdrcProcessor.getBand(bandIndex)
-            val currentGain = band?.gainDb ?: 0.0f
+            val currentGain = band?.gainDb?: 0.0f
             sb.progress = (currentGain * 10.0f + 120).toInt().coerceIn(0, 240)
             tv.text = String.format("%+.1f dB", currentGain)
 
@@ -564,7 +626,7 @@ class EqActivity : AppCompatActivity() {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     val gainDb = (progress - 120) / 10.0f
                     tv.text = String.format("%+.1f dB", gainDb)
-                    if (fromUser && !isUpdatingUiFromPreset) {
+                    if (fromUser &&!isUpdatingUiFromPreset) {
                         mdrcProcessor.getBand(bandIndex)?.gainDb = gainDb
                         PlaybackService.instance?.atsEngine?.updateMDRC()
                         syncAllEffects()
@@ -591,11 +653,11 @@ class EqActivity : AppCompatActivity() {
 
         spinnerPresets.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val selectedName = spinnerPresets.selectedItem?.toString() ?: return
+                val selectedName = spinnerPresets.selectedItem?.toString()?: return
                 presetManager.setActivePresetName(selectedName)
                 val allPresets = presetManager.getAllPresets()
                 val targetPreset = allPresets.find { it.name.equals(selectedName, ignoreCase = true) }
-                if (targetPreset != null) {
+                if (targetPreset!= null) {
                     loadPresetToUi(targetPreset)
                 }
             }
@@ -609,7 +671,7 @@ class EqActivity : AppCompatActivity() {
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
         spinnerPresets.adapter = adapter
 
-        val target = selectPresetName ?: presetManager.getActivePresetName()
+        val target = selectPresetName?: presetManager.getActivePresetName()
         val idx = names.indexOf(target)
         if (idx >= 0) {
             spinnerPresets.setSelection(idx)
@@ -658,6 +720,9 @@ class EqActivity : AppCompatActivity() {
         btnSavePreset.setTextColor(color)
         switchEqEnabled.thumbTintList = colorList
         switchMdrcEnabled.thumbTintList = colorList
+
+        // Spectrum sigue el color del preset
+        try { spectrumView.setThemeColor(color) } catch(_: Exception){}
     }
 
     private fun loadPresetToUi(preset: EqPreset) {
@@ -728,26 +793,26 @@ class EqActivity : AppCompatActivity() {
         }
 
         btnDeletePreset.setOnClickListener {
-            val selected = spinnerPresets.selectedItem?.toString() ?: return@setOnClickListener
+            val selected = spinnerPresets.selectedItem?.toString()?: return@setOnClickListener
             if (presetManager.defaultPresetNames.contains(selected)) {
                 Toast.makeText(this, "No se pueden borrar presets de fábrica", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             AlertDialog.Builder(this)
-                .setTitle("Borrar Preset")
-                .setMessage("¿Deseas eliminar el preset '$selected'?")
-                .setPositiveButton("Borrar") { _, _ ->
+               .setTitle("Borrar Preset")
+               .setMessage("¿Deseas eliminar el preset '$selected'?")
+               .setPositiveButton("Borrar") { _, _ ->
                     presetManager.deletePreset(selected)
                     refreshPresetsSpinner("ATS-2835P Master")
                     Toast.makeText(this, "Preset eliminado", Toast.LENGTH_SHORT).show()
                 }
-                .setNegativeButton("Cancelar", null)
-                .show()
+               .setNegativeButton("Cancelar", null)
+               .show()
         }
 
         btnExportSjbz.setOnClickListener {
-            val currentPresetName = spinnerPresets.selectedItem?.toString() ?: "SjbZ_Preset"
+            val currentPresetName = spinnerPresets.selectedItem?.toString()?: "SjbZ_Preset"
             exportSjbzLauncher.launch("$currentPresetName.sjbz")
         }
 
@@ -805,9 +870,9 @@ class EqActivity : AppCompatActivity() {
         }
 
         dialog = AlertDialog.Builder(this)
-            .setView(container)
-            .setNegativeButton("Cancelar", null)
-            .create()
+           .setView(container)
+           .setNegativeButton("Cancelar", null)
+           .create()
 
         dialog.show()
     }
@@ -820,14 +885,14 @@ class EqActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Guardar Preset")
-            .setView(input)
-            .setPositiveButton("Guardar") { _, _ ->
+           .setTitle("Guardar Preset")
+           .setView(input)
+           .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
                     // Preserve color if preset already exists, else use currentThemeColor
                     val existing = presetManager.getCustomPresets().find { it.name.equals(name, ignoreCase = true) }
-                    val colorToSave = existing?.color ?: currentThemeColor
+                    val colorToSave = existing?.color?: currentThemeColor
                     val currentPreset = equalizerProcessor.toEqPreset(
                         name = name,
                         isCustom = true,
@@ -840,11 +905,13 @@ class EqActivity : AppCompatActivity() {
                     Toast.makeText(this, "Preset '$name' guardado", Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("Cancelar", null)
-            .show()
+           .setNegativeButton("Cancelar", null)
+           .show()
     }
 
     override fun onDestroy() {
+        spectrumHandler.removeCallbacks(spectrumRunnable)
+        try { visualizer?.release() } catch(_: Exception){}
         super.onDestroy()
         globalSessionManager.onSessionsChangedListener = null
     }

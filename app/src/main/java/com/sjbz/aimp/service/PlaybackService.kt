@@ -88,7 +88,8 @@ class PlaybackService : MediaSessionService() {
     private lateinit var bluetoothDetector: BluetoothDetector
     private lateinit var prefs: SharedPreferences
 
-    // Spectrum bridge como lambda - coincide con SjbzDspProcessor.fftListener: ((FloatArray) -> Unit)?
+    // Spectrum bridge como propiedad - coincide con SjbzDspProcessor.fftListener: ((FloatArray) -> Unit)?
+    // NOTA: no agregar fun setSpectrumListener(), causa Platform declaration clash
     var spectrumListener: ((FloatArray) -> Unit)? = null
 
     private var cachedArtworkTrackId: Long = -999L
@@ -128,10 +129,6 @@ class PlaybackService : MediaSessionService() {
 
     fun setBassBoost(enabled: Boolean, freqHz: Float, gainDb: Float) {
         dspProcessor.setBassBoost(enabled, freqHz, gainDb)
-    }
-
-    fun setSpectrumListener(listener: ((FloatArray) -> Unit)?) {
-        spectrumListener = listener
     }
 
     // -------------------------------------------------------------------------

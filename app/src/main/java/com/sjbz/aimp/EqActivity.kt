@@ -30,14 +30,6 @@ import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.service.PlaybackService
 import com.sjbz.aimp.ui.AudioSpectrumVisualizerView
 
-/**
- * EqActivity PRO - Professional 32-Band ISO Equalizer Studio.
- *
- * - 32 vertical ISO sliders (-12dB..+12dB) con debounce 60ms
- * - Bass Boost RBJ low-shelf + Preamp + Master DSP
- * - Emulación ATS2835P con Wet/Dry y auto-bypass BT
- * - Spectrum 60fps vía PlaybackService.spectrumListener (lambda, no pisa fftListener del DSP)
- */
 class EqActivity : AppCompatActivity() {
 
     companion object {

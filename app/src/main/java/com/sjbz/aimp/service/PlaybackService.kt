@@ -18,7 +18,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -80,15 +82,15 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildMediaItem(track: Track): MediaItem {
         val metadata = MediaMetadata.Builder()
-        .setTitle(track.title)
-        .setArtist(track.artist)
-        .setAlbumTitle(track.album)
-        .build()
+       .setTitle(track.title)
+       .setArtist(track.artist)
+       .setAlbumTitle(track.album)
+       .build()
         return MediaItem.Builder()
-        .setUri(track.uri)
-        .setMediaId(track.id.toString())
-        .setMediaMetadata(metadata)
-        .build()
+       .setUri(track.uri)
+       .setMediaId(track.id.toString())
+       .setMediaMetadata(metadata)
+       .build()
     }
 
     override fun onCreate() {
@@ -114,20 +116,23 @@ class PlaybackService : MediaSessionService() {
         bluetoothDetector.start()
 
         val audioAttributes = AudioAttributes.Builder()
-     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-     .setUsage(C.USAGE_MEDIA)
-     .build()
+    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+    .setUsage(C.USAGE_MEDIA)
+    .build()
 
-        val audioSink = DefaultAudioSink.Builder()
-     .setAudioProcessors(arrayOf(sjbzEqProcessor))
-     .build()
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
+                return DefaultAudioSink.Builder()
+                .setAudioProcessors(arrayOf(sjbzEqProcessor))
+                .build()
+            }
+        }
 
-        player = ExoPlayer.Builder(this)
-     .setAudioSink(audioSink)
-     .setAudioAttributes(audioAttributes, true)
-     .setHandleAudioBecomingNoisy(true)
-     .setWakeMode(C.WAKE_MODE_LOCAL)
-     .build()
+        player = ExoPlayer.Builder(this, renderersFactory)
+    .setAudioAttributes(audioAttributes, true)
+    .setHandleAudioBecomingNoisy(true)
+    .setWakeMode(C.WAKE_MODE_LOCAL)
+    .build()
 
         audioChain.bindPlayer(player)
 
@@ -166,16 +171,12 @@ class PlaybackService : MediaSessionService() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        // FIX CI: MediaSession.Callback de media3 no tiene onSkipToNext/onSkipToPrevious/onPlay/onPause
-        // con esas firmas. Esos "overrides nothing" rompían el build. Se usa callback por defecto;
-        // play/next/prev se manejan vía Player (ExoPlayer) y via intents ACTION_*.
-        // Si necesitas interceptar comandos, hazlo con onConnect/onPlaybackResumption o Player.Listener.
         val callback = object : MediaSession.Callback {
         }
         mediaSession = MediaSession.Builder(this, player)
-     .setSessionActivity(sessionActivityPendingIntent)
-     .setCallback(callback)
-     .build()
+    .setSessionActivity(sessionActivityPendingIntent)
+    .setCallback(callback)
+    .build()
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
     }
@@ -223,18 +224,18 @@ class PlaybackService : MediaSessionService() {
         val stopIntent = PendingIntent.getService(this, 4, Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
         return NotificationCompat.Builder(this, CHANNEL_ID)
-     .setContentTitle(title).setContentText(artist)
-     .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
-     .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
-     .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-     .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-     .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
-         .setMediaSession(mediaSession?.sessionCompatToken)
-         .setShowActionsInCompactView(0, 1, 2))
-     .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
-     .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-     .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
-     .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
+    .setContentTitle(title).setContentText(artist)
+    .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
+    .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
+    .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+    .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+    .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+        .setMediaSession(mediaSession?.sessionCompatToken)
+        .setShowActionsInCompactView(0, 1, 2))
+    .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
+    .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+    .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
+    .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -348,7 +349,7 @@ class PlaybackService : MediaSessionService() {
         if (player.currentPosition > 3000) { player.seekTo(0); return }
         val prevIndex = currentTrackIndex - 1
         if (prevIndex >= 0) playTrackAtIndex(prevIndex, true)
-        else if (isLoopPlaylistEnabled) playTrackAtIndex(playlist.size - 1, true)
+        else if (isLoopPlaylistEnabled) playTrackAtIndex(0, true)
     }
     private fun onSongEnded() {
         if (playlist.isEmpty()) return

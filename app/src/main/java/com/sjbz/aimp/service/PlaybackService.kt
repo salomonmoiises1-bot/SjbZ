@@ -43,25 +43,18 @@ import com.sjbz.aimp.audio.SjbzDspProcessor
 import com.sjbz.aimp.model.Track
 import com.sjbz.aimp.utils.BluetoothDetector
 
-/**
- * Robust Foreground MediaSessionService for SjbZ player.
- * Powered by Media3 ExoPlayer with direct SjbzDspProcessor floating-point DSP pipeline.
- */
 class PlaybackService : MediaSessionService() {
 
     companion object {
         const val CHANNEL_ID = "sjbz_playback_channel"
         const val NOTIFICATION_ID = 2835
-
         const val ACTION_TOGGLE = "com.sjbz.aimp.ACTION_TOGGLE"
         const val ACTION_PREV = "com.sjbz.aimp.ACTION_PREV"
         const val ACTION_NEXT = "com.sjbz.aimp.ACTION_NEXT"
         const val ACTION_STOP = "com.sjbz.aimp.ACTION_STOP"
-
         private const val PREFS_DSP = "sjbz_dsp_pro"
         private const val KEY_EMU_ENABLED = "emu_enabled"
         private const val KEY_EMU_AMOUNT = "emu_amount"
-
         var instance: PlaybackService? = null
             private set
     }
@@ -72,46 +65,32 @@ class PlaybackService : MediaSessionService() {
     }
 
     private val binder = LocalBinder()
-
     lateinit var player: ExoPlayer
         private set
     private var mediaSession: MediaSession? = null
     private lateinit var mediaSessionCompat: MediaSessionCompat
-
     private val dspProcessor = SjbzDspProcessor()
     fun getDsp(): SjbzDspProcessor = dspProcessor
-
     lateinit var atsEngine: ATS2835PEngine
         private set
     lateinit var audioChain: AudioChain
         private set
     private lateinit var bluetoothDetector: BluetoothDetector
     private lateinit var prefs: SharedPreferences
-
-    // Spectrum bridge como propiedad - coincide con SjbzDspProcessor.fftListener: ((FloatArray) -> Unit)?
-    // NOTA: no agregar fun setSpectrumListener(), causa Platform declaration clash
     var spectrumListener: ((FloatArray) -> Unit)? = null
-
     private var cachedArtworkTrackId: Long = -999L
     private var cachedArtworkBitmap: Bitmap? = null
-
     private val playlist = mutableListOf<Track>()
     private var currentTrackIndex = -1
     var isLoopPlaylistEnabled: Boolean = true
-
     private var wakeLock: PowerManager.WakeLock? = null
-
     var onTrackChangedListener: ((Track?, Int) -> Unit)? = null
     var onPlaybackStateChangedListener: ((Boolean) -> Unit)? = null
-
-    // -------------------------------------------------------------------------
-    // DSP Control Surface - Emulation ATS2835P
-    // -------------------------------------------------------------------------
 
     fun setEmulationEnabled(enabled: Boolean) {
         dspProcessor.setEmulationEnabled(enabled)
         prefs.edit().putBoolean(KEY_EMU_ENABLED, enabled).apply()
-        updateNotification(player.isPlaying)
+        if (::player.isInitialized) updateNotification(player.isPlaying)
     }
 
     fun setEmulationAmount(amount: Float) {
@@ -123,17 +102,9 @@ class PlaybackService : MediaSessionService() {
     fun isEmulationEnabled(): Boolean = dspProcessor.isEmulationEnabled()
     fun getEmulationAmount(): Float = dspProcessor.getEmulationAmount()
 
-    // -------------------------------------------------------------------------
-    // DSP Control Surface - Bass Boost (firma real: enabled, freq, gain)
-    // -------------------------------------------------------------------------
-
     fun setBassBoost(enabled: Boolean, freqHz: Float, gainDb: Float) {
         dspProcessor.setBassBoost(enabled, freqHz, gainDb)
     }
-
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
 
     override fun onCreate() {
         super.onCreate()
@@ -145,54 +116,43 @@ class PlaybackService : MediaSessionService() {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SjbZ:PlaybackWakeLock").apply {
                 setReferenceCounted(false)
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
 
         atsEngine = ATS2835PEngine(dspProcessor)
         audioChain = AudioChain(this, atsEngine)
-
-        // Bridge DSP fftListener (lambda) -> UI spectrumListener (lambda)
-        dspProcessor.fftListener = { samples ->
-            spectrumListener?.invoke(samples)
-        }
-
+        dspProcessor.fftListener = { samples -> spectrumListener?.invoke(samples) }
         dspProcessor.setEmulationEnabled(prefs.getBoolean(KEY_EMU_ENABLED, false))
         dspProcessor.setEmulationAmount(prefs.getFloat(KEY_EMU_AMOUNT, 0.8f))
 
-        bluetoothDetector = BluetoothDetector(this) { connected ->
-            dspProcessor.setBluetoothConnected(connected)
-            updateNotification(player.isPlaying)
-            updateMediaSessionMetadataAndState()
-        }
-        bluetoothDetector.start()
-        dspProcessor.setBluetoothConnected(bluetoothDetector.isBluetoothA2dpConnected())
-
         val audioAttributes = AudioAttributes.Builder()
-           .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-           .setUsage(C.USAGE_MEDIA)
-           .build()
+          .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+          .setUsage(C.USAGE_MEDIA)
+          .build()
 
         val renderersFactory = object : DefaultRenderersFactory(this) {
-            override fun buildAudioSink(
-                context: Context,
-                enableFloatOutput: Boolean,
-                enableAudioTrackPlaybackParams: Boolean
-            ): AudioSink {
-                return DefaultAudioSink.Builder(context)
-                   .setEnableFloatOutput(true)
-                   .setAudioProcessors(arrayOf(dspProcessor))
-                   .build()
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
+                return DefaultAudioSink.Builder(context).setEnableFloatOutput(true).setAudioProcessors(arrayOf(dspProcessor)).build()
             }
         }
 
         player = ExoPlayer.Builder(this, renderersFactory)
-           .setAudioAttributes(audioAttributes, true)
-           .setHandleAudioBecomingNoisy(true)
-           .setWakeMode(C.WAKE_MODE_LOCAL)
-           .build()
+          .setAudioAttributes(audioAttributes, true)
+          .setHandleAudioBecomingNoisy(true)
+          .setWakeMode(C.WAKE_MODE_LOCAL)
+          .build()
 
         audioChain.bindPlayer(player)
+
+        // FIX: Bluetooth despues del player
+        bluetoothDetector = BluetoothDetector(this) { connected ->
+            dspProcessor.setBluetoothConnected(connected)
+            if (::player.isInitialized) {
+                updateNotification(player.isPlaying)
+                updateMediaSessionMetadataAndState()
+            }
+        }
+        bluetoothDetector.start()
+        dspProcessor.setBluetoothConnected(bluetoothDetector.isBluetoothA2dpConnected())
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -203,32 +163,21 @@ class PlaybackService : MediaSessionService() {
                 updateMediaSessionMetadataAndState()
                 onPlaybackStateChangedListener?.invoke(isPlaying)
             }
-
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 handleWakeLockState(isPlaying)
                 updateNotification(isPlaying)
                 updateMediaSessionMetadataAndState()
                 onPlaybackStateChangedListener?.invoke(isPlaying)
             }
-
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val currentTrack = getCurrentTrack()
                 updateNotification(player.isPlaying)
                 updateMediaSessionMetadataAndState()
-                onTrackChangedListener?.invoke(currentTrack, currentTrackIndex)
+                onTrackChangedListener?.invoke(getCurrentTrack(), currentTrackIndex)
             }
         })
 
-        val sessionActivityPendingIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        mediaSession = MediaSession.Builder(this, player)
-           .setSessionActivity(sessionActivityPendingIntent)
-           .build()
-
+        val sessionActivityPendingIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        mediaSession = MediaSession.Builder(this, player).setSessionActivity(sessionActivityPendingIntent).build()
         mediaSessionCompat = MediaSessionCompat(this, "SjbZMediaSession").apply {
             setSessionActivity(sessionActivityPendingIntent)
             isActive = true
@@ -242,7 +191,6 @@ class PlaybackService : MediaSessionService() {
             })
         }
         updateMediaSessionMetadataAndState()
-
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
     }
@@ -260,21 +208,14 @@ class PlaybackService : MediaSessionService() {
 
     private fun handleWakeLockState(isPlaying: Boolean) {
         try {
-            if (isPlaying) {
-                if (wakeLock?.isHeld == false) wakeLock?.acquire(2 * 60 * 60 * 1000L)
-            } else {
-                if (wakeLock?.isHeld == true) wakeLock?.release()
-            }
+            if (isPlaying) { if (wakeLock?.isHeld == false) wakeLock?.acquire(2*60*60*1000L) }
+            else { if (wakeLock?.isHeld == true) wakeLock?.release() }
         } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "SjbZ Reproducción de Audio",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
+            val channel = NotificationChannel(CHANNEL_ID, "SjbZ Reproducción de Audio", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Reproducción continua de música en segundo plano y pantalla bloqueada con Pro DSP"
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -285,50 +226,31 @@ class PlaybackService : MediaSessionService() {
 
     private fun updateMediaSessionMetadataAndState() {
         if (!::mediaSessionCompat.isInitialized) return
+        if (!::player.isInitialized) return
         val isPlaying = player.isPlaying
         val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
-        val actions = PlaybackStateCompat.ACTION_PLAY or
-                PlaybackStateCompat.ACTION_PAUSE or
-                PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                PlaybackStateCompat.ACTION_STOP or
-                PlaybackStateCompat.ACTION_SEEK_TO
-
-        mediaSessionCompat.setPlaybackState(
-            PlaybackStateCompat.Builder()
-               .setActions(actions)
-               .setState(state, player.currentPosition, player.playbackParameters.speed)
-               .build()
-        )
-
+        val actions = PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_STOP or PlaybackStateCompat.ACTION_SEEK_TO
+        mediaSessionCompat.setPlaybackState(PlaybackStateCompat.Builder().setActions(actions).setState(state, player.currentPosition, player.playbackParameters.speed).build())
         val currentTrack = getCurrentTrack()
         val artworkBitmap = getArtworkBitmap(currentTrack)
-        mediaSessionCompat.setMetadata(
-            MediaMetadataCompat.Builder()
-               .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTrack?.title?: "SB-Z Hi-Res Player")
-               .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentTrack?.artist?: "SB-Z Studio Pro DSP")
-               .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, currentTrack?.album?: "Studio Master 32-bit")
-               .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST, currentTrack?.artist?: "SB-Z Studio Pro DSP")
-               .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, if (player.duration > 0) player.duration else (currentTrack?.duration?: 0L))
-               .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, artworkBitmap)
-               .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, artworkBitmap)
-               .build()
-        )
+        mediaSessionCompat.setMetadata(MediaMetadataCompat.Builder()
+          .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTrack?.title?: "SB-Z Hi-Res Player")
+          .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentTrack?.artist?: "SB-Z Studio Pro DSP")
+          .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, currentTrack?.album?: "Studio Master 32-bit")
+          .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, if (player.duration > 0) player.duration else (currentTrack?.duration?: 0L))
+          .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, artworkBitmap)
+          .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, artworkBitmap)
+          .build())
     }
 
     private fun getArtworkBitmap(track: Track?): Bitmap {
-        if (track!= null && track.id == cachedArtworkTrackId && cachedArtworkBitmap!= null) {
-            return cachedArtworkBitmap!!
-        }
+        if (track!= null && track.id == cachedArtworkTrackId && cachedArtworkBitmap!= null) return cachedArtworkBitmap!!
         var bitmap: Bitmap? = null
         if (track!= null && (track.uri.startsWith("content://") || track.uri.startsWith("file://"))) {
             try {
                 val retriever = MediaMetadataRetriever()
                 retriever.setDataSource(this, Uri.parse(track.uri))
-                retriever.embeddedPicture?.let { artBytes ->
-                    bitmap = android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
-                }
+                retriever.embeddedPicture?.let { artBytes -> bitmap = android.graphics.BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size) }
                 retriever.release()
             } catch (_: Exception) {}
         }
@@ -337,31 +259,24 @@ class PlaybackService : MediaSessionService() {
             val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmp)
             val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-            paint.shader = LinearGradient(0f, 0f, size.toFloat(), size.toFloat(),
-                Color.parseColor("#080D14"), Color.parseColor("#121F33"), Shader.TileMode.CLAMP)
+            paint.shader = LinearGradient(0f, 0f, size.toFloat(), size.toFloat(), Color.parseColor("#080D14"), Color.parseColor("#121F33"), Shader.TileMode.CLAMP)
             canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), paint)
             paint.shader = null
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 2f
-            paint.color = Color.parseColor("#1A2942")
-            val cx = size / 2f; val cy = size / 2f
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 2f; paint.color = Color.parseColor("#1A2942")
+            val cx = size/2f; val cy = size/2f
             for (r in 60..220 step 20) canvas.drawCircle(cx, cy, r.toFloat(), paint)
-            paint.style = Paint.Style.FILL
-            paint.color = Color.parseColor("#00E5FF"); paint.alpha = 40
+            paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#00E5FF"); paint.alpha = 40
             canvas.drawCircle(cx, cy, 70f, paint)
-            paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
-            paint.color = Color.parseColor("#00E5FF"); paint.alpha = 255
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f; paint.color = Color.parseColor("#00E5FF"); paint.alpha = 255
             canvas.drawCircle(cx, cy, 70f, paint)
-            paint.style = Paint.Style.FILL
-            paint.color = Color.parseColor("#05080E")
+            paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#05080E")
             canvas.drawCircle(cx, cy, 18f, paint)
-            paint.color = Color.parseColor("#00E5FF"); paint.textSize = 28f
-            paint.textAlign = Paint.Align.CENTER; paint.isFakeBoldText = true
-            canvas.drawText("SB-Z STUDIO", cx, cy - 105f, paint)
+            paint.color = Color.parseColor("#00E5FF"); paint.textSize = 28f; paint.textAlign = Paint.Align.CENTER; paint.isFakeBoldText = true
+            canvas.drawText("SB-Z STUDIO", cx, cy-105f, paint)
             paint.color = Color.parseColor("#E2E8F0"); paint.textSize = 22f
-            canvas.drawText((track?.title?: "Hi-Res Audio").take(22), cx, cy + 130f, paint)
+            canvas.drawText((track?.title?: "Hi-Res Audio").take(22), cx, cy+130f, paint)
             paint.color = Color.parseColor("#94A3B8"); paint.textSize = 16f
-            canvas.drawText((track?.artist?: "Pro 32-bit DSP").take(26), cx, cy + 160f, paint)
+            canvas.drawText((track?.artist?: "Pro 32-bit DSP").take(26), cx, cy+160f, paint)
             bitmap = bmp
         }
         if (track!= null) cachedArtworkTrackId = track.id
@@ -371,96 +286,58 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildNotification(isPlaying: Boolean): Notification {
         val currentTrack = getCurrentTrack()
-        val openActivityIntent = PendingIntent.getActivity(this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val prevIntent = PendingIntent.getService(this, 1,
-            Intent(this, PlaybackService::class.java).apply { action = ACTION_PREV },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val toggleIntent = PendingIntent.getService(this, 2,
-            Intent(this, PlaybackService::class.java).apply { action = ACTION_TOGGLE },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val nextIntent = PendingIntent.getService(this, 3,
-            Intent(this, PlaybackService::class.java).apply { action = ACTION_NEXT },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val stopIntent = PendingIntent.getService(this, 4,
-            Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-
-        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
-           .setMediaSession(mediaSessionCompat.sessionToken)
-           .setShowActionsInCompactView(0, 1, 2)
-           .setShowCancelButton(true)
-           .setCancelButtonIntent(stopIntent)
-
+        val openActivityIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val prevIntent = PendingIntent.getService(this, 1, Intent(this, PlaybackService::class.java).apply { action = ACTION_PREV }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val toggleIntent = PendingIntent.getService(this, 2, Intent(this, PlaybackService::class.java).apply { action = ACTION_TOGGLE }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val nextIntent = PendingIntent.getService(this, 3, Intent(this, PlaybackService::class.java).apply { action = ACTION_NEXT }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val stopIntent = PendingIntent.getService(this, 4, Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle().setMediaSession(mediaSessionCompat.sessionToken).setShowActionsInCompactView(0,1,2).setShowCancelButton(true).setCancelButtonIntent(stopIntent)
         val emuTag = when {
             dspProcessor.isBluetoothAutoBypass() && dspProcessor.isBluetoothConnected() -> " [BT Bypass]"
             dspProcessor.isEmulationEnabled() -> " [ATS2835P]"
             else -> ""
         }
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
-           .setContentTitle(currentTrack?.title?: "SB-Z Hi-Res Player")
-           .setContentText(currentTrack?.artist?: "SB-Z Studio Pro DSP")
-           .setSubText("SB-Z • 32-Band Pro DSP$emuTag")
-           .setSmallIcon(R.drawable.ic_launcher_foreground)
-           .setLargeIcon(getArtworkBitmap(currentTrack))
-           .setStyle(mediaStyle)
-           .setContentIntent(openActivityIntent)
-           .setOngoing(isPlaying)
-           .setOnlyAlertOnce(true)
-           .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-           .setPriority(NotificationCompat.PRIORITY_MAX)
-           .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-           .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
-           .addAction(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-           .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
-           .addAction(R.drawable.ic_stop, "Detener", stopIntent)
-           .build()
+          .setContentTitle(currentTrack?.title?: "SB-Z Hi-Res Player")
+          .setContentText(currentTrack?.artist?: "SB-Z Studio Pro DSP")
+          .setSubText("SB-Z • 32-Band Pro DSP$emuTag")
+          .setSmallIcon(R.drawable.ic_launcher_foreground)
+          .setLargeIcon(getArtworkBitmap(currentTrack))
+          .setStyle(mediaStyle).setContentIntent(openActivityIntent).setOngoing(isPlaying).setOnlyAlertOnce(true)
+          .setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+          .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
+          .addAction(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+          .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
+          .addAction(R.drawable.ic_stop, "Detener", stopIntent)
+          .build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
         val notification = buildNotification(isPlaying)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        else startForeground(NOTIFICATION_ID, notification)
     }
 
     private fun updateNotification(isPlaying: Boolean) {
         try {
             updateMediaSessionMetadataAndState()
-            (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
-               ?.notify(NOTIFICATION_ID, buildNotification(isPlaying))
+            (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)?.notify(NOTIFICATION_ID, buildNotification(isPlaying))
         } catch (e: Exception) { e.printStackTrace() }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
-
-    override fun onBind(intent: Intent?): IBinder {
-        super.onBind(intent)
-        return binder
-    }
+    override fun onBind(intent: Intent?): IBinder { super.onBind(intent); return binder }
 
     fun setPlaylist(tracks: List<Track>, startIndex: Int = 0, startPlaying: Boolean = true) {
         if (tracks.isEmpty()) return
-        val isSameList = playlist.size == tracks.size && playlist.indices.all { playlist[it].id == tracks[it].id }
-        if (isSameList) {
-            if (startIndex in playlist.indices) playTrackAtIndex(startIndex, startPlaying)
-            return
-        }
         playlist.clear(); playlist.addAll(tracks)
         val mediaItems = ArrayList<MediaItem>(playlist.size)
-        for (track in playlist) {
-            mediaItems.add(MediaItem.Builder().setUri(track.uri).setMediaId(track.uri).build())
-        }
+        for (track in playlist) mediaItems.add(MediaItem.Builder().setUri(track.uri).setMediaId(track.uri).build())
         val targetIndex = if (startIndex in playlist.indices) startIndex else 0
         player.setMediaItems(mediaItems, targetIndex, 0L)
         player.prepare()
         if (targetIndex in playlist.indices) playTrackAtIndex(targetIndex, startPlaying)
     }
-
     fun setPlaylist(tracks: List<Track>) { setPlaylist(tracks, 0, true) }
     fun setPlaylist(tracks: List<Track>, startPlaying: Boolean) { setPlaylist(tracks, 0, startPlaying) }
     fun setPlaylist(tracks: List<Track>, startIndex: Int) { setPlaylist(tracks, startIndex, true) }
@@ -496,52 +373,41 @@ class PlaybackService : MediaSessionService() {
     fun togglePlayPause() { if (player.isPlaying) player.pause() else player.play() }
     fun play() { player.play() }
     fun pause() { player.pause() }
-
-    fun stopPlayback() {
-        player.stop(); player.seekTo(0)
-        handleWakeLockState(false); updateNotification(false)
-    }
+    fun stopPlayback() { player.stop(); player.seekTo(0); handleWakeLockState(false); updateNotification(false) }
     fun stop() { stopPlayback() }
 
     fun playNext() {
         if (playlist.isEmpty()) return
         val n = currentTrackIndex + 1
-        if (n < playlist.size) playTrackAtIndex(n, true)
-        else if (isLoopPlaylistEnabled) playTrackAtIndex(0, true)
+        if (n < playlist.size) playTrackAtIndex(n, true) else if (isLoopPlaylistEnabled) playTrackAtIndex(0, true)
     }
 
     fun playPrevious() {
         if (playlist.isEmpty()) return
         if (player.currentPosition > 3000) player.seekTo(0)
-        else {
-            val p = currentTrackIndex - 1
-            if (p >= 0) playTrackAtIndex(p, true)
-            else if (isLoopPlaylistEnabled) playTrackAtIndex(playlist.size - 1, true)
-        }
+        else { val p = currentTrackIndex - 1; if (p >= 0) playTrackAtIndex(p, true) else if (isLoopPlaylistEnabled) playTrackAtIndex(playlist.size-1, true) }
     }
 
     private fun onSongEnded() {
         if (playlist.isEmpty()) return
         val n = currentTrackIndex + 1
-        if (n < playlist.size) playTrackAtIndex(n, true)
-        else if (isLoopPlaylistEnabled) playTrackAtIndex(0, true)
+        if (n < playlist.size) playTrackAtIndex(n, true) else if (isLoopPlaylistEnabled) playTrackAtIndex(0, true)
     }
 
     fun getCurrentTrack(): Track? = if (currentTrackIndex in playlist.indices) playlist[currentTrackIndex] else null
     fun getPlaylist(): List<Track> = playlist
     fun getCurrentIndex(): Int = currentTrackIndex
-
-    override fun onTaskRemoved(rootIntent: Intent?) { updateNotification(player.isPlaying) }
+    override fun onTaskRemoved(rootIntent: Intent?) { if (::player.isInitialized) updateNotification(player.isPlaying) }
 
     override fun onDestroy() {
         if (instance == this) instance = null
         try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (e: Exception) { e.printStackTrace() }
         dspProcessor.fftListener = null
         spectrumListener = null
-        bluetoothDetector.stop()
+        try { bluetoothDetector.stop() } catch (_: Exception) {}
         audioChain.release()
         try { if (::mediaSessionCompat.isInitialized) mediaSessionCompat.release() } catch (e: Exception) { e.printStackTrace() }
-        mediaSession?.run { player.release(); release(); mediaSession = null }
+        mediaSession?.run { try { player.release() } catch (_: Exception) {}; release(); mediaSession = null }
         super.onDestroy()
     }
 }

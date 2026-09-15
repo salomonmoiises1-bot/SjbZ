@@ -21,6 +21,8 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.ListenableFuture
 import com.sjbz.aimp.MainActivity
 import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.ATS2835PEngine
@@ -61,21 +63,31 @@ class PlaybackService : MediaSessionService() {
     var onTrackChangedListener: ((Track?, Int) -> Unit)? = null
     var onPlaybackStateChangedListener: ((Boolean) -> Unit)? = null
 
+    // PATCH #3: evita triple attach que recrea DynamicsProcessing y causa micro-cortes
+    private var lastAttachedAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
+
     fun getAudioSessionId(): Int {
         return if (::player.isInitialized) player.audioSessionId else C.AUDIO_SESSION_ID_UNSET
     }
 
+    private fun attachAudioSessionOnce(sessionId: Int) {
+        if (sessionId == C.AUDIO_SESSION_ID_UNSET || sessionId <= 0) return
+        if (sessionId == lastAttachedAudioSessionId) return
+        lastAttachedAudioSessionId = sessionId
+        audioChain.attachAudioSession(sessionId)
+    }
+
     private fun buildMediaItem(track: Track): MediaItem {
         val metadata = MediaMetadata.Builder()
-           .setTitle(track.title)
-           .setArtist(track.artist)
-           .setAlbumTitle(track.album)
-           .build()
+          .setTitle(track.title)
+          .setArtist(track.artist)
+          .setAlbumTitle(track.album)
+          .build()
         return MediaItem.Builder()
-           .setUri(track.uri)
-           .setMediaId(track.id.toString())
-           .setMediaMetadata(metadata)
-           .build()
+          .setUri(track.uri)
+          .setMediaId(track.id.toString())
+          .setMediaMetadata(metadata)
+          .build()
     }
 
     override fun onCreate() {
@@ -98,15 +110,15 @@ class PlaybackService : MediaSessionService() {
         bluetoothDetector.start()
 
         val audioAttributes = AudioAttributes.Builder()
-        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-        .setUsage(C.USAGE_MEDIA)
-        .build()
+       .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+       .setUsage(C.USAGE_MEDIA)
+       .build()
 
         player = ExoPlayer.Builder(this)
-        .setAudioAttributes(audioAttributes, true)
-        .setHandleAudioBecomingNoisy(true)
-        .setWakeMode(C.WAKE_MODE_LOCAL)
-        .build()
+       .setAudioAttributes(audioAttributes, true)
+       .setHandleAudioBecomingNoisy(true)
+       .setWakeMode(C.WAKE_MODE_LOCAL)
+       .build()
 
         audioChain.bindPlayer(player)
 
@@ -124,9 +136,6 @@ class PlaybackService : MediaSessionService() {
                 onPlaybackStateChangedListener?.invoke(isPlaying)
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // PATCH: sincroniza tu índice con el del player.
-                // El QS / MediaSession mueve player.currentMediaItemIndex directo,
-                // sin pasar por playTrackAtIndex(). Sin esto quedaba desync.
                 val newIndex = player.currentMediaItemIndex
                 if (newIndex in playlist.indices) {
                     currentTrackIndex = newIndex
@@ -137,36 +146,41 @@ class PlaybackService : MediaSessionService() {
                 onTrackChangedListener?.invoke(currentTrack, currentTrackIndex)
             }
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                if (audioSessionId!= C.AUDIO_SESSION_ID_UNSET) {
-                    audioChain.attachAudioSession(audioSessionId)
-                }
+                attachAudioSessionOnce(audioSessionId)
             }
         })
 
         val sessionId = player.audioSessionId
-        if (sessionId!= C.AUDIO_SESSION_ID_UNSET) {
-            audioChain.attachAudioSession(sessionId)
-        }
+        attachAudioSessionOnce(sessionId)
 
         val sessionActivityPendingIntent = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        // PATCH: intercepta next/prev del QS para que pasen por tu lógica de loop y fade
+        // PATCH #7: callback completo para QS / Android Auto / reloj
         val callback = object : MediaSession.Callback {
             override fun onSkipToNext(session: MediaSession, controller: MediaSession.ControllerInfo): Int {
                 playNext()
-                return androidx.media3.session.SessionResult.RESULT_SUCCESS
+                return SessionResult.RESULT_SUCCESS
             }
             override fun onSkipToPrevious(session: MediaSession, controller: MediaSession.ControllerInfo): Int {
                 playPrevious()
-                return androidx.media3.session.SessionResult.RESULT_SUCCESS
+                return SessionResult.RESULT_SUCCESS
+            }
+            override fun onPlay(session: MediaSession, controller: MediaSession.ControllerInfo): ListenableFuture<SessionResult> {
+                play()
+                audioChain.startFadeIn()
+                return super.onPlay(session, controller)
+            }
+            override fun onPause(session: MediaSession, controller: MediaSession.ControllerInfo): ListenableFuture<SessionResult> {
+                pause()
+                return super.onPause(session, controller)
             }
         }
         mediaSession = MediaSession.Builder(this, player)
-        .setSessionActivity(sessionActivityPendingIntent)
-        .setCallback(callback)
-        .build()
+       .setSessionActivity(sessionActivityPendingIntent)
+       .setCallback(callback)
+       .build()
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
     }
@@ -182,10 +196,11 @@ class PlaybackService : MediaSessionService() {
         return START_STICKY
     }
 
+    // PATCH #6: WakeLock sin timeout fijo de 2h que drenaba batería
     private fun handleWakeLockState(isPlaying: Boolean) {
         try {
             if (isPlaying) {
-                if (wakeLock?.isHeld == false) wakeLock?.acquire(2*60*60*1000L)
+                if (wakeLock?.isHeld == false) wakeLock?.acquire()
             } else {
                 if (wakeLock?.isHeld == true) wakeLock?.release()
             }
@@ -214,18 +229,18 @@ class PlaybackService : MediaSessionService() {
         val stopIntent = PendingIntent.getService(this, 4, Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
         return NotificationCompat.Builder(this, CHANNEL_ID)
-        .setContentTitle(title).setContentText(artist)
-        .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
-        .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
-        .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-        .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-        .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
-            .setMediaSession(mediaSession?.sessionCompatToken)
-            .setShowActionsInCompactView(0, 1, 2))
-        .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
-        .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-        .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
-        .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
+       .setContentTitle(title).setContentText(artist)
+       .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
+       .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
+       .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+       .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+       .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+           .setMediaSession(mediaSession?.sessionCompatToken)
+           .setShowActionsInCompactView(0, 1, 2))
+       .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
+       .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+       .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
+       .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {
@@ -248,12 +263,24 @@ class PlaybackService : MediaSessionService() {
     fun setPlaylist(tracks: List<Track>, startIndex: Int = 0, startPlaying: Boolean = true) {
         if (tracks.isEmpty()) return
         val isSameList = playlist.size == tracks.size && playlist.indices.all { playlist[it].id == tracks[it].id }
-        if (isSameList) { if (startIndex in playlist.indices) playTrackAtIndex(startIndex, startPlaying); return }
+        // PATCH #5: si es la misma lista y mismo índice y ya está sonando, no reiniciar
+        if (isSameList) {
+            if (startIndex in playlist.indices) {
+                if (startIndex == currentTrackIndex && player.isPlaying) return
+                playTrackAtIndex(startIndex, startPlaying)
+            }
+            return
+        }
         playlist.clear(); playlist.addAll(tracks)
         val mediaItems = ArrayList<MediaItem>(playlist.size)
         for (track in playlist) mediaItems.add(buildMediaItem(track))
         val targetIndex = if (startIndex in playlist.indices) startIndex else 0
         player.setMediaItems(mediaItems, targetIndex, 0L); player.prepare()
+        // PATCH #1: restaura posición guardada si coincide con la lista nueva
+        val (savedIndex, savedPos) = restorePlaybackSession()
+        if (savedIndex in playlist.indices && playlist[savedIndex].id == playlist[targetIndex].id && savedPos > 5000) {
+            player.seekTo(targetIndex, savedPos)
+        }
         if (targetIndex in playlist.indices) playTrackAtIndex(targetIndex, startPlaying)
     }
     fun setPlaylist(tracks: List<Track>) { setPlaylist(tracks, 0, true) }
@@ -261,13 +288,27 @@ class PlaybackService : MediaSessionService() {
     fun setPlaylist(tracks: List<Track>, startIndex: Int) { setPlaylist(tracks, startIndex, true) }
     fun setPlaybackSpeed(speed: Float) { player.playbackParameters = PlaybackParameters(speed) }
 
+    // PATCH #1: aplica la sesión guardada después de que la UI ya cargó la playlist
+    fun applyRestoredSession() {
+        val (savedIndex, savedPos) = restorePlaybackSession()
+        if (savedIndex in playlist.indices) {
+            currentTrackIndex = savedIndex
+            if (player.currentMediaItemIndex!= savedIndex) {
+                player.seekTo(savedIndex, savedPos)
+            } else if (savedPos > 0) {
+                player.seekTo(savedPos)
+            }
+            updateNotification(player.isPlaying)
+            onTrackChangedListener?.invoke(getCurrentTrack(), currentTrackIndex)
+        }
+    }
+
     fun playTrackAtIndex(index: Int, startPlaying: Boolean = true) {
         if (index!in playlist.indices) return
         currentTrackIndex = index
         if (player.currentMediaItemIndex!= index) player.seekToDefaultPosition(index)
         if (startPlaying) { player.play(); audioChain.startFadeIn() }
-        val sessionId = player.audioSessionId
-        if (sessionId!= C.AUDIO_SESSION_ID_UNSET) audioChain.attachAudioSession(sessionId)
+        attachAudioSessionOnce(player.audioSessionId)
         savePlaybackSession(); updateNotification(startPlaying)
         onTrackChangedListener?.invoke(getCurrentTrack(), currentTrackIndex)
     }
@@ -289,11 +330,23 @@ class PlaybackService : MediaSessionService() {
         val prefs = getSharedPreferences("sbz_playback_session", Context.MODE_PRIVATE)
         return Pair(prefs.getInt("last_track_index", 0), prefs.getLong("last_position_ms", 0L))
     }
-    fun togglePlayPause() { if (player.isPlaying) player.pause() else player.play() }
+    fun togglePlayPause() { if (player.isPlaying) { player.pause() } else { player.play(); audioChain.startFadeIn() } }
     fun play() { player.play() }
     fun pause() { player.pause() }
-    fun stopPlayback() { player.stop(); player.seekTo(0); handleWakeLockState(false); updateNotification(false) }
-    fun stop() { stopPlayback() }
+    fun stopPlayback() {
+        player.stop(); player.seekTo(0); handleWakeLockState(false); updateNotification(false)
+    }
+    // PATCH #2: stop() saca el foreground para no dejar notificación huérfana
+    fun stop() {
+        stopPlayback()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION") stopForeground(true)
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
     fun playNext() {
         if (playlist.isEmpty()) return
         val nextIndex = currentTrackIndex + 1
@@ -309,20 +362,28 @@ class PlaybackService : MediaSessionService() {
     }
     private fun onSongEnded() {
         if (playlist.isEmpty()) return
-        // PATCH: usa el índice real del player por si hubo desync previo
         val baseIndex = player.currentMediaItemIndex.takeIf { it in playlist.indices }?: currentTrackIndex
         val nextIndex = baseIndex + 1
         if (nextIndex < playlist.size) playTrackAtIndex(nextIndex, true)
         else if (isLoopPlaylistEnabled) playTrackAtIndex(0, true)
     }
     fun getCurrentTrack(): Track? {
-        // PATCH: si hay desync, prioriza el índice del player que es la fuente de verdad para el QS
         val idx = player.currentMediaItemIndex.takeIf { it in playlist.indices }?: currentTrackIndex
         return if (idx in playlist.indices) playlist[idx] else null
     }
     fun getPlaylist(): List<Track> = playlist
     fun getCurrentIndex(): Int = currentTrackIndex
-    override fun onTaskRemoved(rootIntent: Intent?) { updateNotification(player.isPlaying) }
+    // PATCH #4: si se desliza la app y no está sonando, limpia foreground; si está sonando, mantiene servicio
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (!player.isPlaying) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+                else @Suppress("DEPRECATION") stopForeground(true)
+            } catch (e: Exception) { e.printStackTrace() }
+        } else {
+            updateNotification(true)
+        }
+    }
     override fun onDestroy() {
         if (instance == this) instance = null
         try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (e: Exception) { e.printStackTrace() }

@@ -93,7 +93,6 @@ class EqActivity : AppCompatActivity() {
     private var isUpdatingUiFromCode = false
     private val cyanColor = Color.parseColor("#00E5FF")
 
-    // Spectrum bridge como lambda - compatible con SjbzDspProcessor.fftListener: ((FloatArray) -> Unit)?
     private val spectrumBridge: (FloatArray) -> Unit = { samples ->
         visualizerView.onAudioData(samples)
     }
@@ -197,9 +196,14 @@ class EqActivity : AppCompatActivity() {
         val enabled = switchBassBoost.isChecked
         val freq = getSelectedBassFreq()
         val gain = seekBarBassBoost.progress / 10.0f
-        // API real de SjbzDspProcessor: setBassBoost(enabled, freq, gain)
         dspProcessor?.setBassBoost(enabled, freq, gain)
         playbackService?.setBassBoost(enabled, freq, gain)
+    }
+
+    private fun bassFreqToSpinnerPosition(freq: Float): Int = when {
+        freq == 60f -> 0
+        freq == 85f -> 1
+        else -> 2
     }
 
     private fun setupMasterControls() {
@@ -229,7 +233,11 @@ class EqActivity : AppCompatActivity() {
         spinnerBassFreq.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (isUpdatingUiFromCode) return
-                val freq = when (position) { 0 -> 60f; 1 -> 85f; else -> 120f }
+                val freq = when (position) {
+                    0 -> 60f
+                    1 -> 85f
+                    else -> 120f
+                }
                 val gain = seekBarBassBoost.progress / 10f
                 val enabled = switchBassBoost.isChecked
                 dspProcessor?.setBassBoost(enabled, freq, gain)
@@ -268,8 +276,11 @@ class EqActivity : AppCompatActivity() {
 
     private fun setupEmuControls() {
         switchEmu.setOnCheckedChangeListener { _, isChecked ->
-            playbackService?.setEmulationEnabled(isChecked)
-               ?: dspProcessor?.setEmulationEnabled(isChecked)
+            if (playbackService!= null) {
+                playbackService?.setEmulationEnabled(isChecked)
+            } else {
+                dspProcessor?.setEmulationEnabled(isChecked)
+            }
             prefs.edit().putBoolean("emu_enabled", isChecked).apply()
             val masterActive = dspProcessor?.masterEnabled!= false
             seekBarEmuAmount.isEnabled = isChecked && masterActive
@@ -283,8 +294,11 @@ class EqActivity : AppCompatActivity() {
                 if (fromUser &&!isUpdatingUiFromCode) {
                     emuDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
                     val r = Runnable {
-                        playbackService?.setEmulationAmount(amount)
-                           ?: dspProcessor?.setEmulationAmount(amount)
+                        if (playbackService!= null) {
+                            playbackService?.setEmulationAmount(amount)
+                        } else {
+                            dspProcessor?.setEmulationAmount(amount)
+                        }
                         prefs.edit().putFloat("emu_amount", amount).apply()
                     }
                     emuDebounceRunnable = r
@@ -327,7 +341,9 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun getSelectedBassFreq(): Float = when (spinnerBassFreq.selectedItemPosition) {
-        0 -> 60f; 1 -> 85f; else -> 120f
+        0 -> 60f
+        1 -> 85f
+        else -> 120f
     }
 
     private fun setupPresetControls() {
@@ -359,28 +375,36 @@ class EqActivity : AppCompatActivity() {
 
     private fun build32BandSliders() {
         llEqBandsContainer.removeAllViews()
-        bandSeekBars.clear(); bandValueLabels.clear()
+        bandSeekBars.clear()
+        bandValueLabels.clear()
         val bandCount = EqualizerProcessor.BAND_COUNT
         val labels = EqualizerProcessor.BAND_LABELS
         val density = resources.displayMetrics.density
         for (i in 0 until bandCount) {
             val bandCol = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams((density*52).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
-                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(2,6,2,6)
+                layoutParams = LinearLayout.LayoutParams((density * 52).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(2, 6, 2, 6)
             }
             val tvGain = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                text = "0.0"; textSize = 9.5f; setTextColor(cyanColor); gravity = Gravity.CENTER
+                text = "0.0"
+                textSize = 9.5f
+                setTextColor(cyanColor)
+                gravity = Gravity.CENTER
             }
-            bandCol.addView(tvGain); bandValueLabels.add(tvGain)
+            bandCol.addView(tvGain)
+            bandValueLabels.add(tvGain)
             val faderContainer = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 0, 1f)
                 gravity = Gravity.CENTER
             }
             val seekBar = SeekBar(this).apply {
-                layoutParams = LinearLayout.LayoutParams((density*150).toInt(), (density*34).toInt())
-                rotation = 270f; max = 240; progress = 120
+                layoutParams = LinearLayout.LayoutParams((density * 150).toInt(), (density * 34).toInt())
+                rotation = 270f
+                max = 240
+                progress = 120
                 progressTintList = ColorStateList.valueOf(cyanColor)
                 thumbTintList = ColorStateList.valueOf(cyanColor)
             }
@@ -409,12 +433,18 @@ class EqActivity : AppCompatActivity() {
                 override fun onStartTrackingTouch(sb: SeekBar?) {}
                 override fun onStopTrackingTouch(sb: SeekBar?) {}
             })
-            faderContainer.addView(seekBar); bandCol.addView(faderContainer); bandSeekBars.add(seekBar)
+            faderContainer.addView(seekBar)
+            bandCol.addView(faderContainer)
+            bandSeekBars.add(seekBar)
             val tvFreq = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                text = labels[i]; textSize = 9.5f; setTextColor(Color.parseColor("#94A3B8")); gravity = Gravity.CENTER
+                text = labels[i]
+                textSize = 9.5f
+                setTextColor(Color.parseColor("#94A3B8"))
+                gravity = Gravity.CENTER
             }
-            bandCol.addView(tvFreq); llEqBandsContainer.addView(bandCol)
+            bandCol.addView(tvFreq)
+            llEqBandsContainer.addView(bandCol)
         }
     }
 
@@ -427,7 +457,7 @@ class EqActivity : AppCompatActivity() {
             updateControlsAlpha(masterEnabled)
 
             val preampDb = prefs.getFloat("preamp_db", 0f)
-            seekBarPreamp.progress = (preampDb*10f+120).toInt().coerceIn(0,240)
+            seekBarPreamp.progress = (preampDb * 10f + 120).toInt().coerceIn(0, 240)
             tvPreampValue.text = String.format("%+.1f dB", preampDb)
             dspProcessor?.setPreamp(preampDb)
 
@@ -435,14 +465,14 @@ class EqActivity : AppCompatActivity() {
             val bassFreq = prefs.getFloat("bass_freq", 85f)
             val bassGain = prefs.getFloat("bass_gain", 4f)
             switchBassBoost.isChecked = bassEnabled
-            spinnerBassFreq.setSelection(when(bassFreq){60f->0;85f->1;else->2})
-            seekBarBassBoost.progress = (bassGain*10f).toInt().coerceIn(0,120)
+            spinnerBassFreq.setSelection(bassFreqToSpinnerPosition(bassFreq))
+            seekBarBassBoost.progress = (bassGain * 10f).toInt().coerceIn(0, 120)
             tvBassBoostValue.text = String.format("+%.1f dB", bassGain)
             dspProcessor?.setBassBoost(bassEnabled, bassFreq, bassGain)
 
             for (i in 0 until EqualizerProcessor.BAND_COUNT) {
                 val g = prefs.getFloat("band_gain_$i", 0f)
-                bandSeekBars.getOrNull(i)?.progress = (g*10f+120).toInt().coerceIn(0,240)
+                bandSeekBars.getOrNull(i)?.progress = (g * 10f + 120).toInt().coerceIn(0, 240)
                 bandValueLabels.getOrNull(i)?.text = String.format("%+.1f", g)
                 dspProcessor?.setBandGain(i, g)
             }
@@ -451,46 +481,51 @@ class EqActivity : AppCompatActivity() {
             val emuAmount = prefs.getFloat("emu_amount", 0.8f)
             val btBypass = prefs.getBoolean("bt_auto_bypass", true)
             switchEmu.isChecked = emuEnabled
-            seekBarEmuAmount.progress = (emuAmount*100f).toInt().coerceIn(0,100)
-            tvEmuAmountValue.text = "${(emuAmount*100).toInt()}%"
+            seekBarEmuAmount.progress = (emuAmount * 100f).toInt().coerceIn(0, 100)
+            tvEmuAmountValue.text = "${(emuAmount * 100).toInt()}%"
             switchBtAutoBypass.isChecked = btBypass
             dspProcessor?.setEmulationEnabled(emuEnabled)
             dspProcessor?.setEmulationAmount(emuAmount)
             dspProcessor?.setBluetoothAutoBypass(btBypass)
             updateEmuStatus()
-        } finally { isUpdatingUiFromCode = false }
+        } finally {
+            isUpdatingUiFromCode = false
+        }
     }
 
     private fun applyPresetByName(name: String) {
         val all = presetManager.getAllPresets()
         val match = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
-        if (match!= null) loadPresetIntoUi(match)
-        else {
-            val helper = EqualizerProcessor(); helper.applyPreset(name)
-            loadPresetIntoUi(helper.toEqPreset(name, name=="Bass"||name=="Rock", 85f, if(name=="Bass") 8f else 4f))
+        if (match!= null) {
+            loadPresetIntoUi(match)
+        } else {
+            val helper = EqualizerProcessor()
+            helper.applyPreset(name)
+            val isBassHeavy = name == "Bass" || name == "Rock"
+            val gain = if (name == "Bass") 8f else 4f
+            loadPresetIntoUi(helper.toEqPreset(name, isBassHeavy, 85f, gain))
         }
     }
 
     private fun loadPresetIntoUi(preset: EqPreset) {
         isUpdatingUiFromCode = true
         try {
-            seekBarPreamp.progress = (preset.preampDb*10f+120).toInt().coerceIn(0,240)
+            seekBarPreamp.progress = (preset.preampDb * 10f + 120).toInt().coerceIn(0, 240)
             tvPreampValue.text = String.format("%+.1f dB", preset.preampDb)
             dspProcessor?.setPreamp(preset.preampDb)
 
             switchBassBoost.isChecked = preset.bassBoostEnabled
-            spinnerBassFreq.setSelection(when(preset.bassBoostFreq){60f->0;85f->1;else->2})
-            seekBarBassBoost.progress = (preset.bassBoostGain*10f).toInt().coerceIn(0,120)
+            spinnerBassFreq.setSelection(bassFreqToSpinnerPosition(preset.bassBoostFreq))
+            seekBarBassBoost.progress = (preset.bassBoostGain * 10f).toInt().coerceIn(0, 120)
             tvBassBoostValue.text = String.format("+%.1f dB", preset.bassBoostGain)
             dspProcessor?.setBassBoost(preset.bassBoostEnabled, preset.bassBoostFreq, preset.bassBoostGain)
 
-            // Persistir estado de emulación del preset v2 si existe
             dspProcessor?.setEmulationEnabled(preset.emuEnabled)
             dspProcessor?.setEmulationAmount(preset.emuAmount)
             dspProcessor?.setBluetoothAutoBypass(preset.btAutoBypass)
             switchEmu.isChecked = preset.emuEnabled
-            seekBarEmuAmount.progress = (preset.emuAmount*100f).toInt().coerceIn(0,100)
-            tvEmuAmountValue.text = "${(preset.emuAmount*100).toInt()}%"
+            seekBarEmuAmount.progress = (preset.emuAmount * 100f).toInt().coerceIn(0, 100)
+            tvEmuAmountValue.text = "${(preset.emuAmount * 100).toInt()}%"
             switchBtAutoBypass.isChecked = preset.btAutoBypass
             updateEmuStatus()
 
@@ -504,21 +539,24 @@ class EqActivity : AppCompatActivity() {
             editor.putBoolean("bt_auto_bypass", preset.btAutoBypass)
             for (i in 0 until minOf(preset.bandGains.size, bandSeekBars.size)) {
                 val g = preset.bandGains[i]
-                bandSeekBars[i].progress = (g*10f+120).toInt().coerceIn(0,240)
+                bandSeekBars[i].progress = (g * 10f + 120).toInt().coerceIn(0, 240)
                 bandValueLabels[i].text = String.format("%+.1f", g)
                 dspProcessor?.setBandGain(i, g)
                 editor.putFloat("band_gain_$i", g)
             }
-            editor.putString("active_preset", preset.name); editor.apply()
+            editor.putString("active_preset", preset.name)
+            editor.apply()
             presetManager.setActivePresetName(preset.name)
-        } finally { isUpdatingUiFromCode = false }
+        } finally {
+            isUpdatingUiFromCode = false
+        }
     }
 
     private fun applyGenrePreset(genre: String) {
         when (genre.lowercase()) {
-            "rock","metal" -> applyPresetByName("Rock")
-            "electronic","bass","hip-hop" -> applyPresetByName("Bass")
-            "vocal","acoustic" -> applyPresetByName("Vocal")
+            "rock", "metal" -> applyPresetByName("Rock")
+            "electronic", "bass", "hip-hop" -> applyPresetByName("Bass")
+            "vocal", "acoustic" -> applyPresetByName("Vocal")
             "pop" -> applyPresetByName("Pop")
             "jazz" -> applyPresetByName("Jazz")
             "classical" -> applyPresetByName("Classical")
@@ -531,29 +569,38 @@ class EqActivity : AppCompatActivity() {
         try {
             val editor = prefs.edit()
             for (i in 0 until bandSeekBars.size) {
-                bandSeekBars[i].progress = 120; bandValueLabels[i].text = "0.0"
-                dspProcessor?.setBandGain(i, 0f); editor.putFloat("band_gain_$i", 0f)
+                bandSeekBars[i].progress = 120
+                bandValueLabels[i].text = "0.0"
+                dspProcessor?.setBandGain(i, 0f)
+                editor.putFloat("band_gain_$i", 0f)
             }
             editor.apply()
             Toast.makeText(this, "Bandas a 0 dB", Toast.LENGTH_SHORT).show()
-        } finally { isUpdatingUiFromCode = false }
+        } finally {
+            isUpdatingUiFromCode = false
+        }
     }
 
     private fun saveCurrentAsCustomPreset() {
         val gains = ArrayList<Float>()
-        for (i in 0 until bandSeekBars.size) gains.add((bandSeekBars[i].progress-120)/10f)
-        val preamp = (seekBarPreamp.progress-120)/10f
+        for (i in 0 until bandSeekBars.size) {
+            gains.add((bandSeekBars[i].progress - 120) / 10f)
+        }
+        val preamp = (seekBarPreamp.progress - 120) / 10f
         val preset = EqPreset(
-            name = "Custom ${System.currentTimeMillis()%1000}",
-            preampDb = preamp, bandGains = gains, isCustom = true,
+            name = "Custom ${System.currentTimeMillis() % 1000}",
+            preampDb = preamp,
+            bandGains = gains,
+            isCustom = true,
             bassBoostEnabled = switchBassBoost.isChecked,
             bassBoostFreq = getSelectedBassFreq(),
-            bassBoostGain = seekBarBassBoost.progress/10f,
+            bassBoostGain = seekBarBassBoost.progress / 10f,
             emuEnabled = switchEmu.isChecked,
             emuAmount = seekBarEmuAmount.progress / 100f,
             btAutoBypass = switchBtAutoBypass.isChecked
         )
-        presetManager.saveCustomPreset(preset); refreshPresetSpinner()
+        presetManager.saveCustomPreset(preset)
+        refreshPresetSpinner()
         Toast.makeText(this, "Preset guardado: ${preset.name}", Toast.LENGTH_SHORT).show()
     }
 
@@ -569,7 +616,10 @@ class EqActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { finish(); return true }
+        if (item.itemId == android.R.id.home) {
+            finish()
+            return true
+        }
         return super.onOptionsItemSelected(item)
     }
 

@@ -19,12 +19,14 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.sjbz.aimp.MainActivity
 import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.ATS2835PEngine
 import com.sjbz.aimp.audio.AudioChain
+import com.sjbz.aimp.audio.Sjbz32BandProcessor
 import com.sjbz.aimp.model.Track
 import com.sjbz.aimp.utils.BluetoothDetector
 
@@ -51,6 +53,8 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     lateinit var atsEngine: ATS2835PEngine
         private set
+    lateinit var sjbzEqProcessor: Sjbz32BandProcessor
+        private set
     lateinit var audioChain: AudioChain
         private set
     private lateinit var bluetoothDetector: BluetoothDetector
@@ -76,15 +80,15 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildMediaItem(track: Track): MediaItem {
         val metadata = MediaMetadata.Builder()
-         .setTitle(track.title)
-         .setArtist(track.artist)
-         .setAlbumTitle(track.album)
-         .build()
+        .setTitle(track.title)
+        .setArtist(track.artist)
+        .setAlbumTitle(track.album)
+        .build()
         return MediaItem.Builder()
-         .setUri(track.uri)
-         .setMediaId(track.id.toString())
-         .setMediaMetadata(metadata)
-         .build()
+        .setUri(track.uri)
+        .setMediaId(track.id.toString())
+        .setMediaMetadata(metadata)
+        .build()
     }
 
     override fun onCreate() {
@@ -98,6 +102,9 @@ class PlaybackService : MediaSessionService() {
         } catch (e: Exception) { e.printStackTrace() }
 
         atsEngine = ATS2835PEngine(this)
+        sjbzEqProcessor = Sjbz32BandProcessor().apply {
+            equalizer = atsEngine.equalizer
+        }
         audioChain = AudioChain(this, atsEngine)
         com.sjbz.aimp.audio.GlobalAudioSessionManager.getInstance(this).syncAudioEffects(atsEngine.equalizer, atsEngine.mdrc, atsEngine.limiter)
 
@@ -107,15 +114,20 @@ class PlaybackService : MediaSessionService() {
         bluetoothDetector.start()
 
         val audioAttributes = AudioAttributes.Builder()
-      .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-      .setUsage(C.USAGE_MEDIA)
-      .build()
+     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+     .setUsage(C.USAGE_MEDIA)
+     .build()
+
+        val audioSink = DefaultAudioSink.Builder()
+     .setAudioProcessors(arrayOf(sjbzEqProcessor))
+     .build()
 
         player = ExoPlayer.Builder(this)
-      .setAudioAttributes(audioAttributes, true)
-      .setHandleAudioBecomingNoisy(true)
-      .setWakeMode(C.WAKE_MODE_LOCAL)
-      .build()
+     .setAudioSink(audioSink)
+     .setAudioAttributes(audioAttributes, true)
+     .setHandleAudioBecomingNoisy(true)
+     .setWakeMode(C.WAKE_MODE_LOCAL)
+     .build()
 
         audioChain.bindPlayer(player)
 
@@ -161,9 +173,9 @@ class PlaybackService : MediaSessionService() {
         val callback = object : MediaSession.Callback {
         }
         mediaSession = MediaSession.Builder(this, player)
-      .setSessionActivity(sessionActivityPendingIntent)
-      .setCallback(callback)
-      .build()
+     .setSessionActivity(sessionActivityPendingIntent)
+     .setCallback(callback)
+     .build()
         createNotificationChannel()
         startForegroundWithNotification(player.isPlaying)
     }
@@ -211,18 +223,18 @@ class PlaybackService : MediaSessionService() {
         val stopIntent = PendingIntent.getService(this, 4, Intent(this, PlaybackService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
         return NotificationCompat.Builder(this, CHANNEL_ID)
-      .setContentTitle(title).setContentText(artist)
-      .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
-      .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
-      .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-      .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-      .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
-          .setMediaSession(mediaSession?.sessionCompatToken)
-          .setShowActionsInCompactView(0, 1, 2))
-      .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
-      .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
-      .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
-      .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
+     .setContentTitle(title).setContentText(artist)
+     .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
+     .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
+     .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+     .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+     .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+         .setMediaSession(mediaSession?.sessionCompatToken)
+         .setShowActionsInCompactView(0, 1, 2))
+     .addAction(R.drawable.ic_skip_previous, "Anterior", prevIntent)
+     .addAction(playPauseIcon, if (isPlaying) "Pausar" else "Reproducir", toggleIntent)
+     .addAction(R.drawable.ic_skip_next, "Siguiente", nextIntent)
+     .addAction(R.drawable.ic_stop, "Detener", stopIntent).build()
     }
 
     private fun startForegroundWithNotification(isPlaying: Boolean) {

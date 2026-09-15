@@ -4,7 +4,7 @@
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/aimp_black">
+    android:background="@color/studio_black">
 
     <!-- Main Content Area -->
     <LinearLayout
@@ -29,7 +29,7 @@
             <View
                 android:layout_width="6dp"
                 android:layout_height="6dp"
-                android:background="@color/aimp_orange" />
+                android:background="@color/studio_cyan" />
 
             <TextView
                 android:id="@+id/tvDspActiveStatus"
@@ -38,7 +38,7 @@
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:fontFamily="sans-serif-medium"
-                android:text="SB-Z DSP • 32-Band PreEq • 5-Band MDRC • Limiter Active"
+                android:text="SB-Z Studio DSP • 32-Band ISO Float"
                 android:textColor="@color/text_secondary"
                 android:textSize="10sp" />
 
@@ -47,11 +47,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="0 tracks"
-                android:textColor="@color/aimp_orange"
+                android:textColor="@color/studio_cyan"
                 android:textSize="10sp" />
         </LinearLayout>
 
-        <!-- Central Playlist RecyclerView (Drag & drop, Swipe to delete) -->
+        <!-- Central Playlist RecyclerView -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -93,26 +93,26 @@
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
                     android:layout_marginTop="12dp"
-                    android:backgroundTint="@color/aimp_orange"
+                    android:backgroundTint="@color/studio_cyan"
                     android:text="Escanear Memoria"
-                    android:textColor="@color/aimp_black"
+                    android:textColor="@color/studio_black"
                     android:textSize="12sp" />
             </LinearLayout>
         </FrameLayout>
 
-        <!-- Bottom SB-Z Player Panel -->
+        <!-- Bottom Player Panel -->
         <LinearLayout
             android:id="@+id/bottomPlayerPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/aimp_black_surface"
+            android:background="@color/studio_surface"
             android:elevation="12dp"
             android:orientation="vertical"
             android:paddingHorizontal="14dp"
             android:paddingTop="8dp"
             android:paddingBottom="12dp">
 
-            <!-- Stereo VU Meters & Waveform Bar (SB-Z style) -->
+            <!-- Stereo VU Meters & Waveform Bar -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="22dp"
@@ -127,7 +127,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif-black"
                     android:text="L"
-                    android:textColor="@color/aimp_orange"
+                    android:textColor="@color/studio_cyan"
                     android:textSize="9sp" />
 
                 <!-- Left VU Meter Progress -->
@@ -150,7 +150,7 @@
                     android:layout_marginHorizontal="8dp"
                     android:fontFamily="sans-serif-medium"
                     android:text="-3.2 dB"
-                    android:textColor="@color/aimp_orange"
+                    android:textColor="@color/studio_cyan"
                     android:textSize="9sp" />
 
                 <!-- Right VU Meter Progress -->
@@ -170,11 +170,11 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif-black"
                     android:text="R"
-                    android:textColor="@color/aimp_orange"
+                    android:textColor="@color/studio_cyan"
                     android:textSize="9sp" />
             </LinearLayout>
 
-            <!-- Track Info Row: Large Artwork + Title / Artist / Tech specs -->
+            <!-- Track Info Row: Artwork + Title / Artist / Tech specs -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -185,10 +185,10 @@
                     android:id="@+id/ivPlayerArtwork"
                     android:layout_width="56dp"
                     android:layout_height="56dp"
-                    android:background="@drawable/bg_aimp_card"
+                    android:background="@drawable/bg_studio_card"
                     android:scaleType="centerCrop"
                     android:src="@drawable/ic_music_note"
-                    app:tint="@color/aimp_orange" />
+                    app:tint="@color/studio_cyan" />
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -218,8 +218,8 @@
                         android:layout_marginTop="2dp"
                         android:ellipsize="end"
                         android:maxLines="1"
-                        android:text="SjbZ Hi-Res Player"
-                        android:textColor="@color/aimp_orange"
+                        android:text="SB-Z Hi-Res Player"
+                        android:textColor="@color/studio_cyan"
                         android:textSize="12sp" />
 
                     <TextView
@@ -227,7 +227,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="1dp"
-                        android:text="24-bit • 192kHz • SB-Z"
+                        android:text="24-bit • 192kHz • 32-bit Float DSP"
                         android:textColor="@color/text_muted"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -256,8 +256,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:max="1000"
-                    android:progressTint="@color/aimp_orange"
-                    android:thumbTint="@color/aimp_orange" />
+                    android:progressTint="@color/studio_cyan"
+                    android:thumbTint="@color/studio_cyan" />
 
                 <TextView
                     android:id="@+id/tvRemainingTime"
@@ -269,7 +269,7 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <!-- SB-Z Control Buttons Row: Shuffle, Prev, Stop, Play/Pause, Next, Repeat, Crossfade -->
+            <!-- Control Buttons Row: Shuffle, Prev, Stop, Play/Pause, Next, Repeat, Crossfade -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
@@ -309,7 +309,7 @@
                     android:src="@drawable/ic_stop"
                     app:tint="@color/text_secondary" />
 
-                <!-- Play / Pause Button (Large Orange SB-Z circle) -->
+                <!-- Play / Pause Button -->
                 <ImageButton
                     android:id="@+id/btnPlayPause"
                     android:layout_width="48dp"
@@ -318,7 +318,7 @@
                     android:background="@drawable/bg_play_btn"
                     android:contentDescription="Play/Pause"
                     android:src="@drawable/ic_play"
-                    app:tint="@color/aimp_black" />
+                    app:tint="@color/studio_black" />
 
                 <!-- Next Button -->
                 <ImageButton
@@ -340,7 +340,7 @@
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="Repeat Loop"
                     android:src="@drawable/ic_repeat"
-                    app:tint="@color/aimp_orange" />
+                    app:tint="@color/studio_cyan" />
 
                 <!-- Crossfade Button -->
                 <ImageButton
@@ -350,7 +350,7 @@
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="Crossfade"
                     android:src="@drawable/ic_crossfade"
-                    app:tint="@color/aimp_orange" />
+                    app:tint="@color/studio_cyan" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
@@ -361,7 +361,7 @@
         android:layout_width="280dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="@color/aimp_black_surface"
+        android:background="@color/studio_surface"
         android:orientation="vertical"
         android:paddingTop="32dp">
 
@@ -377,14 +377,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-black"
-                android:text="SjbZ"
-                android:textColor="@color/aimp_orange"
+                android:text="SB-Z"
+                android:textColor="@color/studio_cyan"
                 android:textSize="26sp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Motor SB-Z &amp; SB-Z DSP"
+                android:text="SB-Z Studio 32-Bit Pro DSP"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -392,7 +392,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/aimp_border" />
+            android:background="@color/studio_border" />
 
         <!-- Drawer Menu Items -->
         <TextView
@@ -443,7 +443,7 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginVertical="10dp"
-            android:background="@color/aimp_border" />
+            android:background="@color/studio_border" />
 
         <TextView
             android:id="@+id/drawerExportM3U8"
@@ -453,7 +453,7 @@
             android:gravity="center_vertical"
             android:paddingHorizontal="20dp"
             android:text="Exportar M3U8"
-            android:textColor="@color/aimp_orange"
+            android:textColor="@color/studio_cyan"
             android:textSize="13sp" />
 
         <TextView
@@ -464,7 +464,7 @@
             android:gravity="center_vertical"
             android:paddingHorizontal="20dp"
             android:text="Importar M3U8"
-            android:textColor="@color/aimp_orange"
+            android:textColor="@color/studio_cyan"
             android:textSize="13sp" />
 
     </LinearLayout>

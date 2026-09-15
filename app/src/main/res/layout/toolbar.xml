@@ -4,7 +4,7 @@
     android:id="@+id/mainToolbar"
     android:layout_width="match_parent"
     android:layout_height="56dp"
-    android:background="@color/aimp_black_surface"
+    android:background="@color/studio_surface"
     android:elevation="4dp"
     app:contentInsetStart="0dp"
     app:contentInsetEnd="0dp">
@@ -23,9 +23,9 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Menu"
             android:src="@drawable/ic_menu"
-            app:tint="@color/aimp_orange" />
+            app:tint="@color/studio_cyan" />
 
-        <!-- SjbZ AIMP Logo -->
+        <!-- SB-Z Studio Logo -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -37,8 +37,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-black"
-                android:text="SjbZ"
-                android:textColor="@color/aimp_orange"
+                android:text="SB-Z"
+                android:textColor="@color/studio_cyan"
                 android:textSize="20sp" />
 
             <TextView
@@ -46,7 +46,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:fontFamily="sans-serif-medium"
-                android:text="DSP"
+                android:text="PRO"
                 android:textColor="@color/text_secondary"
                 android:textSize="10sp" />
         </LinearLayout>
@@ -57,7 +57,7 @@
             android:layout_height="36dp"
             android:layout_marginHorizontal="12dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_aimp_card"
+            android:background="@drawable/bg_studio_card"
             android:paddingHorizontal="8dp">
 
             <EditText
@@ -89,7 +89,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Equalizer"
             android:src="@drawable/ic_equalizer"
-            app:tint="@color/aimp_orange" />
+            app:tint="@color/studio_cyan" />
 
     </LinearLayout>
 

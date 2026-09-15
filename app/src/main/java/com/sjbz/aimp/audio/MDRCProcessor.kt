@@ -1,5 +1,6 @@
 package com.sjbz.aimp.audio
 
+import android.util.Log
 import com.sjbz.aimp.model.MDRCBandConfig
 import com.sjbz.aimp.model.MDRCSettings
 
@@ -16,6 +17,12 @@ import com.sjbz.aimp.model.MDRCSettings
  */
 class MDRCProcessor {
 
+    companion object {
+        private const val TAG = "MDRCProcessor"
+        private const val MIN_GAIN_DB = -12.0f
+        private const val MAX_GAIN_DB = 12.0f
+    }
+
     data class Band(
         val name: String,
         var cutoffHz: Float,
@@ -28,11 +35,32 @@ class MDRCProcessor {
         var isEnabled: Boolean = true
     )
 
+    // PATCH: callback como en Equalizer/BassBoost/Limiter para que el engine
+    // pueda reaplicar sin que la UI tenga que llamar updateMDRC() manual.
+    // Antes no existía y todo dependía de llamadas manuales desde EqActivity.
+    var onParametersChanged: (() -> Unit)? = null
+
     var isEnabled: Boolean = true
+        set(value) {
+            val changed = field!= value
+            field = value
+            if (!changed) return
+            try { onParametersChanged?.invoke() } catch (_: Throwable) {}
+        }
+
+    // PATCH: guarda valores originales para restaurar al desconectar Bluetooth.
+    // Antes applyGentleConstraints() pisaba ratio/threshold y nunca los restauraba,
+    // quedando el MDRC capado para siempre después de un paso por BT.
+    private data class OriginalConstraints(val ratio: Float, val thresholdDb: Float)
+    private val originalConstraints = mutableMapOf<Int, OriginalConstraints>()
+
     var isGentleBluetoothMode: Boolean = false
         set(value) {
+            val changed = field!= value
             field = value
+            if (!changed) return
             applyGentleConstraints()
+            try { onParametersChanged?.invoke() } catch (_: Throwable) {}
         }
 
     val bands: Array<Band> = arrayOf(
@@ -49,9 +77,24 @@ class MDRCProcessor {
         return if (index in bands.indices) bands[index] else null
     }
 
+    // PATCH: setter con coerce y notificación para gainDb.
+    // Antes EqActivity hacía mdrcProcessor.getBand(i)?.gainDb = gainDb directo,
+    // sin coerce a -12..12 y sin notificar, dependiendo de updateMDRC() manual.
+    fun setBandGainDb(index: Int, gainDb: Float) {
+        val b = getBand(index)?: return
+        val coerced = gainDb.coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
+        if (b.gainDb == coerced) return
+        b.gainDb = coerced
+        try { onParametersChanged?.invoke() } catch (_: Throwable) {}
+    }
+
     private fun applyGentleConstraints() {
         if (isGentleBluetoothMode) {
-            for (band in bands) {
+            for ((idx, band) in bands.withIndex()) {
+                // Guarda original solo la primera vez que entra en modo BT
+                if (!originalConstraints.containsKey(idx)) {
+                    originalConstraints[idx] = OriginalConstraints(band.ratio, band.thresholdDb)
+                }
                 if (band.ratio > 3.0f) {
                     band.ratio = 3.0f
                 }
@@ -59,6 +102,17 @@ class MDRCProcessor {
                     band.thresholdDb = -14.0f
                 }
             }
+            Log.d(TAG, "Gentle BT mode ON: ratios/thresholds capados")
+        } else {
+            // PATCH: restaura originales al salir de BT
+            for ((idx, orig) in originalConstraints) {
+                if (idx in bands.indices) {
+                    bands[idx].ratio = orig.ratio
+                    bands[idx].thresholdDb = orig.thresholdDb
+                }
+            }
+            originalConstraints.clear()
+            Log.d(TAG, "Gentle BT mode OFF: valores restaurados")
         }
     }
 
@@ -71,7 +125,7 @@ class MDRCProcessor {
                 ratio = it.ratio,
                 attackMs = it.attackMs,
                 releaseMs = it.releaseMs,
-                gainDb = it.gainDb,
+                gainDb = it.gainDb.coerceIn(MIN_GAIN_DB, MAX_GAIN_DB),
                 kneeWidthDb = it.kneeWidthDb,
                 enabled = it.isEnabled
             )
@@ -80,19 +134,36 @@ class MDRCProcessor {
     }
 
     fun loadFromSettings(settings: MDRCSettings) {
-        isEnabled = settings.enabled
-        for (i in 0 until minOf(settings.bands.size, bands.size)) {
-            val cfg = settings.bands[i]
-            val b = bands[i]
-            b.cutoffHz = cfg.cutoffHz
-            b.thresholdDb = cfg.thresholdDb
-            b.ratio = cfg.ratio
-            b.attackMs = cfg.attackMs
-            b.releaseMs = cfg.releaseMs
-            b.gainDb = cfg.gainDb
-            b.kneeWidthDb = cfg.kneeWidthDb
-            b.isEnabled = cfg.enabled
+        // PATCH: suspende notificaciones durante la carga masiva para no
+        // disparar 5+1 callbacks que reaplican el DSP en cada banda.
+        val prevCallback = onParametersChanged
+        onParametersChanged = null
+        try {
+            isEnabled = settings.enabled
+            for (i in 0 until minOf(settings.bands.size, bands.size)) {
+                val cfg = settings.bands[i]
+                val b = bands[i]
+                b.cutoffHz = cfg.cutoffHz
+                b.thresholdDb = cfg.thresholdDb
+                b.ratio = cfg.ratio
+                b.attackMs = cfg.attackMs
+                b.releaseMs = cfg.releaseMs
+                // PATCH: coerce consistente con el resto del pipeline
+                b.gainDb = cfg.gainDb.coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
+                b.kneeWidthDb = cfg.kneeWidthDb
+                b.isEnabled = cfg.enabled
+            }
+            // PATCH: si estaba en modo BT, limpia los originales guardados porque
+            // los valores recién cargados son la nueva base, no los viejos.
+            // Antes applyGentleConstraints() reaplicaba el cap sobre el preset
+            // recién cargado sin avisar.
+            if (isGentleBluetoothMode) {
+                originalConstraints.clear()
+            }
+            applyGentleConstraints()
+        } finally {
+            onParametersChanged = prevCallback
         }
-        applyGentleConstraints()
+        try { onParametersChanged?.invoke() } catch (_: Throwable) {}
     }
 }

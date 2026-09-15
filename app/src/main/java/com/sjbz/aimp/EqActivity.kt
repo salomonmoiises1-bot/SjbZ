@@ -97,6 +97,10 @@ class EqActivity : AppCompatActivity() {
 
         bindViews()
         setupToolbar()
+        setupMasterControls()
+        setupEmuControls()
+        setupPresetControls()
+        build32BandSliders()
 
         if (dspProcessor == null) {
             Toast.makeText(this, "Conectando servicio...", Toast.LENGTH_SHORT).show()
@@ -108,38 +112,27 @@ class EqActivity : AppCompatActivity() {
                     finish()
                 } else {
                     setupGenreRecognition()
-                    setupMasterControls()
-                    setupEmuControls()
-                    setupPresetControls()
-                    build32BandSliders()
                     restoreAllDspParameters()
+                    updateEmuStatus()
                 }
             }, 300)
-            setupMasterControls()
-            setupEmuControls()
-            setupPresetControls()
-            build32BandSliders()
             return
         }
 
         setupGenreRecognition()
-        setupMasterControls()
-        setupEmuControls()
-        setupPresetControls()
-        build32BandSliders()
         restoreAllDspParameters()
     }
 
     override fun onResume() {
         super.onResume()
-        playbackService?.setSpectrumListener(spectrumBridge)
+        playbackService?.let { it.spectrumListener = spectrumBridge }
         updateEmuStatus()
     }
 
     override fun onPause() {
         super.onPause()
         try {
-            playbackService?.setSpectrumListener(null)
+            playbackService?.let { it.spectrumListener = null }
         } catch (_: Exception) {}
     }
 
@@ -615,7 +608,7 @@ class EqActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         try {
-            playbackService?.setSpectrumListener(null)
+            playbackService?.let { it.spectrumListener = null }
         } catch (_: Exception) {}
         super.onDestroy()
     }

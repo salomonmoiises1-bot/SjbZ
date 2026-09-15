@@ -122,8 +122,8 @@ class MainActivity : AppCompatActivity() {
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val audioGranted = permissions[Manifest.permission.READ_MEDIA_AUDIO]?: false
-        val storageGranted = permissions[Manifest.permission.READ_EXTERNAL_STORAGE]?: false
+        val audioGranted = permissions[Manifest.permission.READ_MEDIA_AUDIO] ?: false
+        val storageGranted = permissions[Manifest.permission.READ_EXTERNAL_STORAGE] ?: false
         if (audioGranted || storageGranted) {
             scanAudioStorage()
         } else {
@@ -135,7 +135,7 @@ class MainActivity : AppCompatActivity() {
     private val exportM3U8Launcher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("audio/x-mpegurl")
     ) { uri: Uri? ->
-        if (uri!= null) {
+        if (uri != null) {
             exportCurrentPlaylistToM3U8(uri)
         }
     }
@@ -158,7 +158,7 @@ class MainActivity : AppCompatActivity() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             runOnUiThread {
                 val track = playbackService?.getCurrentTrack()
-                val index = playbackService?.getCurrentIndex()?: 0
+                val index = playbackService?.getCurrentIndex() ?: 0
                 updatePlayerUi(track, index)
             }
         }
@@ -192,10 +192,8 @@ class MainActivity : AppCompatActivity() {
                     if (savedPos > 0L) {
                         try { srv.player.seekTo(savedPos) } catch (_: Exception) {}
                     }
-                    // PATCH: refresca UI con el track restaurado
                     updatePlayerUi(srv.getCurrentTrack(), targetIndex)
                 } else if (srv.getPlaylist().isNotEmpty()) {
-                    // PATCH: si el servicio ya tenía playlist (ej. rotación), sincroniza UI
                     updatePlayerUi(srv.getCurrentTrack(), srv.getCurrentIndex())
                 }
             }
@@ -218,8 +216,8 @@ class MainActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             )
         }
 
@@ -233,7 +231,6 @@ class MainActivity : AppCompatActivity() {
         setupDrawer()
         setupSearch()
         startPlaybackService()
-        // PATCH: carga DB primero para UI instantánea, luego escanea MediaStore
         loadTracksFromDb()
         checkPermissionsAndScan()
     }
@@ -247,7 +244,6 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         uiHandler.removeCallbacks(uiUpdateRunnable)
-        // PATCH: guarda sesión al pausar para restaurar después
         try { playbackService?.savePlaybackSession() } catch (_: Exception) {}
     }
 
@@ -282,7 +278,6 @@ class MainActivity : AppCompatActivity() {
         vuMeterRightBar = findViewById(R.id.vuMeterRightBar)
         tvVuPeakText = findViewById(R.id.tvVuPeakText)
 
-        // PATCH: estado visual inicial consistente con los flags
         btnRepeat.setColorFilter(ContextCompat.getColor(this, if (isRepeatLoopActive) R.color.studio_cyan else R.color.text_muted))
         btnCrossfade.setColorFilter(ContextCompat.getColor(this, if (isCrossfadeActive) R.color.studio_cyan else R.color.text_muted))
         btnShuffle.setColorFilter(ContextCompat.getColor(this, if (isShuffleActive) R.color.studio_cyan else R.color.text_muted))
@@ -309,20 +304,16 @@ class MainActivity : AppCompatActivity() {
         playlistAdapter = PlaylistAdapter(
             tracks = currentDisplayList,
             onItemClick = { track, position ->
-                // PATCH: si hay búsqueda activa, reproduce desde la lista filtrada pero
-                // mantiene allTracksList intacta para cuando se limpie el filtro
                 playbackService?.setPlaylist(currentDisplayList.toList(), position, startPlaying = true)
             },
             onFavoriteClick = { track, position ->
                 toggleFavorite(track, position)
             },
             onTrackMoved = { from, to ->
-                // PATCH: preserva el índice actual real en vez de resetear a getCurrentIndex
-                // sobre una lista reordenada (antes desincronizaba el track sonando)
                 val srv = playbackService
-                if (srv!= null && srv.getPlaylist().isNotEmpty()) {
+                if (srv != null && srv.getPlaylist().isNotEmpty()) {
                     val currentTrack = srv.getCurrentTrack()
-                    val newIndex = currentDisplayList.indexOfFirst { it.id == currentTrack?.id }.coerceAtLeast(0)
+                    val newIndex = currentDisplayList.indexOfFirst { Track.stableKey(it) == Track.stableKey(currentTrack ?: trackFallback()) }.coerceAtLeast(0)
                     val wasPlaying = srv.player.isPlaying
                     val pos = srv.player.currentPosition
                     srv.setPlaylist(currentDisplayList.toList(), newIndex, startPlaying = false)
@@ -334,8 +325,7 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch(Dispatchers.IO) {
                     try { database.trackDao().deleteTrack(track) } catch (_: Exception) {}
                 }
-                // PATCH: también saca de allTracksList para que no reaparezca al limpiar búsqueda
-                allTracksList.removeAll { it.id == track.id }
+                allTracksList.removeAll { Track.stableKey(it) == Track.stableKey(track) }
                 updateTrackCount()
             }
         )
@@ -345,6 +335,8 @@ class MainActivity : AppCompatActivity() {
 
         playlistAdapter.getItemTouchHelper().attachToRecyclerView(rvPlaylist)
     }
+
+    private fun trackFallback(): Track = Track(title = "__none__", uri = "__none__")
 
     private fun setupPlayerControls() {
         btnPlayPause.setOnClickListener {
@@ -365,12 +357,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnShuffle.setOnClickListener {
-            isShuffleActive =!isShuffleActive
+            isShuffleActive = !isShuffleActive
             btnShuffle.setColorFilter(if (isShuffleActive) ContextCompat.getColor(this, R.color.studio_cyan) else ContextCompat.getColor(this, R.color.text_muted))
-            // PATCH: preserva el track actual al mezclar/desmezclar
             val currentTrack = playbackService?.getCurrentTrack()
             val wasPlaying = playbackService?.player?.isPlaying == true
-            val pos = playbackService?.player?.currentPosition?: 0L
+            val pos = playbackService?.player?.currentPosition ?: 0L
             if (isShuffleActive) {
                 currentDisplayList.shuffle()
             } else {
@@ -378,7 +369,7 @@ class MainActivity : AppCompatActivity() {
                 currentDisplayList.addAll(allTracksList)
             }
             playlistAdapter.updateData(currentDisplayList)
-            val newIndex = currentDisplayList.indexOfFirst { it.id == currentTrack?.id }.coerceAtLeast(0)
+            val newIndex = currentDisplayList.indexOfFirst { Track.stableKey(it) == Track.stableKey(currentTrack ?: trackFallback()) }.coerceAtLeast(0)
             playbackService?.setPlaylist(currentDisplayList.toList(), newIndex, startPlaying = false)
             try { playbackService?.player?.seekTo(pos) } catch (_: Exception) {}
             if (wasPlaying) playbackService?.player?.play()
@@ -386,14 +377,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnRepeat.setOnClickListener {
-            isRepeatLoopActive =!isRepeatLoopActive
+            isRepeatLoopActive = !isRepeatLoopActive
             playbackService?.isLoopPlaylistEnabled = isRepeatLoopActive
             btnRepeat.setColorFilter(if (isRepeatLoopActive) ContextCompat.getColor(this, R.color.studio_cyan) else ContextCompat.getColor(this, R.color.text_muted))
             Toast.makeText(this, if (isRepeatLoopActive) "Bucle de Playlist Activado" else "Bucle Desactivado", Toast.LENGTH_SHORT).show()
         }
 
         btnCrossfade.setOnClickListener {
-            isCrossfadeActive =!isCrossfadeActive
+            isCrossfadeActive = !isCrossfadeActive
             btnCrossfade.setColorFilter(if (isCrossfadeActive) ContextCompat.getColor(this, R.color.studio_cyan) else ContextCompat.getColor(this, R.color.text_muted))
             playbackService?.atsEngine?.crossfadeSeconds = if (isCrossfadeActive) 3 else 0
             Toast.makeText(this, if (isCrossfadeActive) "Crossfade 3s Activo" else "Crossfade 0s", Toast.LENGTH_SHORT).show()
@@ -402,7 +393,7 @@ class MainActivity : AppCompatActivity() {
         playerSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    val duration: Long = playbackService?.player?.duration?: 0L
+                    val duration: Long = playbackService?.player?.duration ?: 0L
                     if (duration > 0L) {
                         val seekPos: Long = (progress / 1000.0f * duration).toLong()
                         tvElapsedTime.text = formatTime(seekPos)
@@ -417,8 +408,8 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 isUserTrackingSeekBar = false
                 val player: ExoPlayer? = playbackService?.player
-                val duration: Long = player?.duration?: 0L
-                if (duration > 0L && sb!= null) {
+                val duration: Long = player?.duration ?: 0L
+                if (duration > 0L && sb != null) {
                     val targetPos: Long = (sb.progress / 1000.0f * duration).toLong()
                     try { player?.seekTo(targetPos) } catch (_: Exception) {}
                 }
@@ -465,7 +456,7 @@ class MainActivity : AppCompatActivity() {
         etSearchTracks.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val query = s?.toString()?.trim()?: ""
+                val query = s?.toString()?.trim() ?: ""
                 filterTracksByQuery(query)
             }
             override fun afterTextChanged(s: Editable?) {}
@@ -497,7 +488,6 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                // PATCH: fallback si el DAO no tiene esos métodos en alguna variante
                 withContext(Dispatchers.IO) { database.trackDao().getAllTracks() }
             }
             currentDisplayList.clear()
@@ -509,11 +499,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleFavorite(track: Track, position: Int) {
         if (position !in currentDisplayList.indices) return
-        val newFav =!track.isFavorite
+        val newFav = !track.isFavorite
         val updated = track.copy(isFavorite = newFav)
         currentDisplayList[position] = updated
-        // PATCH: mantiene allTracksList sincronizada
-        val allIdx = allTracksList.indexOfFirst { it.id == track.id }
+        val allIdx = allTracksList.indexOfFirst { Track.stableKey(it) == Track.stableKey(track) }
         if (allIdx >= 0) allTracksList[allIdx] = updated
         playlistAdapter.notifyItemChanged(position)
 
@@ -536,8 +525,7 @@ class MainActivity : AppCompatActivity() {
         val permissions = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
-            // PATCH: POST_NOTIFICATIONS por separado, no bloquea el scan si se niega
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)!= PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 storagePermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
             }
         } else {
@@ -545,7 +533,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val needed = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it)!= PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
         if (needed.isEmpty()) {
@@ -555,7 +543,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // PATCH: carga inmediata desde DB para no mostrar lista vacía mientras escanea
     private fun loadTracksFromDb() {
         lifecycleScope.launch {
             val list = withContext(Dispatchers.IO) {
@@ -578,9 +565,17 @@ class MainActivity : AppCompatActivity() {
     private fun scanAudioStorage() {
         lifecycleScope.launch {
             val scannedTracks = withContext(Dispatchers.IO) {
+                // FIX CI: preserva favoritos sin llamar a trackDao().isFavorite(id) que no existe.
+                // Era la línea 618 que rompía el build: Unresolved reference: isFavorite
+                val favMap: Map<Long, Boolean> = try {
+                    database.trackDao().getAllTracks().associate { t ->
+                        val key = if (t.mediaStoreId != 0L) t.mediaStoreId else t.id
+                        key to t.isFavorite
+                    }
+                } catch (_: Exception) { emptyMap() }
+
                 val tracks = mutableListOf<Track>()
                 val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-                // PATCH: sin columna DATA (deprecated en Q+). Se resuelve vía _ID.
                 val projection = arrayOf(
                     MediaStore.Audio.Media._ID,
                     MediaStore.Audio.Media.TITLE,
@@ -604,22 +599,23 @@ class MainActivity : AppCompatActivity() {
 
                         var order = 0
                         while (c.moveToNext()) {
-                            val id = c.getLong(idCol)
-                            val title = c.getString(titleCol)?: "Audio Track"
-                            val artist = c.getString(artistCol)?: "Unknown Artist"
-                            val album = c.getString(albumCol)?: "Unknown Album"
+                            val msId = c.getLong(idCol)
+                            val title = c.getString(titleCol) ?: "Audio Track"
+                            val artist = c.getString(artistCol) ?: "Unknown Artist"
+                            val album = c.getString(albumCol) ?: "Unknown Album"
                             val duration = try { c.getLong(durationCol) } catch (_: Exception) { 0L }
-                            val relPath = try { if (pathCol >= 0) c.getString(pathCol)?: "" else "" } catch (_: Exception) { "" }
+                            val relPath = try { if (pathCol >= 0) c.getString(pathCol) ?: "" else "" } catch (_: Exception) { "" }
 
-                            val contentUri = ContentUris.withAppendedId(uri, id).toString()
+                            val contentUri = ContentUris.withAppendedId(uri, msId).toString()
                             val format = detectFormat(title + relPath)
-
-                            // PATCH: preserva favorito si ya existía en DB
-                            val prevFav = try { database.trackDao().isFavorite(id) } catch (_: Exception) { false }
+                            val prevFav = favMap[msId] ?: false
 
                             tracks.add(
                                 Track(
-                                    id = id,
+                                    // FIX CI: id autogenerado por Room (0), mediaStoreId = msId.
+                                    // Antes se hacía id = msId con autoGenerate=true -> colisión.
+                                    id = 0,
+                                    mediaStoreId = msId,
                                     title = title,
                                     artist = artist,
                                     album = album,
@@ -657,8 +653,7 @@ class MainActivity : AppCompatActivity() {
 
             allTracksList.clear()
             allTracksList.addAll(scannedTracks)
-            // PATCH: si hay búsqueda activa no pisa el filtro
-            val q = etSearchTracks.text?.toString()?.trim()?: ""
+            val q = etSearchTracks.text?.toString()?.trim() ?: ""
             if (q.isEmpty()) {
                 currentDisplayList.clear()
                 currentDisplayList.addAll(allTracksList)
@@ -669,9 +664,8 @@ class MainActivity : AppCompatActivity() {
             playlistAdapter.updateData(currentDisplayList)
             updateTrackCount()
 
-            // PATCH: no pisa la playlist del servicio si ya está sonando
             val srv = playbackService
-            if (srv!= null && srv.getPlaylist().isEmpty() && currentDisplayList.isNotEmpty()) {
+            if (srv != null && srv.getPlaylist().isEmpty() && currentDisplayList.isNotEmpty()) {
                 srv.setPlaylist(currentDisplayList.toList(), 0, startPlaying = false)
             }
         }
@@ -692,10 +686,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createDemoTracks(): List<Track> {
-        // PATCH: URIs asset compatibles con Media3 (asset:/// con triple slash)
         return listOf(
             Track(
-                id = 1,
+                id = 0,
+                mediaStoreId = -1,
                 title = "SjbZ Studio Bass Master Reference",
                 artist = "ATS2835P Hi-Res Studio",
                 album = "Audiophile Acoustic Tests 2026",
@@ -709,7 +703,8 @@ class MainActivity : AppCompatActivity() {
                 orderIndex = 0
             ),
             Track(
-                id = 2,
+                id = 0,
+                mediaStoreId = -2,
                 title = "Cybernetic Pulse - MDRC Dynamic Test",
                 artist = "Actions Semiconductor DSP Labs",
                 album = "Hardware Reference Curves",
@@ -723,7 +718,8 @@ class MainActivity : AppCompatActivity() {
                 orderIndex = 1
             ),
             Track(
-                id = 3,
+                id = 0,
+                mediaStoreId = -3,
                 title = "Vocal Clarity & Acoustic Resonance",
                 artist = "SjbZ Master Engineers",
                 album = "Hi-Fi Stereo Demonstrations",
@@ -737,7 +733,8 @@ class MainActivity : AppCompatActivity() {
                 orderIndex = 2
             ),
             Track(
-                id = 4,
+                id = 0,
+                mediaStoreId = -4,
                 title = "Sub-Bass 20Hz - 120Hz Excursion Sweep",
                 artist = "Frequency Sweep Generator",
                 album = "Subwoofer Calibration",
@@ -770,14 +767,12 @@ class MainActivity : AppCompatActivity() {
         tvPlayerTitle.text = track.title
         tvPlayerArtist.text = track.artist
         tvPlayerTechSpecs.text = track.getTechInfo()
-        // PATCH: mapea el índice del servicio a la lista visible si coincide el track,
-        // si no, no marca ninguno en vez de marcar uno equivocado
-        val visibleIdx = currentDisplayList.indexOfFirst { it.id == track.id }
+        val visibleIdx = currentDisplayList.indexOfFirst { Track.stableKey(it) == Track.stableKey(track) }
         playlistAdapter.setPlayingIndex(visibleIdx)
     }
 
     private fun updatePlaybackProgressAndVUMeters() {
-        val srv = playbackService?: return
+        val srv = playbackService ?: return
         val player = srv.player
 
         val isPlaying = try { player.isPlaying } catch (_: Exception) { false }
@@ -791,7 +786,6 @@ class MainActivity : AppCompatActivity() {
             tvRemainingTime.text = "-" + formatTime((duration - position).coerceAtLeast(0L))
         }
 
-        // PATCH: no anima VU si la activity está pausada (el runnable ya se remueve, doble seguro)
         val fraction = if (duration > 0) position.toFloat() / duration else 0f
         try { srv.audioChain.updateVUMeters(isPlaying, fraction) } catch (_: Exception) {}
 
@@ -819,7 +813,6 @@ class MainActivity : AppCompatActivity() {
                     writer.write("#EXTM3U\n")
                     for (track in currentDisplayList) {
                         writer.write("#EXTINF:${track.duration / 1000},${track.artist} - ${track.title}\n")
-                        // PATCH: usa uri (reproducible) en vez de path físico que puede ser content://
                         writer.write("${track.uri}\n")
                     }
                 }

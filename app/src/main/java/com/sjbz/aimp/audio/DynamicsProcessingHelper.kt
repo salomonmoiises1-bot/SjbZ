@@ -7,6 +7,8 @@ import android.util.Log
 
 /**
  * DynamicsProcessingHelper para SjbZ / ATS2835P.
+ * PATCH SjbZ32: PreEq desactivado, EQ ahora en Sjbz32BandProcessor (software ExoPlayer).
+ * Este helper solo maneja MDRC + Limiter.
  */
 class DynamicsProcessingHelper {
 
@@ -23,17 +25,8 @@ class DynamicsProcessingHelper {
     private var dynamicsProcessing: DynamicsProcessing? = null
     private var legacyEqualizer: Equalizer? = null
 
-    // PATCH anti-clipseo: memoria de ganancias para rampa suave
     private var lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
-
-    // PATCH: cuenta real aceptada por el HAL (32/16/8). Antes se asumía 32 fijo
-    // en applyEqualizerLocked y crasheaba con setPreEqBand en 16..31 si el HAL
-    // solo aceptó 16 u 8.
     private var activePreEqCount: Int = EqualizerProcessor.BAND_COUNT
-
-    // PATCH: primera aplicación después de attach salta directo al target,
-    // sin slew-rate. Antes lastGains se reseteaba a 0 y el primer apply
-    // dejaba el EQ a +3dB en vez de +9dB hasta el próximo movimiento.
     private var isFirstApplyAfterAttach: Boolean = true
 
     @Volatile
@@ -64,7 +57,8 @@ class DynamicsProcessingHelper {
                 if (bassBoostProcessor!= null) {
                     equalizerProcessor.bassBoostProcessor = bassBoostProcessor
                 }
-                applyEqualizerLocked(equalizerProcessor, bassBoostProcessor)
+                // PATCH SjbZ32: no aplicar PreEq, solo MDRC/Limiter
+                // applyEqualizerLocked(equalizerProcessor, bassBoostProcessor)
                 applyMDRCLocked(mdrcProcessor)
                 applyLimiterLocked(limiterProcessor)
                 return
@@ -72,9 +66,7 @@ class DynamicsProcessingHelper {
 
             releaseLocked()
             currentSessionId = audioSessionId
-            // reset rampa al cambiar de sesión
             lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
-            // PATCH: reset de flags de sesión nueva
             isFirstApplyAfterAttach = true
             activePreEqCount = EqualizerProcessor.BAND_COUNT
 
@@ -121,10 +113,10 @@ class DynamicsProcessingHelper {
                 }
 
                 if (created) {
-                    // PATCH: guardar el count real aceptado por el HAL
                     activePreEqCount = usedPreEqCount
                     isFirstApplyAfterAttach = true
-                    applyEqualizerLocked(equalizerProcessor, bassBoostProcessor)
+                    // PATCH SjbZ32: dejar PreEq flat, no aplicar EQ aquí
+                    // applyEqualizerLocked(equalizerProcessor, bassBoostProcessor)
                     applyMDRCLocked(mdrcProcessor)
                     applyLimiterLocked(limiterProcessor)
                     isHardwareDspActive = true
@@ -151,18 +143,17 @@ class DynamicsProcessingHelper {
         bassBoostProcessor: BassBoostProcessor?
     ) {
         try {
-            val shouldEnable = equalizerProcessor.isEnabled || (bassBoostProcessor?.isEnabled == true)
-            val eq = Equalizer(0, audioSessionId).apply { enabled = shouldEnable }
-            legacyEqualizer = eq
-            // PATCH: en legacy no hay PreEq variable, pero marcamos primera aplicación
-            // para que el path legacy también arranque sin rampa heredada
-            isFirstApplyAfterAttach = true
-            applyLegacyEqualizerLocked(equalizerProcessor, bassBoostProcessor)
-            isLegacyFallbackActive = true
+            // PATCH SjbZ32: legacy Equalizer desactivado, EQ va por software
+            // No creamos Equalizer nativo para evitar doble EQ
+            Log.i(TAG, "Legacy fallback desactivado para EQ (SjbZ32 software), sesión $audioSessionId")
+            isLegacyFallbackActive = false
             isHardwareDspActive = false
-            Log.i(TAG, "Legacy Equalizer fallback en sesión $audioSessionId enabled=$shouldEnable bands=${eq.numberOfBands}")
+            // Si necesitas legacy para otros efectos, descomenta abajo:
+            // val shouldEnable = false
+            // val eq = Equalizer(0, audioSessionId).apply { enabled = false }
+            // legacyEqualizer = eq
         } catch (t: Throwable) {
-            Log.e(TAG, "Legacy Equalizer failed en sesión $audioSessionId: ${t.message}", t)
+            Log.e(TAG, "Legacy fallback failed en sesión $audioSessionId: ${t.message}", t)
             try { legacyEqualizer?.release() } catch (_: Throwable) {}
             legacyEqualizer = null
             isLegacyFallbackActive = false
@@ -170,9 +161,8 @@ class DynamicsProcessingHelper {
     }
 
     fun applyEqualizer(equalizerProcessor: EqualizerProcessor, bassBoostProcessor: BassBoostProcessor? = null) {
-        synchronized(dpLock) {
-            applyEqualizerLocked(equalizerProcessor, bassBoostProcessor)
-        }
+        // PATCH SjbZ32: no-op, EQ ahora en Sjbz32BandProcessor
+        Log.d(TAG, "applyEqualizer ignorado (SjbZ32 software activo)")
     }
 
     private fun applyEqualizerLocked(equalizerProcessor: EqualizerProcessor, bassBoostProcessor: BassBoostProcessor?) {
@@ -186,21 +176,16 @@ class DynamicsProcessingHelper {
                 } catch (_: Throwable) {
                     false
                 }
-
-                // PATCH: usar el count real aceptado por el HAL, no BAND_COUNT fijo
                 val preEqCount = activePreEqCount.coerceAtMost(EqualizerProcessor.BAND_COUNT)
-
                 for (b in 0 until preEqCount) {
                     if (b >= EqualizerProcessor.ISO_FREQUENCIES.size) break
                     val cutoff = EqualizerProcessor.ISO_FREQUENCIES[b]
-
                     val eqOnlyGain: Float = try {
                         if (equalizerProcessor.isEnabled) equalizerProcessor.getEffectiveGain(b, null) else 0.0f
                     } catch (t: Throwable) {
                         Log.w(TAG, "getEffectiveGain(b, null) no soportado: ${t.message}, usando path alternativo")
                         0.0f
                     }
-
                     val bbGain: Float = if (nativeActive) {
                         0.0f
                     } else {
@@ -211,7 +196,6 @@ class DynamicsProcessingHelper {
                             0.0f
                         }
                     }
-
                     val rawTotal: Float = if (eqOnlyGain == 0.0f && equalizerProcessor.isEnabled) {
                         try {
                             equalizerProcessor.getEffectiveGain(b, effectiveBb)
@@ -221,11 +205,7 @@ class DynamicsProcessingHelper {
                     } else {
                         eqOnlyGain + bbGain
                     }
-
                     val totalGain = rawTotal.coerceIn(MIN_PRE_EQ_GAIN_DB, MAX_PRE_EQ_GAIN_DB)
-
-                    // PATCH anti-clipseo: slew-rate limiter 3dB por aplicación,
-                    // pero la primera aplicación después de attach va directo al target
                     val prev = lastGains.getOrElse(b) { 0f }
                     val smoothed = if (isFirstApplyAfterAttach) {
                         totalGain
@@ -233,7 +213,6 @@ class DynamicsProcessingHelper {
                         totalGain.coerceIn(prev - SLEW_MAX_DB_PER_APPLY, prev + SLEW_MAX_DB_PER_APPLY)
                     }
                     if (b < lastGains.size) lastGains[b] = smoothed
-
                     val eqBand = DynamicsProcessing.EqBand(true, cutoff, smoothed)
                     try {
                         dp.setPreEqBandByChannelIndex(0, b, eqBand)
@@ -246,14 +225,12 @@ class DynamicsProcessingHelper {
                         Log.w(TAG, "setPreEqBand ch1 band=$b cutoff=$cutoff: ${t.message}")
                     }
                 }
-                // PATCH: limpiar flag de primera aplicación una vez completado el barrido
                 if (isFirstApplyAfterAttach) isFirstApplyAfterAttach = false
             } catch (t: Throwable) {
                 Log.w(TAG, "Error updating PreEq: ${t.message}", t)
             }
             return
         }
-
         if (legacyEqualizer!= null) {
             applyLegacyEqualizerLocked(equalizerProcessor, effectiveBb)
         } else {
@@ -265,27 +242,23 @@ class DynamicsProcessingHelper {
         val eq = legacyEqualizer?: return
         try {
             val effectiveBb = bassBoostProcessor?: equalizerProcessor.bassBoostProcessor
-
             val nativeActive: Boolean = try {
                 effectiveBb?.isNativeActive() == true
             } catch (_: Throwable) {
                 false
             }
-
             val shouldEnable = equalizerProcessor.isEnabled || (effectiveBb?.isEnabled == true)
             try {
                 eq.enabled = shouldEnable
             } catch (t: Throwable) {
                 Log.w(TAG, "legacy eq.enabled=$shouldEnable falló: ${t.message}")
             }
-
             val numBands = eq.numberOfBands.toInt()
             val range = eq.bandLevelRange?: run {
                 Log.w(TAG, "legacy bandLevelRange null, abortando")
                 return
             }
             val isoFreqs = EqualizerProcessor.ISO_FREQUENCIES
-
             for (b in 0 until numBands) {
                 val centerFreqHz: Float = try {
                     eq.getCenterFreq(b.toShort()) / 1000.0f
@@ -293,16 +266,13 @@ class DynamicsProcessingHelper {
                     Log.w(TAG, "getCenterFreq($b) falló: ${t.message}")
                     continue
                 }
-
                 var weightSum = 0.0
                 var weightedGainSum = 0.0
-
                 for (i in isoFreqs.indices) {
                     val logDist = kotlin.math.abs(
                         kotlin.math.log10(isoFreqs[i].toDouble()) - kotlin.math.log10(centerFreqHz.toDouble())
                     )
                     val weight = 1.0 / (1.0 + (logDist / 0.35) * (logDist / 0.35))
-
                     val eqGain: Float = if (equalizerProcessor.isEnabled) {
                         try {
                             equalizerProcessor.getEffectiveGain(i, null)
@@ -310,7 +280,6 @@ class DynamicsProcessingHelper {
                             0.0f
                         }
                     } else 0.0f
-
                     val bbGain: Float = if (nativeActive) 0.0f else {
                         try {
                             effectiveBb?.getBoostGainForFrequency(isoFreqs[i])?: 0.0f
@@ -318,12 +287,10 @@ class DynamicsProcessingHelper {
                             0.0f
                         }
                     }
-
                     val g = (eqGain + bbGain).toDouble()
                     weightedGainSum += g * weight
                     weightSum += weight
                 }
-
                 val targetDb = if (weightSum > 0.0) (weightedGainSum / weightSum).toFloat() else 0.0f
                 val targetDbClamped = targetDb.coerceIn(MIN_PRE_EQ_GAIN_DB, MAX_PRE_EQ_GAIN_DB)
                 val milliBels = (targetDbClamped * 100.0f).toInt().coerceIn(range[0].toInt(), range[1].toInt()).toShort()
@@ -398,7 +365,6 @@ class DynamicsProcessingHelper {
                 Log.w(TAG, "isEffectivelyActive falló: ${t.message}")
                 false
             }
-            // PATCH: usar postGainDb para compensación automática de headroom
             val postGain = try { limiterProcessor.postGainDb } catch (_: Throwable) { 0f }
             for (ch in 0..1) {
                 val limiter = DynamicsProcessing.Limiter(
@@ -447,7 +413,6 @@ class DynamicsProcessingHelper {
         isLegacyFallbackActive = false
         currentSessionId = 0
         lastGains = FloatArray(EqualizerProcessor.BAND_COUNT) { 0f }
-        // PATCH: reset de parches de sesión
         activePreEqCount = EqualizerProcessor.BAND_COUNT
         isFirstApplyAfterAttach = true
     }

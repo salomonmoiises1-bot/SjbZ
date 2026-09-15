@@ -34,7 +34,6 @@ class DynamicsProcessingHelper {
     var isLegacyFallbackActive: Boolean = false
         private set
 
-    // PARCHE: helper para linkear bassBoost -> eq -> dsp
     fun bindBassBoost(equalizerProcessor: EqualizerProcessor, bassBoost: BassBoostProcessor) {
         equalizerProcessor.linkBassBoost(bassBoost) {
             applyEqualizer(equalizerProcessor, bassBoost)
@@ -57,6 +56,10 @@ class DynamicsProcessingHelper {
         }
         release()
         currentSessionId = audioSessionId
+
+        if (bassBoostProcessor!= null) {
+            bindBassBoost(equalizerProcessor, bassBoostProcessor)
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {

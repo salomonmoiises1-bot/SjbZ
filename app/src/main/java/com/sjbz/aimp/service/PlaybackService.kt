@@ -183,7 +183,7 @@ class PlaybackService : MediaSessionService() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
          .setContentTitle(title).setContentText(artist)
          .setSubText(if (atsEngine.isBluetoothConnected) "SB-Z • Bluetooth LDAC/A2DP" else "SB-Z • ATS2835P Hi-Res Direct")
-         .setSmallIcon(R.drawable.ic_launcher_foreground).setContentIntent(openActivityIntent)
+         .setSmallIcon(R.drawable.ic_play).setContentIntent(openActivityIntent)
          .setOngoing(isPlaying).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
          .setPriority(NotificationCompat.PRIORITY_LOW).setCategory(NotificationCompat.CATEGORY_TRANSPORT)
          .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
@@ -209,11 +209,7 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onBind(intent: Intent?): IBinder? {
-        val action = intent?.action
-        if (action == "androidx.media3.session.MediaSessionService" || action == "android.media.browse.MediaBrowserService") {
-            return super.onBind(intent)
-        }
-        return binder
+        return super.onBind(intent)?: binder
     }
 
     fun setPlaylist(tracks: List<Track>, startIndex: Int = 0, startPlaying: Boolean = true) {

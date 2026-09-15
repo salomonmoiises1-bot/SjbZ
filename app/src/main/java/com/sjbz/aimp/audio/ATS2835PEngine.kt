@@ -36,10 +36,10 @@ class ATS2835PEngine(
     private var isUpdatingBb = false
 
     init {
-        equalizer.bassBoostProcessor = bassBoost
-        bassBoost.onParametersChanged = {
-            // la EqActivity ya llama a updateBassBoost con debounce,
-            // acá solo reacciona a cambios internos (presets) y evita loop
+        // PATCH: usa linkBassBoost para encadenar callbacks en vez de pisar
+        // onParametersChanged. Antes se asignaba directo y si EqActivity u otro
+        // componente seteaba su propio listener, se perdía este.
+        equalizer.linkBassBoost(bassBoost) {
             if (!isUpdatingBb) updateBassBoost()
         }
         if (audioSessionId > 0) {
@@ -51,27 +51,38 @@ class ATS2835PEngine(
         Log.d(TAG, "attachAudioSession: $sessionId")
         if (sessionId <= 0) return
         this.audioSessionId = sessionId
-        // 1. Helper primero
+        // 1. Helper primero (crea DP o fallback legacy)
         dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter, bassBoost)
-        // 2. BassBoost nativo en modo pasivo: no crear efecto HAL, solo guardar sesión
+        // 2. BassBoost nativo en modo pasivo: guardar sesión pero forzado a disabled
         // para que isNativeActive() devuelva false y el helper haga todo en software.
+        // Evita doble boost +24dB (12dB DSP + 12dB HAL).
         bassBoost.attachToSession(sessionId)
         bassBoost.setNativeEnabled(false)
 
-        updateEqualizer()
+        // PATCH: un solo ciclo de apply. updateBassBoost() ya hace
+        // applyLimiter + applyEqualizer internamente, no hace falta
+        // llamar updateEqualizer() + updateLimiter() por separado antes.
+        // Antes se hacían 4 applys seguidos (eq, mdrc, limiter, bb->limiter+eq).
         updateMDRC()
-        updateLimiter()
         updateBassBoost()
     }
 
     fun applyPreset(preset: EqPreset) {
         equalizer.loadFromPreset(preset)
         mdrc.loadFromSettings(preset.mdrcSettings)
-        if (preset.name == "Bass Boost") {
+        if (preset.name.equals("Bass Boost", ignoreCase = true)) {
             bassBoost.isEnabled = true
-            bassBoost.strength = 800.toShort()
+            // PATCH: usa setStrengthDbDsp para escala consistente con el motor DSP.
+            // Antes se seteaba 800 directo (9.6dB DSP) sin pasar por el guard
+            // de isUpdatingBb, disparando callback en medio del applyPreset.
+            isUpdatingBb = true
+            try {
+                bassBoost.setStrengthDbDsp(9.0f)
+            } finally {
+                isUpdatingBb = false
+            }
         }
-        updateEqualizer()
+        // PATCH: mismo orden que attach, un solo ciclo
         updateMDRC()
         updateBassBoost()
     }
@@ -102,24 +113,26 @@ class ATS2835PEngine(
         isUpdatingBb = true
         try {
             // PATCH anti-clipseo: compensación automática de headroom
-            // Por cada dB de boost, baja 0.4dB el postGain del limiter
-            val bbDb = try { bassBoost.getStrengthDb() } catch (_: Throwable) { 0f }
-            if (bassBoost.isEnabled) {
-                limiter.postGainDb = (-bbDb * 0.4f).coerceIn(-6f, 0f)
+            // PATCH escala: usa getStrengthDbDsp() (12dB) en vez de getStrengthDb() (15dB UI).
+            // Antes sobre-compensaba 25%: con 9dB UI bajaba -3.6dB en vez de -2.88dB DSP.
+            val bbDb = try { bassBoost.getStrengthDbDsp() } catch (_: Throwable) { 0f }
+            limiter.postGainDb = if (bassBoost.isEnabled) {
+                (-bbDb * 0.4f).coerceIn(-6f, 0f)
             } else {
-                limiter.postGainDb = 0f
+                0f
             }
             dynamicsHelper.applyLimiter(limiter)
 
-            // FIX MUTE: solo path software. No llamar a updateNativeEffect()
-            // cuando DynamicsProcessing está activo, porque duplica +24dB.
+            // FIX MUTE: solo path software cuando DP está activo.
+            // No llamar a updateNativeEffect() con DP activo porque duplica +24dB.
+            // setNativeEnabled(false) asegura que isNativeActive()=false y el helper
+            // inyecte el bajo vía PreEq.
+            dynamicsHelper.applyEqualizer(equalizer, bassBoost)
             if (dynamicsHelper.isHardwareDspActive) {
-                dynamicsHelper.applyEqualizer(equalizer, bassBoost)
                 // Asegurar que el nativo quede apagado
                 bassBoost.setNativeEnabled(false)
             } else {
                 // Solo en fallback legacy sin DP, usar nativo como segunda capa
-                dynamicsHelper.applyEqualizer(equalizer, bassBoost)
                 bassBoost.updateNativeEffect()
             }
         } finally {
@@ -130,5 +143,8 @@ class ATS2835PEngine(
     fun release() {
         dynamicsHelper.release()
         bassBoost.release()
+        // PATCH: reset de flags de sesión para que un re-attach no herede estado
+        audioSessionId = 0
+        isUpdatingBb = false
     }
 }

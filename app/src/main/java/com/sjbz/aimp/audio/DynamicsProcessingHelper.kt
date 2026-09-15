@@ -63,7 +63,6 @@ class DynamicsProcessingHelper {
                 val preEqBandCount = EqualizerProcessor.BAND_COUNT
                 val mbcBandCount = mdrcProcessor.getBandCount()
 
-                // PARCHE: Builder lleva 10 params, faltaba limiterChannelCount
                 val configBuilder = DynamicsProcessing.Config.Builder(
                     DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
                     2,
@@ -73,8 +72,7 @@ class DynamicsProcessingHelper {
                     mbcBandCount,
                     false,
                     0,
-                    limiterProcessor.isEffectivelyActive(),
-                    2
+                    limiterProcessor.isEffectivelyActive()
                 )
 
                 val config = configBuilder.build()

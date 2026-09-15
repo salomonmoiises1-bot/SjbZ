@@ -81,4 +81,13 @@ dependencies {
 
     // Palette - Colores dinámicos desde carátula
     implementation("androidx.palette:palette-ktx:1.0.0")
+
+    // ViewPager2 - Swipe entre carátula / lista / ecualizador
+    implementation("androidx.viewpager2:viewpager2:1.1.0")
+
+    // Preference - Pantalla de ajustes para DSP / Hi-Res
+    implementation("androidx.preference:preference-ktx:1.2.1")
+
+    // DocumentFile - Mejor acceso a carpetas USB / SD con SAF
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }

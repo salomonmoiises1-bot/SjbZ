@@ -271,6 +271,23 @@ class BassBoostProcessor(@Volatile var audioSessionId: Int = 0) {
         }
     }
 
+    /**
+     * Fuerza el estado enabled del efecto nativo sin tocar strength ni isEnabled.
+     * Usado por ATS2835PEngine para evitar doble boost (+24dB) cuando
+     * DynamicsProcessing ya aplica el bajo en software.
+     */
+    fun setNativeEnabled(enabled: Boolean) {
+        synchronized(nativeLock) {
+            val bb = nativeBassBoost?: return
+            try {
+                bb.enabled = enabled
+                Log.d(TAG, "setNativeEnabled($enabled) aplicado a sesión $audioSessionId")
+            } catch (t: Throwable) {
+                Log.w(TAG, "setNativeEnabled($enabled) falló: ${t.message}")
+            }
+        }
+    }
+
     fun hasValidSession(): Boolean = audioSessionId > 0
 
     fun release() {

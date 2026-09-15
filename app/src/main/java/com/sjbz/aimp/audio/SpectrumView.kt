@@ -72,6 +72,15 @@ class SpectrumView @JvmOverloads constructor(
         invalidate()
     }
 
+    // PARCHE: theming dinámico desde EqActivity.applyPresetColor()
+    fun setThemeColor(color: Int) {
+        spectrumPaint.color = color
+        spectrumPaint.alpha = 180
+        linePaint.color = color
+        textPaint.color = color
+        invalidate()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val w = width.toFloat()

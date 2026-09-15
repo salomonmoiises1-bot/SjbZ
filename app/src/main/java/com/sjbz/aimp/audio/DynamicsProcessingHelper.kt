@@ -82,15 +82,6 @@ class DynamicsProcessingHelper {
                     limiterProcessor.isEffectivelyActive()
                 )
 
-                for (b in 0 until preEqBandCount) {
-                    val cutoff = EqualizerProcessor.ISO_FREQUENCIES[b]
-                    val gain = equalizerProcessor.getEffectiveGain(b, bassBoostProcessor)
-                    val eqBand = createEqBand(equalizerProcessor.isEnabled, cutoff, gain, 1.0f)
-                    // CORREGIDO: Builder no tiene setPreEqBandAllChannelsTo, usar por canal
-                    configBuilder.setPreEqBandByChannelIndex(0, b, eqBand)
-                    configBuilder.setPreEqBandByChannelIndex(1, b, eqBand)
-                }
-
                 val config = configBuilder.build()
                 dynamicsProcessing = DynamicsProcessing(0, audioSessionId, config).apply {
                     enabled = true

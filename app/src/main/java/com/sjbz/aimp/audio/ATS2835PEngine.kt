@@ -6,16 +6,6 @@ import com.sjbz.aimp.model.EqPreset
 
 typealias ATSEngine = ATS2835PEngine
 
-/**
- * Core Audio DSP Engine for SjbZ.
- * Models the Actions Semiconductor ATS2835P audio processing architecture:
- * - Preamp & 32-Band ISO Equalizer with calibrated hardware curve (+1.5dB @ 60Hz, +1dB @ 12.5kHz, -0.5dB natural roll-off)
- * - 5-Band Hardware Multi-band Dynamic Range Compression (MDRC) with ATS2835P datasheet specs
- * - ATS2835P QFN68 Anti-clipping Limiter (-1.0dB, 1ms attack, 100ms release)
- * - ATS2835P Hardware SoftClipper
- * - Stereo Balance, Pitch & Speed scaling, Crossfade engine
- * - Bluetooth A2DP auto-adaptation (Gentle MDRC mode, limiter bypass)
- */
 class ATS2835PEngine(
     private val context: Context? = null,
     var audioSessionId: Int = 0
@@ -34,11 +24,10 @@ class ATS2835PEngine(
     val bassBoost = BassBoostProcessor()
     val dynamicsHelper = DynamicsProcessingHelper()
 
-    // DSP Parameters
-    var balance: Float = 0.0f // -1.0 (Left) to +1.0 (Right)
-    var pitch: Float = 1.0f   // 0.5x to 2.0x
-    var speed: Float = 1.0f   // 0.5x to 2.0x
-    var crossfadeSeconds: Int = 3 // 0 to 10s
+    var balance: Float = 0.0f
+    var pitch: Float = 1.0f
+    var speed: Float = 1.0f
+    var crossfadeSeconds: Int = 3
 
     var isBluetoothConnected: Boolean = false
         private set
@@ -57,12 +46,13 @@ class ATS2835PEngine(
         Log.d(TAG, "attachAudioSession: $sessionId")
         if (sessionId <= 0) return
         this.audioSessionId = sessionId
-        // 1. Primero el helper (DynamicsProcessing)
+        // 1. Helper primero
         dynamicsHelper.attachToSession(sessionId, equalizer, mdrc, limiter, bassBoost)
-        // 2. Después el BassBoost nativo
+        // 2. BassBoost nativo en modo pasivo: no crear efecto HAL, solo guardar sesión
+        // para que isNativeActive() devuelva false y el helper haga todo en software.
         bassBoost.attachToSession(sessionId)
+        bassBoost.setNativeEnabled(false)
 
-        // 3. Reaplicar todo DESPUÉS del attach, si no queda en 0
         updateEqualizer()
         updateMDRC()
         updateLimiter()
@@ -85,8 +75,7 @@ class ATS2835PEngine(
         isBluetoothConnected = connected
         limiter.isBypassedForBluetooth = connected
         mdrc.isGentleBluetoothMode = connected
-
-        Log.i(TAG, "Bluetooth A2DP state: $connected. Gentle MDRC: $connected. Internal limiter bypassed: $connected")
+        Log.i(TAG, "Bluetooth A2DP state: $connected")
         dynamicsHelper.applyMDRC(mdrc)
         dynamicsHelper.applyLimiter(limiter)
     }
@@ -104,10 +93,17 @@ class ATS2835PEngine(
     }
 
     fun updateBassBoost() {
-        // 1. Primary DSP: DynamicsProcessing 32-band PreEq (guaranteed to work on Android 12+)
-        dynamicsHelper.applyEqualizer(equalizer, bassBoost)
-        // 2. Secondary layer: Native AudioEffect BassBoost
-        bassBoost.updateNativeEffect()
+        // FIX MUTE: solo path software. No llamar a updateNativeEffect()
+        // cuando DynamicsProcessing está activo, porque duplica +24dB.
+        if (dynamicsHelper.isHardwareDspActive) {
+            dynamicsHelper.applyEqualizer(equalizer, bassBoost)
+            // Asegurar que el nativo quede apagado
+            bassBoost.setNativeEnabled(false)
+        } else {
+            // Solo en fallback legacy sin DP, usar nativo como segunda capa
+            dynamicsHelper.applyEqualizer(equalizer, bassBoost)
+            bassBoost.updateNativeEffect()
+        }
     }
 
     fun release() {

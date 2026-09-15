@@ -15,7 +15,7 @@ import com.sjbz.aimp.model.Track
 import java.util.Collections
 
 /**
- * Playlist RecyclerView adapter with AIMP styling, Drag & Drop, and Swipe-to-Delete.
+ * Playlist RecyclerView adapter with SB-Z Studio styling, Drag & Drop, and Swipe-to-Delete.
  */
 class PlaylistAdapter(
     private var tracks: MutableList<Track>,
@@ -71,10 +71,10 @@ class PlaylistAdapter(
             tvFormat.text = track.format
             tvBitrate.text = "${track.bitrate}k"
 
-            // Highlight playing track with AIMP signature orange
+            // Highlight playing track with Studio Electric Cyan
             if (isPlaying) {
-                container.setBackgroundColor(Color.parseColor("#26FF7700"))
-                tvTitle.setTextColor(Color.parseColor("#FF8800"))
+                container.setBackgroundColor(Color.parseColor("#2600E5FF"))
+                tvTitle.setTextColor(Color.parseColor("#00E5FF"))
                 ivPlayingIndicator.visibility = View.VISIBLE
             } else {
                 container.setBackgroundColor(Color.TRANSPARENT)

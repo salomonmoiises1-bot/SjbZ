@@ -282,7 +282,7 @@ class EqActivity : AppCompatActivity() {
                 dspProcessor?.setEmulationEnabled(isChecked)
             }
             prefs.edit().putBoolean("emu_enabled", isChecked).apply()
-            val masterActive = dspProcessor?.masterEnabled!= false
+            val masterActive = (dspProcessor?.masterEnabled?: false)
             seekBarEmuAmount.isEnabled = isChecked && masterActive
             updateEmuStatus()
         }

@@ -1,3 +1,4 @@
-# Add project specific ProGuard rules here.
--keep class androidx.media3.** { *; }
--dontwarn androidx.media3.**
+# SB-Z Studio Audio Equalizer ProGuard Rules
+-keep class com.sjbz.aimp.model.** { *; }
+-keep class com.sjbz.aimp.audio.** { *; }
+-keep class com.google.gson.** { *; }

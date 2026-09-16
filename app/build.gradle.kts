@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
 }
 
 android {
@@ -38,7 +37,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-        freeCompilerArgs = listOf("-opt-in=androidx.media3.common.util.UnstableApi")
     }
 
     buildFeatures {
@@ -61,17 +59,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 
-    // Media3 ExoPlayer (1.4.1)
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-ui:1.4.1")
-    implementation("androidx.media3:media3-session:1.4.1")
-    implementation("androidx.media3:media3-common:1.4.1")
-    implementation("androidx.media:media:1.7.0")
+    // Jetpack Preferences DataStore for persisting presets, profiles and audio settings
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
 
-    // Room Database
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    // Media support for foreground notifications & audio controls
+    implementation("androidx.media:media:1.7.0")
 
     // Gson JSON Parser
     implementation("com.google.code.gson:gson:2.10.1")

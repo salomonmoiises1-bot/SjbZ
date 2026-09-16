@@ -30,7 +30,6 @@ import com.sjbz.aimp.audio.PresetManager
 import com.sjbz.aimp.audio.SjbzDspProcessor
 import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.service.GlobalAudioService
-import com.sjbz.aimp.service.PlaybackService
 import com.sjbz.aimp.ui.AudioSpectrumVisualizerView
 
 /**
@@ -140,8 +139,8 @@ class EqActivity : AppCompatActivity() {
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         presetManager = PresetManager(this)
 
-        // Acquire DSP processor reference from running PlaybackService or fallback
-        dspProcessor = PlaybackService.instance?.getDsp() ?: SjbzDspProcessor()
+        // Initialize DSP processor
+        dspProcessor = SjbzDspProcessor()
 
         bindViews()
         setupToolbar()
@@ -242,16 +241,16 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun setupGenreRecognition() {
-        val currentTrack = PlaybackService.instance?.getCurrentTrack()
-        val genre = currentTrack?.genre ?: "Studio"
-        val title = currentTrack?.title ?: "Reproducción activa"
+        val currentProfile = GlobalAudioSessionManager.getInstance(this).currentProfile
+        val genre = currentProfile.presetName
+        val title = currentProfile.appName
 
         tvRecognizedGenre.text = genre
-        tvGenreTrackInfo.text = "$title • Adaptación DSP disponible"
+        tvGenreTrackInfo.text = "$title • Perfil activo"
 
         btnAutoEqGenre.setOnClickListener {
             applyGenrePreset(genre)
-            Toast.makeText(this, "EQ adaptado al género: $genre", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "EQ adaptado al perfil: $genre", Toast.LENGTH_SHORT).show()
         }
     }
 

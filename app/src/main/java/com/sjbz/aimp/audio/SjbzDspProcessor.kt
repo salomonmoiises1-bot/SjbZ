@@ -1,8 +1,5 @@
 package com.sjbz.aimp.audio
 
-import androidx.media3.common.C
-import androidx.media3.common.audio.AudioProcessor
-import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
@@ -19,14 +16,12 @@ import kotlin.math.tanh
  *   Input -> Preamp Gain -> Low-Shelf Bass (RBJ) -> 32-Band ISO Peaking EQ (RBJ, Q=1.4) ->
  *   Analog Warmth Soft Clipper (tanh) -> Output
  *
- * Requirements:
- * - Strict C.ENCODING_PCM_FLOAT format negotiation.
- * - Zero heap allocations during queueInput (real-time audio thread safety).
+ * Fully standalone (no external framework dependencies):
+ * - Zero heap allocations during audio processing loops.
  * - Per-channel Transposed Direct Form II biquad filter state memory.
- * - Coefficient recalculation exclusively when marked dirty.
  * - Real-time mono 2048-sample FFT buffer streaming via fftListener.
  */
-class SjbzDspProcessor : BaseAudioProcessor() {
+class SjbzDspProcessor {
 
     companion object {
         const val BAND_COUNT = 32
@@ -34,7 +29,7 @@ class SjbzDspProcessor : BaseAudioProcessor() {
         const val MAX_CHANNELS = 8
         const val FFT_BLOCK_SIZE = 2048
         const val DEFAULT_Q = 1.4f
-        const val EMU_FILTERS = 4 // 0: Low-Shelf 80Hz, 1: Dip 3kHz, 2: High-Shelf 18kHz, 3: LowPass 18.5kHz
+        const val EMU_FILTERS = 4
 
         val ISO_FREQUENCIES = floatArrayOf(
             20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f,
@@ -68,7 +63,7 @@ class SjbzDspProcessor : BaseAudioProcessor() {
 
     // ATS2835P Emulation Mode parameters
     private var emulationEnabled: Boolean = false
-    private var emulationAmount: Float = 0.8f // 0.0 to 1.0 (dry/wet)
+    private var emulationAmount: Float = 0.8f
     private var bluetoothAutoBypass: Boolean = true
     @Volatile
     private var bluetoothConnected: Boolean = false
@@ -76,78 +71,52 @@ class SjbzDspProcessor : BaseAudioProcessor() {
     // 5-Band Multi-Band Dynamic Range Compressor (MDRC)
     val mdrcProcessor = MDRCProcessor()
 
-    // Emulation Filters (4 Biquads):
-    // 0: Signature Low-shelf +2dB @ 80Hz
-    // 1: Signature Dip -1.5dB @ 3000Hz (Q=1.4)
-    // 2: Signature High-shelf -3dB @ 18000Hz
-    // 3: Codec Loss 2nd-order Butterworth Low-pass @ 18500Hz
     private val emuB0 = FloatArray(EMU_FILTERS)
     private val emuB1 = FloatArray(EMU_FILTERS)
     private val emuB2 = FloatArray(EMU_FILTERS)
     private val emuA1 = FloatArray(EMU_FILTERS)
     private val emuA2 = FloatArray(EMU_FILTERS)
 
-    // Per-channel biquad states for Emulation filters:
-    // emuS1[channel * EMU_FILTERS + filterIndex], emuS2[...]
     private val emuS1 = FloatArray(MAX_CHANNELS * EMU_FILTERS)
     private val emuS2 = FloatArray(MAX_CHANNELS * EMU_FILTERS)
 
-    // Dynamic Limiter: 1-band, threshold -6dB, ratio 4:1, attack 5ms, release 80ms
-    private val limiterThresholdLin = 10.0.pow(-6.0 / 20.0).toFloat() // ~0.5011872f
+    private val limiterThresholdLin = 10.0.pow(-6.0 / 20.0).toFloat()
     private var limiterAlphaAtt: Float = 0.0f
     private var limiterAlphaRel: Float = 0.0f
     private val emuEnv = FloatArray(MAX_CHANNELS)
 
-    // PRNG seed for zero-allocation hardware dither simulation
     private var ditherSeed: Int = 123456789
 
-    // Dirty state flag for coefficient updates
     @Volatile
     private var isDirty: Boolean = true
     private var currentSampleRate: Float = 48000.0f
 
-    // Biquad normalized coefficients: b0, b1, b2, a1, a2 (for 33 filters)
     private val b0Array = FloatArray(TOTAL_FILTERS)
     private val b1Array = FloatArray(TOTAL_FILTERS)
     private val b2Array = FloatArray(TOTAL_FILTERS)
     private val a1Array = FloatArray(TOTAL_FILTERS)
     private val a2Array = FloatArray(TOTAL_FILTERS)
 
-    // Per-channel filter states for Transposed Direct Form II:
-    // s1[channel * TOTAL_FILTERS + filterIndex]
-    // s2[channel * TOTAL_FILTERS + filterIndex]
     private val s1 = FloatArray(MAX_CHANNELS * TOTAL_FILTERS)
     private val s2 = FloatArray(MAX_CHANNELS * TOTAL_FILTERS)
 
-    // Preallocated ring buffer and dispatch array for 2048-sample FFT streaming
     private val fftRingBuffer = FloatArray(FFT_BLOCK_SIZE)
     private val fftDispatchBuffer = FloatArray(FFT_BLOCK_SIZE)
     private var fftRingIndex: Int = 0
 
-    /**
-     * Callback for real-time spectrum analysis. Dispatches a 2048-sample mono block.
-     */
     var fftListener: ((FloatArray) -> Unit)? = null
 
     init {
         recalculateCoefficients()
     }
 
-    // -------------------------------------------------------------------------
-    // AudioProcessor Lifecycle & Configuration
-    // -------------------------------------------------------------------------
-
-    override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
-            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
-        }
-        currentSampleRate = inputAudioFormat.sampleRate.toFloat().coerceAtLeast(8000f)
+    fun configure(sampleRate: Float) {
+        currentSampleRate = sampleRate.coerceAtLeast(8000f)
         mdrcProcessor.setSampleRate(currentSampleRate)
         isDirty = true
-        return inputAudioFormat
     }
 
-    override fun onReset() {
+    fun reset() {
         s1.fill(0.0f)
         s2.fill(0.0f)
         emuS1.fill(0.0f)
@@ -159,27 +128,13 @@ class SjbzDspProcessor : BaseAudioProcessor() {
         isDirty = true
     }
 
-    // -------------------------------------------------------------------------
-    // Zero-Allocation Real-Time Audio Buffer Processing
-    // -------------------------------------------------------------------------
-
-    override fun queueInput(inputBuffer: ByteBuffer) {
-        val remainingBytes = inputBuffer.remaining()
-        if (remainingBytes == 0) return
-
+    fun processFloats(samples: FloatArray, offset: Int, length: Int, channelCount: Int) {
         if (isDirty) {
             recalculateCoefficients()
         }
 
-        // BaseAudioProcessor allocates/reuses the internal output ByteBuffer
-        val outputBuffer = replaceOutputBuffer(remainingBytes)
-        outputBuffer.order(ByteOrder.nativeOrder())
-        inputBuffer.order(ByteOrder.nativeOrder())
-
-        val channelCount = inputAudioFormat.channelCount.coerceIn(1, MAX_CHANNELS)
-        val totalFloats = remainingBytes / 4
-        val frames = totalFloats / channelCount
-
+        val chCount = channelCount.coerceIn(1, MAX_CHANNELS)
+        val frames = length / chCount
         val localMasterEnabled = masterEnabled
         val localLinearPreamp = linearPreamp
         val localListener = fftListener
@@ -194,15 +149,13 @@ class SjbzDspProcessor : BaseAudioProcessor() {
         for (frame in 0 until frames) {
             frameMonoSum = 0.0f
 
-            for (ch in 0 until channelCount) {
-                var x = inputBuffer.float * localLinearPreamp
+            for (ch in 0 until chCount) {
+                val sampleIdx = offset + frame * chCount + ch
+                var x = samples[sampleIdx] * localLinearPreamp
 
                 if (localMasterEnabled) {
                     val chOffset = ch * TOTAL_FILTERS
 
-                    // Cascade through 33 Biquad Filters (Direct Form II Transposed)
-                    // Index 0: Low-Shelf Bass
-                    // Indices 1..32: 32 ISO Peaking EQ bands
                     for (f in 0 until TOTAL_FILTERS) {
                         val stateIdx = chOffset + f
                         val b0 = b0Array[f]
@@ -221,13 +174,11 @@ class SjbzDspProcessor : BaseAudioProcessor() {
                         x = y
                     }
 
-                    // ATS2835P Hardware Emulation Block (Input -> Bass -> 32x Peaking -> ATS2835P Emu -> Soft Clipper -> Output)
                     if (isEmuActive) {
                         val dryX = x
                         var wetX = x
                         val emuOffset = ch * EMU_FILTERS
 
-                        // 1. Signature EQ (Filters 0, 1, 2) + Codec Loss Low-Pass (Filter 3)
                         for (ef in 0 until EMU_FILTERS) {
                             val sIdx = emuOffset + ef
                             val eb0 = emuB0[ef]
@@ -246,12 +197,10 @@ class SjbzDspProcessor : BaseAudioProcessor() {
                             wetX = ey
                         }
 
-                        // 2. Codec Loss Dither (simulating subtle hardware DAC noise floor)
                         ditherSeed = ditherSeed * 1664525 + 1013904223
                         val dither = ((ditherSeed and 0xFFFF) - 32768) * 0.0000003f
                         wetX += dither
 
-                        // 3. Dynamic Limiter: 1-band compressor, threshold -6dB, ratio 4:1, attack 5ms, release 80ms
                         val absX = abs(wetX)
                         var env = emuEnv[ch]
                         if (absX > env) {
@@ -261,33 +210,34 @@ class SjbzDspProcessor : BaseAudioProcessor() {
                         }
                         emuEnv[ch] = env
 
+                        var gain = 1.0f
                         if (env > localLimiterThresh) {
-                            // Ratio 4:1 -> gain = (threshold / env)^(1 - 1/ratio) = (threshold / env)^0.75
-                            val ratioFactor = localLimiterThresh / env
-                            val gain = ratioFactor.pow(0.75f)
-                            wetX *= gain
+                            val overDb = 20.0f * kotlin.math.log10(env / localLimiterThresh)
+                            val compGainDb = -overDb * (3.0f / 4.0f)
+                            gain = 10.0.pow(compGainDb / 20.0).toFloat()
                         }
+                        wetX *= gain
 
-                        // 4. Wet/Dry mix with amount
-                        x = (1.0f - localEmuAmount) * dryX + localEmuAmount * wetX
+                        x = dryX * (1.0f - localEmuAmount) + wetX * localEmuAmount
                     }
 
-                    // 5-Band Multi-Band Dynamic Range Compressor (MDRC)
-                    x = mdrcProcessor.processSample(x, ch)
-
-                    // Analog Soft Clipper: tanh(x) prevents harsh 0dBFS digital intersample clipping
-                    x = tanh(x.toDouble()).toFloat()
+                    // Analog Warmth Soft Clipper
+                    if (x > 1.0f) {
+                        x = 1.0f + tanh(x - 1.0f) * 0.3f
+                    } else if (x < -1.0f) {
+                        x = -1.0f + tanh(x + 1.0f) * 0.3f
+                    }
                 }
 
-                outputBuffer.putFloat(x)
+                samples[sampleIdx] = x
                 frameMonoSum += x
             }
 
-            // Downmix to mono for FFT Spectrum Analysis
-            fftRingBuffer[fftRingIndex++] = frameMonoSum / channelCount
-            if (fftRingIndex >= FFT_BLOCK_SIZE) {
-                fftRingIndex = 0
-                if (localListener != null) {
+            if (localListener != null) {
+                fftRingBuffer[fftRingIndex] = frameMonoSum / chCount
+                fftRingIndex++
+                if (fftRingIndex >= FFT_BLOCK_SIZE) {
+                    fftRingIndex = 0
                     System.arraycopy(fftRingBuffer, 0, fftDispatchBuffer, 0, FFT_BLOCK_SIZE)
                     localListener.invoke(fftDispatchBuffer)
                 }
@@ -296,14 +246,14 @@ class SjbzDspProcessor : BaseAudioProcessor() {
     }
 
     // -------------------------------------------------------------------------
-    // DSP Parameters Configuration (Thread-Safe Dirty Notification)
+    // DSP Parameter Setters
     // -------------------------------------------------------------------------
 
-    fun setPreamp(gainDb: Float) {
-        val clamped = gainDb.coerceIn(-12.0f, 12.0f)
-        if (abs(this.preampDb - clamped) > 0.001f) {
-            this.preampDb = clamped
-            this.linearPreamp = 10.0.pow(clamped / 20.0).toFloat()
+    fun setPreamp(db: Float) {
+        val clamped = db.coerceIn(-12.0f, 12.0f)
+        if (abs(preampDb - clamped) > 0.001f) {
+            preampDb = clamped
+            linearPreamp = 10.0.pow(clamped / 20.0).toFloat()
         }
     }
 
@@ -311,40 +261,42 @@ class SjbzDspProcessor : BaseAudioProcessor() {
 
     fun setBassBoost(enabled: Boolean, freqHz: Float, gainDb: Float) {
         val clampedGain = gainDb.coerceIn(0.0f, 12.0f)
-        val validFreq = when {
-            freqHz <= 70f -> 60.0f
-            freqHz <= 100f -> 85.0f
-            else -> 120.0f
-        }
-        if (bassEnabled != enabled || abs(bassFreqHz - validFreq) > 0.1f || abs(bassGainDb - clampedGain) > 0.01f) {
+        val clampedFreq = freqHz.coerceIn(20.0f, 500.0f)
+        if (bassEnabled != enabled || abs(bassFreqHz - clampedFreq) > 0.1f || abs(bassGainDb - clampedGain) > 0.01f) {
             bassEnabled = enabled
-            bassFreqHz = validFreq
+            bassFreqHz = clampedFreq
             bassGainDb = clampedGain
             isDirty = true
         }
     }
 
-    fun isBassBoostEnabled(): Boolean = bassEnabled
-    fun getBassBoostFreq(): Float = bassFreqHz
-    fun getBassBoostGain(): Float = bassGainDb
-
-    fun setBandGain(bandIndex: Int, gainDb: Float) {
-        if (bandIndex in 0 until BAND_COUNT) {
+    fun setBandGain(index: Int, gainDb: Float) {
+        if (index in 0 until BAND_COUNT) {
             val clamped = gainDb.coerceIn(-12.0f, 12.0f)
-            if (abs(bandGainsDb[bandIndex] - clamped) > 0.01f) {
-                bandGainsDb[bandIndex] = clamped
+            if (abs(bandGainsDb[index] - clamped) > 0.01f) {
+                bandGainsDb[index] = clamped
                 isDirty = true
             }
         }
     }
 
-    fun getBandGain(bandIndex: Int): Float {
-        return if (bandIndex in 0 until BAND_COUNT) bandGainsDb[bandIndex] else 0.0f
+    fun setAllBands(gains: List<Float>) {
+        var changed = false
+        for (i in 0 until minOf(gains.size, BAND_COUNT)) {
+            val clamped = gains[i].coerceIn(-12.0f, 12.0f)
+            if (abs(bandGainsDb[i] - clamped) > 0.01f) {
+                bandGainsDb[i] = clamped
+                changed = true
+            }
+        }
+        if (changed) {
+            isDirty = true
+        }
     }
 
-    // -------------------------------------------------------------------------
-    // ATS2835P Emulation Mode Configuration & Bluetooth Auto-Bypass
-    // -------------------------------------------------------------------------
+    fun getBandGain(index: Int): Float {
+        return if (index in 0 until BAND_COUNT) bandGainsDb[index] else 0.0f
+    }
 
     fun setEmulationEnabled(enabled: Boolean) {
         if (emulationEnabled != enabled) {
@@ -356,10 +308,7 @@ class SjbzDspProcessor : BaseAudioProcessor() {
     fun isEmulationEnabled(): Boolean = emulationEnabled
 
     fun setEmulationAmount(amount: Float) {
-        val clamped = amount.coerceIn(0.0f, 1.0f)
-        if (abs(emulationAmount - clamped) > 0.001f) {
-            emulationAmount = clamped
-        }
+        emulationAmount = amount.coerceIn(0.0f, 1.0f)
     }
 
     fun getEmulationAmount(): Float = emulationAmount
@@ -376,121 +325,57 @@ class SjbzDspProcessor : BaseAudioProcessor() {
 
     fun isBluetoothConnected(): Boolean = bluetoothConnected
 
-    fun isEmulationActive(): Boolean {
-        return masterEnabled && emulationEnabled && (!bluetoothAutoBypass || !bluetoothConnected)
-    }
-
-    // -------------------------------------------------------------------------
-    // 5-Band Multi-Band Dynamic Range Compressor (MDRC) Configuration
-    // -------------------------------------------------------------------------
-
     fun setMdrcEnabled(enabled: Boolean) {
-        mdrcProcessor.isEnabled = enabled
+        mdrcProcessor.enabled = enabled
     }
 
-    fun isMdrcEnabled(): Boolean = mdrcProcessor.isEnabled
+    fun setMdrcDynamics(thresholdDb: Float, ratio: Float) {
+        mdrcProcessor.setGlobalDynamics(thresholdDb, ratio)
+    }
 
     fun setMdrcBandGain(bandIndex: Int, gainDb: Float) {
         mdrcProcessor.setBandGain(bandIndex, gainDb)
     }
 
-    fun getMdrcBandGain(bandIndex: Int): Float = mdrcProcessor.getBandGain(bandIndex)
-
-    fun setMdrcDynamics(thresholdDb: Float, ratio: Float, attackMs: Float = 10f, releaseMs: Float = 80f) {
-        mdrcProcessor.setDynamics(thresholdDb, ratio, attackMs, releaseMs)
+    fun getMdrcGainReduction(): Float {
+        return mdrcProcessor.getGainReductionDb()
     }
 
-    fun getMdrcThreshold(): Float = mdrcProcessor.thresholdDb
-    fun getMdrcRatio(): Float = mdrcProcessor.ratio
-    fun getMdrcAttack(): Float = mdrcProcessor.attackMs
-    fun getMdrcRelease(): Float = mdrcProcessor.releaseMs
-    fun getMdrcGainReduction(): Float = mdrcProcessor.currentGainReductionDb
-
     // -------------------------------------------------------------------------
-    // Robert Bristow-Johnson (RBJ) Audio EQ Cookbook Coefficient Calculation
+    // Biquad Coefficient Computation
     // -------------------------------------------------------------------------
 
     private fun recalculateCoefficients() {
-        val Fs = currentSampleRate
+        val fs = currentSampleRate
 
-        // 1. Compute Filter 0: Low-Shelf Bass Boost
-        if (!bassEnabled || bassGainDb <= 0.01f) {
-            setFilterBypass(0)
+        // 1. Filter 0: Low-Shelf Bass Boost
+        if (bassEnabled && bassGainDb > 0.01f) {
+            computeLowShelfRbj(0, bassFreqHz, bassGainDb, fs)
         } else {
-            computeLowShelfRbj(
-                filterIndex = 0,
-                f0 = bassFreqHz,
-                gainDb = bassGainDb,
-                sampleRate = Fs
-            )
+            setFilterBypass(0)
         }
 
-        // 2. Compute Filters 1..32: Peaking EQ ISO Bands
+        // 2. Filters 1..32: 32 ISO Peaking EQ bands
         for (i in 0 until BAND_COUNT) {
             val filterIndex = i + 1
             val gain = bandGainsDb[i]
-            val freq = ISO_FREQUENCIES[i]
-
-            if (abs(gain) < 0.01f) {
-                setFilterBypass(filterIndex)
+            if (abs(gain) > 0.01f) {
+                computePeakingRbj(filterIndex, ISO_FREQUENCIES[i], gain, DEFAULT_Q, fs)
             } else {
-                computePeakingRbj(
-                    filterIndex = filterIndex,
-                    f0 = freq,
-                    gainDb = gain,
-                    q = DEFAULT_Q,
-                    sampleRate = Fs
-                )
+                setFilterBypass(filterIndex)
             }
         }
 
-        // 3. Compute ATS2835P Hardware Emulation Coefficients (4 Biquads + Limiter)
-        recalculateEmuCoefficients()
+        // 3. Emulation Filters
+        computeEmuLowShelfRbj(0, 80.0f, 2.0f, fs)
+        computePeakingRbjRaw(emuB0, emuB1, emuB2, emuA1, emuA2, 1, 3000.0f, -1.5f, 1.4f, fs)
+        computeEmuHighShelfRbj(2, 18000.0f, -3.0f, fs)
+        computeEmuLowPassRbj(3, 18500.0f, 0.7071f, fs)
+
+        limiterAlphaAtt = kotlin.math.exp(-1.0f / (0.005f * fs))
+        limiterAlphaRel = kotlin.math.exp(-1.0f / (0.080f * fs))
 
         isDirty = false
-    }
-
-    private fun recalculateEmuCoefficients() {
-        val Fs = currentSampleRate
-
-        // Filter 0: Signature Low-Shelf +2dB @ 80Hz
-        computeEmuLowShelfRbj(
-            filterIndex = 0,
-            f0 = 80.0f,
-            gainDb = 2.0f,
-            sampleRate = Fs
-        )
-
-        // Filter 1: Signature Dip -1.5dB @ 3000Hz (Peaking, Q=1.4)
-        computeEmuPeakingRbj(
-            filterIndex = 1,
-            f0 = 3000.0f,
-            gainDb = -1.5f,
-            q = 1.4f,
-            sampleRate = Fs
-        )
-
-        // Filter 2: Signature High-Shelf -3dB @ 18000Hz (clamped below Nyquist for 44.1k/48k/96k)
-        val highShelfFreq = (Fs * 0.45f).coerceAtMost(18000.0f)
-        computeEmuHighShelfRbj(
-            filterIndex = 2,
-            f0 = highShelfFreq,
-            gainDb = -3.0f,
-            sampleRate = Fs
-        )
-
-        // Filter 3: Codec Loss 2nd-order Butterworth Low-pass @ 18500Hz
-        val lowPassFreq = (Fs * 0.45f).coerceAtMost(18500.0f)
-        computeEmuLowPassRbj(
-            filterIndex = 3,
-            f0 = lowPassFreq,
-            q = 0.70710678f,
-            sampleRate = Fs
-        )
-
-        // Limiter Envelope Follower attack (5ms) & release (80ms) time constants
-        limiterAlphaAtt = kotlin.math.exp(-1.0 / (Fs * 0.005)).toFloat()
-        limiterAlphaRel = kotlin.math.exp(-1.0 / (Fs * 0.080)).toFloat()
     }
 
     private fun computeEmuLowShelfRbj(filterIndex: Int, f0: Float, gainDb: Float, sampleRate: Float) {
@@ -512,24 +397,6 @@ class SjbzDspProcessor : BaseAudioProcessor() {
         emuA2[filterIndex] = (((A + 1.0) + (A - 1.0) * cosW - twoSqrtAAlpha) * invA0).toFloat()
     }
 
-    private fun computeEmuPeakingRbj(filterIndex: Int, f0: Float, gainDb: Float, q: Float, sampleRate: Float) {
-        val freq = f0.coerceIn(10.0f, sampleRate * 0.49f)
-        val A = 10.0.pow(gainDb / 40.0)
-        val w0 = 2.0 * Math.PI * freq / sampleRate
-        val cosW = cos(w0)
-        val sinW = sin(w0)
-        val alpha = sinW / (2.0 * q)
-
-        val a0 = 1.0 + alpha / A
-        val invA0 = 1.0 / a0
-
-        emuB0[filterIndex] = ((1.0 + alpha * A) * invA0).toFloat()
-        emuB1[filterIndex] = ((-2.0 * cosW) * invA0).toFloat()
-        emuB2[filterIndex] = ((1.0 - alpha * A) * invA0).toFloat()
-        emuA1[filterIndex] = ((-2.0 * cosW) * invA0).toFloat()
-        emuA2[filterIndex] = ((1.0 - alpha / A) * invA0).toFloat()
-    }
-
     private fun computeEmuHighShelfRbj(filterIndex: Int, f0: Float, gainDb: Float, sampleRate: Float) {
         val freq = f0.coerceIn(10.0f, sampleRate * 0.49f)
         val A = 10.0.pow(gainDb / 40.0)
@@ -547,6 +414,28 @@ class SjbzDspProcessor : BaseAudioProcessor() {
         emuB2[filterIndex] = (A * ((A + 1.0) + (A - 1.0) * cosW - twoSqrtAAlpha) * invA0).toFloat()
         emuA1[filterIndex] = (2.0 * ((A - 1.0) - (A + 1.0) * cosW) * invA0).toFloat()
         emuA2[filterIndex] = (((A + 1.0) - (A - 1.0) * cosW - twoSqrtAAlpha) * invA0).toFloat()
+    }
+
+    private fun computePeakingRbjRaw(
+        b0A: FloatArray, b1A: FloatArray, b2A: FloatArray,
+        a1A: FloatArray, a2A: FloatArray,
+        idx: Int, f0: Float, gainDb: Float, q: Float, sampleRate: Float
+    ) {
+        val freq = f0.coerceIn(10.0f, sampleRate * 0.49f)
+        val A = 10.0.pow(gainDb / 40.0)
+        val w0 = 2.0 * Math.PI * freq / sampleRate
+        val cosW = cos(w0)
+        val sinW = sin(w0)
+        val alpha = sinW / (2.0 * q)
+
+        val a0 = 1.0 + alpha / A
+        val invA0 = 1.0 / a0
+
+        b0A[idx] = ((1.0 + alpha * A) * invA0).toFloat()
+        b1A[idx] = ((-2.0 * cosW) * invA0).toFloat()
+        b2A[idx] = ((1.0 - alpha * A) * invA0).toFloat()
+        a1A[idx] = ((-2.0 * cosW) * invA0).toFloat()
+        a2A[idx] = ((1.0 - alpha / A) * invA0).toFloat()
     }
 
     private fun computeEmuLowPassRbj(filterIndex: Int, f0: Float, q: Float, sampleRate: Float) {
@@ -575,9 +464,6 @@ class SjbzDspProcessor : BaseAudioProcessor() {
         a2Array[filterIndex] = 0.0f
     }
 
-    /**
-     * RBJ Audio EQ Cookbook - Low-Shelf Filter
-     */
     private fun computeLowShelfRbj(filterIndex: Int, f0: Float, gainDb: Float, sampleRate: Float) {
         val freq = f0.coerceIn(10.0f, sampleRate * 0.49f)
         val A = 10.0.pow(gainDb / 40.0)
@@ -585,7 +471,6 @@ class SjbzDspProcessor : BaseAudioProcessor() {
         val cosW = cos(w0)
         val sinW = sin(w0)
 
-        // For shelf slope S = 1.0, alpha = (sin(w0) / 2) * sqrt(2)
         val alpha = sinW * 0.7071067811865475
         val twoSqrtAAlpha = 2.0 * sqrt(A) * alpha
 
@@ -599,9 +484,6 @@ class SjbzDspProcessor : BaseAudioProcessor() {
         a2Array[filterIndex] = (((A + 1.0) + (A - 1.0) * cosW - twoSqrtAAlpha) * invA0).toFloat()
     }
 
-    /**
-     * RBJ Audio EQ Cookbook - Peaking EQ Filter
-     */
     private fun computePeakingRbj(filterIndex: Int, f0: Float, gainDb: Float, q: Float, sampleRate: Float) {
         val freq = f0.coerceIn(10.0f, sampleRate * 0.49f)
         val A = 10.0.pow(gainDb / 40.0)

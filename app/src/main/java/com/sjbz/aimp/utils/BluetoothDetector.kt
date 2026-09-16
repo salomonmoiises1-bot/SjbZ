@@ -53,11 +53,7 @@ class BluetoothDetector(
             addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
             addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, filter)
-        }
+        context.registerReceiver(receiver, filter)
 
         checkBluetoothState()
     }
@@ -67,9 +63,7 @@ class BluetoothDetector(
         isRegistered = false
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && audioDeviceCallback != null) {
-            try {
-                audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
-            } catch (_: Exception) {}
+            audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
         }
 
         try {
@@ -78,29 +72,23 @@ class BluetoothDetector(
     }
 
     fun isBluetoothA2dpConnected(): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                for (device in devices) {
-                    if (device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                        device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && device.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
-                    ) {
-                        return true
-                    }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            for (device in devices) {
+                if (device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && device.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+                ) {
+                    return true
                 }
             }
-            @Suppress("DEPRECATION")
-            audioManager.isBluetoothA2dpOn
-        } catch (_: Exception) {
-            false
         }
+        @Suppress("DEPRECATION")
+        return audioManager.isBluetoothA2dpOn
     }
 
     fun checkBluetoothState() {
         val connected = isBluetoothA2dpConnected()
-        try {
-            onBluetoothStateChanged(connected)
-        } catch (_: Exception) {}
+        onBluetoothStateChanged(connected)
     }
 }

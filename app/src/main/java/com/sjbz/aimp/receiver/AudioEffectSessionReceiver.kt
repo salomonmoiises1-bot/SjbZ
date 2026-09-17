@@ -25,48 +25,23 @@ class AudioEffectSessionReceiver : BroadcastReceiver() {
         if (intent == null) return
 
         val action = intent.action ?: return
-        // EXTRA_AUDIO_SESSION puede venir como int
-        val sessionId = try {
-            intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR_BAD_VALUE)
-        } catch (_: Exception) {
-            AudioEffect.ERROR_BAD_VALUE
-        }
-        val packageName = try {
-            intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME)
-        } catch (_: Exception) {
-            null
-        } ?: "Desconocido"
+        val sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR_BAD_VALUE)
+        val packageName = intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME) ?: "Desconocido"
 
-        if (sessionId == AudioEffect.ERROR_BAD_VALUE) return
-        // Session 0 la abre manualmente GlobalAudioSessionManager, no duplicar
-        if (sessionId == 0) return
-
-        val manager = try {
-            GlobalAudioSessionManager.getInstance(context.applicationContext)
-        } catch (e: Exception) {
-            Log.w(TAG, "Manager no disponible: ${e.message}")
+        if (sessionId == AudioEffect.ERROR_BAD_VALUE || sessionId == 0) {
             return
         }
 
-        // Si el DSP global está en pausa, no atar sesiones externas
-        if (!manager.isGlobalAudioEnabled) return
+        val manager = GlobalAudioSessionManager.getInstance(context)
 
         when (action) {
             AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION -> {
                 Log.i(TAG, "External audio session opened: $sessionId by $packageName")
-                try {
-                    manager.openSession(sessionId, packageName)
-                } catch (e: Exception) {
-                    Log.w(TAG, "openSession falló: ${e.message}")
-                }
+                manager.openSession(sessionId, packageName)
             }
             AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION -> {
                 Log.i(TAG, "External audio session closed: $sessionId by $packageName")
-                try {
-                    manager.closeSession(sessionId)
-                } catch (e: Exception) {
-                    Log.w(TAG, "closeSession falló: ${e.message}")
-                }
+                manager.closeSession(sessionId)
             }
         }
     }

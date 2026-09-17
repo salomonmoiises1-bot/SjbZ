@@ -25,7 +25,12 @@ object SjbzAudioEngine {
     }
 
     fun isEnabled(): Boolean = try { processor.masterEnabled } catch (_: Exception) { true }
+
     fun setEnabled(e: Boolean) = setMasterEnabled(e)
+
+    fun setMasterEnabled(e: Boolean) {
+        try { processor.setMasterEnabled(e) } catch (_: Exception) {}
+    }
 
     fun syncMdrcFromGlobal(
         enabled: Boolean,
@@ -41,3 +46,15 @@ object SjbzAudioEngine {
             try { mdrcProcessor.setBandGain(i, g) } catch (_: Exception) {}
         }
     }
+
+    fun process(samples: FloatArray, offset: Int = 0, length: Int = samples.size, channels: Int = 2) {
+        try {
+            ensureInitialized()
+            processor.processFloats(samples, offset, length, channels)
+        } catch (_: Exception) {}
+    }
+
+    fun reset() {
+        try { processor.reset() } catch (_: Exception) {}
+    }
+}

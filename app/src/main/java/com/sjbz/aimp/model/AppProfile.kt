@@ -2,6 +2,10 @@ package com.sjbz.aimp.model
 
 import java.io.Serializable
 
+/**
+ * AppProfile: Stores application-specific audio equalizer and dynamics configurations.
+ * Automatically applied when an audio session from the specified package is active.
+ */
 data class AppProfile(
     val id: String,
     val packageName: String,

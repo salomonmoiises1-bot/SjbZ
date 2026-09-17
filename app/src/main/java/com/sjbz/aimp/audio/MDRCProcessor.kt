@@ -39,7 +39,6 @@ class MDRCProcessor {
 
     var isEnabled: Boolean = true
 
-    fun setEnabled(value: Boolean) { isEnabled = value }
     fun isMdrcEnabled(): Boolean = isEnabled
 
     // Dynamics Parameters

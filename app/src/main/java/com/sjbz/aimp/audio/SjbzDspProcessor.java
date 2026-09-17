@@ -125,6 +125,11 @@ public class SjbzDspProcessor {
     private FftListener fftListener; private ClippingListener clippingListener;
     private final float[] visualizerBuffer=new float[256]; private int visualizerIndex=0;
 
+    // --- Genre analysis state ---
+    private volatile float lastBassEnergy = 0;
+    private volatile float lastMidEnergy = 0;
+    private volatile float lastTrebleEnergy = 0;
+
     public SjbzDspProcessor(){ this(48000.0f); }
     public SjbzDspProcessor(float sampleRate){
         this.sampleRate=(sampleRate>8000.0f)?sampleRate:48000.0f;
@@ -186,7 +191,7 @@ public class SjbzDspProcessor {
     public boolean isBluetoothAutoBypass(){ return bluetoothAutoBypass; }
     public synchronized void setEmulationEnabled(boolean e){ this.emulationEnabled=e; updateEmulationFilters(); updateAutoHeadroom(); }
     public synchronized void setEmulationAmount(float a){ this.emulationAmount=Math.max(0,Math.min(1,a)); updateEmulationFilters(); updateAutoHeadroom(); }
-    public synchronized void setBluetoothAutoBypass(boolean b){ this.bluetoothAutoBypass=b; updateAutoHeadroom(); }
+    public synchronized void setBluetoothAutoBypass(boolean b){ this.bluetoothAutoBypass=b; updateEmulationFilters(); updateAutoHeadroom(); }
     private void updateEmulationFilters(){
         if(emulationEnabled&&!bluetoothAutoBypass){
             float amt=emulationAmount;
@@ -216,6 +221,49 @@ public class SjbzDspProcessor {
         for(int i=0;i<4;i++) mdrcCrossoverBiquads[i].reset();
         limiterEnvelope=0; mdrcEnvelope=0;
     }
+
+    // --- NUEVO: snapshot para género, sin tocar audio ---
+    public synchronized float[] getSpectrumSnapshot() {
+        return visualizerBuffer.clone();
+    }
+
+    // --- NUEVO: detección real de género por energía graves/medios/agudos ---
+    // Devuelve String[2] = { nombreGenero, confianzaPct }
+    public String[] detectGenre() {
+        float[] buf = getSpectrumSnapshot();
+        if (buf == null || buf.length < 16) return new String[]{"Sin señal", "0"};
+
+        // Estimación simple: low-pass por promedio móvil para graves, diferencia para agudos
+        double bassE = 0, midE = 0, trebleE = 0;
+        float prev = 0;
+        for (int i = 0; i < buf.length; i++) {
+            float s = buf[i];
+            float low = (prev + s) * 0.5f; // pasa-bajos muy simple
+            float high = s - low; // pasa-altos
+            float mid = s - low - high*0.5f;
+            bassE += low*low;
+            midE += Math.abs(mid);
+            trebleE += high*high;
+            prev = s;
+        }
+        double total = bassE + midE + trebleE + 1e-9;
+        double bassR = bassE/total, trebleR = trebleE/total, midR = midE/total;
+
+        String genre; int conf;
+        if (bassR > 0.55) { genre = "Bass / EDM / Hip-Hop"; conf = (int)(60 + bassR*30); }
+        else if (trebleR > 0.35 && bassR < 0.25) { genre = "Pop Brillante / Electronic"; conf = (int)(60 + trebleR*40); }
+        else if (midR > 0.45) { genre = "Vocal / Acústico"; conf = (int)(60 + midR*30); }
+        else { genre = "Rock / Metal"; conf = 65; }
+
+        if (conf>95) conf=95;
+        // Actualiza caché para UI
+        lastBassEnergy = (float)bassR; lastMidEnergy=(float)midR; lastTrebleEnergy=(float)trebleR;
+        return new String[]{genre, String.valueOf(conf)};
+    }
+
+    public float getLastBassEnergy(){ return lastBassEnergy; }
+    public float getLastMidEnergy(){ return lastMidEnergy; }
+    public float getLastTrebleEnergy(){ return lastTrebleEnergy; }
 
     public void process(float[] buffer,int channels,int frameCount){
         if(!masterEnabled||globalBypass||buffer==null||frameCount<=0) return;

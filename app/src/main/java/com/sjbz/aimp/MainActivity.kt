@@ -83,6 +83,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var seekBarSystemVolume: SeekBar
     private var isUpdatingUiProgrammatically = false
 
+    // Pre-amp Tono
+    private lateinit var seekBarToneBass: SeekBar
+    private lateinit var seekBarToneMid: SeekBar
+    private lateinit var seekBarToneTreble: SeekBar
+    private lateinit var tvToneBassValue: TextView
+    private lateinit var tvToneMidValue: TextView
+    private lateinit var tvToneTrebleValue: TextView
+
     private val uiHandler = Handler(Looper.getMainLooper())
     private val vuMeterRunnable = object : Runnable {
         override fun run() { updateVuMeters(); uiHandler.postDelayed(this, 80) }
@@ -102,6 +110,7 @@ class MainActivity : AppCompatActivity() {
         setupAppProfiles()
         setupMasterDynamicsControls()
         setupBassAndVirtualizer()
+        setupToneControls()
         setupPresetButtons()
         build32BandSliders()
         setupDrawerSettings()
@@ -176,6 +185,13 @@ class MainActivity : AppCompatActivity() {
         btnToggleQMode = findViewById(R.id.btnToggleQMode)
         switchAutoStartBoot = findViewById(R.id.switchAutoStartBoot)
         seekBarSystemVolume = findViewById(R.id.seekBarSystemVolume)
+
+        seekBarToneBass = findViewById(R.id.seekBarToneBass)
+        seekBarToneMid = findViewById(R.id.seekBarToneMid)
+        seekBarToneTreble = findViewById(R.id.seekBarToneTreble)
+        tvToneBassValue = findViewById(R.id.tvToneBassValue)
+        tvToneMidValue = findViewById(R.id.tvToneMidValue)
+        tvToneTrebleValue = findViewById(R.id.tvToneTrebleValue)
     }
 
     private fun setupDrawerAndToolbar() {
@@ -236,7 +252,7 @@ class MainActivity : AppCompatActivity() {
     private fun showSaveProfileDialog() {
         val input = EditText(this).apply { hint = "Nombre del perfil" }
         AlertDialog.Builder(this).setTitle("Guardar perfil").setView(input)
-           .setPositiveButton("Guardar") { _, _ ->
+          .setPositiveButton("Guardar") { _, _ ->
                 val n = input.text.toString().trim()
                 if (n.isNotEmpty()) {
                     audioSessionManager.saveCurrentAsProfile(n)
@@ -252,7 +268,6 @@ class MainActivity : AppCompatActivity() {
                 tvGlobalGainValue.text = String.format("%+.1f dB", db)
                 if (fromUser &&!isUpdatingUiProgrammatically) {
                     audioSessionManager.setGlobalGain(db)
-                    SjbzAudioEngine.processor.setPreamp(db)
                 }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
@@ -327,6 +342,29 @@ class MainActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
+    }
+
+    private fun setupToneControls() {
+        val listener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                val db = (p - 120) / 10f
+                when (sb?.id) {
+                    R.id.seekBarToneBass -> tvToneBassValue.text = String.format("%+.1f dB", db)
+                    R.id.seekBarToneMid -> tvToneMidValue.text = String.format("%+.1f dB", db)
+                    R.id.seekBarToneTreble -> tvToneTrebleValue.text = String.format("%+.1f dB", db)
+                }
+                if (fromUser &&!isUpdatingUiProgrammatically) {
+                    audioSessionManager.setBassPreamp((seekBarToneBass.progress - 120) / 10f)
+                    audioSessionManager.setMidPreamp((seekBarToneMid.progress - 120) / 10f)
+                    audioSessionManager.setTreblePreamp((seekBarToneTreble.progress - 120) / 10f)
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        }
+        seekBarToneBass.setOnSeekBarChangeListener(listener)
+        seekBarToneMid.setOnSeekBarChangeListener(listener)
+        seekBarToneTreble.setOnSeekBarChangeListener(listener)
     }
 
     private fun getSelectedBassFreq() = when (spinnerBassFreq.selectedItemPosition) {
@@ -436,6 +474,12 @@ class MainActivity : AppCompatActivity() {
         tvBassBoostValue.text = String.format("+%.1f dB", audioSessionManager.bassBoostDb)
         seekBarVirtualizer.progress = audioSessionManager.virtualizerStrength
         tvVirtualizerValue.text = "${audioSessionManager.virtualizerStrength / 10}%"
+        seekBarToneBass.progress = ((audioSessionManager.bassPreampDb * 10) + 120).toInt().coerceIn(0, 240)
+        seekBarToneMid.progress = ((audioSessionManager.midPreampDb * 10) + 120).toInt().coerceIn(0, 240)
+        seekBarToneTreble.progress = ((audioSessionManager.treblePreampDb * 10) + 120).toInt().coerceIn(0, 240)
+        tvToneBassValue.text = String.format("%+.1f dB", audioSessionManager.bassPreampDb)
+        tvToneMidValue.text = String.format("%+.1f dB", audioSessionManager.midPreampDb)
+        tvToneTrebleValue.text = String.format("%+.1f dB", audioSessionManager.treblePreampDb)
         syncBandSlidersOnly()
         refreshProfilesSpinner()
         isUpdatingUiProgrammatically = false

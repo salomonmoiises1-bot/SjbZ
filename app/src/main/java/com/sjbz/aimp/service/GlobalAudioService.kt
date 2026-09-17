@@ -11,9 +11,11 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.sjbz.aimp.EqActivity
 import com.sjbz.aimp.MainActivity
 import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
+import com.sjbz.aimp.audio.SjbzAudioEngine
 
 /**
  * GlobalAudioService: Foreground Service that processes audio system-wide.
@@ -67,7 +69,10 @@ class GlobalAudioService : Service() {
         audioSessionManager = GlobalAudioSessionManager.getInstance(this)
         createNotificationChannel()
 
+        // No pisar el listener de las Activities: encadenarlo
+        val prev = audioSessionManager.onProfileChangedListener
         audioSessionManager.onProfileChangedListener = { profile ->
+            prev?.invoke(profile)
             updateNotification(profile.appName, profile.presetName)
         }
     }
@@ -76,6 +81,7 @@ class GlobalAudioService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 audioSessionManager.setGlobalAudioEnabled(false)
+                SjbzAudioEngine.processor.masterEnabled = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -83,6 +89,7 @@ class GlobalAudioService : Service() {
             ACTION_TOGGLE -> {
                 val newState = !audioSessionManager.isGlobalAudioEnabled
                 audioSessionManager.setGlobalAudioEnabled(newState)
+                SjbzAudioEngine.processor.masterEnabled = newState
                 if (newState) {
                     startForegroundServiceWithNotification()
                 } else {
@@ -93,6 +100,7 @@ class GlobalAudioService : Service() {
             }
             ACTION_START, null -> {
                 audioSessionManager.setGlobalAudioEnabled(true)
+                SjbzAudioEngine.processor.masterEnabled = true
                 startForegroundServiceWithNotification()
             }
         }
@@ -147,6 +155,17 @@ class GlobalAudioService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Tap en la notificación abre el estudio completo si querés afinar
+        val eqIntent = Intent(this, EqActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pEq = PendingIntent.getActivity(
+            this,
+            3,
+            eqIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val stopIntent = Intent(this, GlobalAudioService::class.java).apply {
             action = ACTION_STOP
         }
@@ -166,6 +185,7 @@ class GlobalAudioService : Service() {
             .setContentText("Perfil: $appName ($presetName)$limiterStatus$autoGainStatus")
             .setSubText("Procesando mezcla global del sistema (Session 0)")
             .setContentIntent(pOpen)
+            .addAction(R.drawable.ic_equalizer, "Ecualizador", pEq)
             .addAction(R.drawable.ic_stop, "Desactivar", pStop)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)

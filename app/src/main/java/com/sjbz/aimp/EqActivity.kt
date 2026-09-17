@@ -33,7 +33,6 @@ import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.service.GlobalAudioService
 import com.sjbz.aimp.ui.AudioSpectrumVisualizerView
 
-// Helpers seguros para ATS2835P (evitan Unresolved reference)
 private fun atsSetEnabled(enabled: Boolean) {
     try {
         val m = SjbzAudioEngine.atsEngine::class.java.methods.firstOrNull { it.name == "setEnabled" && it.parameterTypes.size == 1 }
@@ -128,8 +127,10 @@ class EqActivity : AppCompatActivity() {
     private val mdrcGainReductionTicker = object : Runnable {
         override fun run() {
             if (!isDestroyed &&!isFinishing) {
-                val gr = SjbzAudioEngine.getMdrcGainReduction()
-                tvMdrcGainReduction.text = String.format("GR: -%.1f dB", gr)
+                try {
+                    val gr = SjbzAudioEngine.getMdrcGainReduction()
+                    tvMdrcGainReduction.text = String.format("GR: -%.1f dB", gr)
+                } catch (_: Exception) {}
                 debounceHandler.postDelayed(this, 120L)
             }
         }
@@ -153,6 +154,29 @@ class EqActivity : AppCompatActivity() {
         setupPresetControls()
         build32BandSliders()
         restoreAllDspParameters()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateEmuStatus()
+        debounceHandler.removeCallbacks(mdrcGainReductionTicker)
+        debounceHandler.post(mdrcGainReductionTicker)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        debounceHandler.removeCallbacks(mdrcGainReductionTicker)
+        syncGlobalAudioDsp()
+    }
+
+    override fun onDestroy() {
+        debounceHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) { finish(); return true }
+        return super.onOptionsItemSelected(item)
     }
 
     private fun bindViews() {
@@ -213,6 +237,7 @@ class EqActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowTitleEnabled(false)
         switchMasterDsp.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUiFromCode) return@setOnCheckedChangeListener
             SjbzAudioEngine.setMasterEnabled(isChecked)
             prefs.edit().putBoolean("master_enabled", isChecked).apply()
             updateControlsAlpha(isChecked)
@@ -267,6 +292,7 @@ class EqActivity : AppCompatActivity() {
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         switchBassBoost.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUiFromCode) return@setOnCheckedChangeListener
             dspProcessor?.setBassBoost(isChecked, getSelectedBassFreq(), seekBarBassBoost.progress / 10f)
             prefs.edit().putBoolean("bass_enabled", isChecked).apply()
             seekBarBassBoost.isEnabled = isChecked
@@ -296,6 +322,7 @@ class EqActivity : AppCompatActivity() {
 
     private fun setupEmuControls() {
         switchEmu.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUiFromCode) return@setOnCheckedChangeListener
             atsSetEnabled(isChecked)
             prefs.edit().putBoolean("emu_enabled", isChecked).apply()
             seekBarEmuAmount.isEnabled = isChecked
@@ -320,6 +347,7 @@ class EqActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
         switchBtAutoBypass.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUiFromCode) return@setOnCheckedChangeListener
             dspProcessor?.setBluetoothAutoBypass(isChecked)
             prefs.edit().putBoolean("bt_auto_bypass", isChecked).apply()
             updateEmuStatus()
@@ -328,8 +356,8 @@ class EqActivity : AppCompatActivity() {
 
     private fun updateEmuStatus() {
         val dsp = dspProcessor?: return
-        val isBt = dsp.isBluetoothConnected()
-        val auto = dsp.isBluetoothAutoBypass()
+        val isBt = try { dsp.isBluetoothConnected() } catch (_: Exception) { false }
+        val auto = try { dsp.isBluetoothAutoBypass() } catch (_: Exception) { false }
         when {
             isBt && auto -> {
                 tvEmuStatus.text = "Auto-Bypass activo (BT detectado)"
@@ -372,6 +400,7 @@ class EqActivity : AppCompatActivity() {
             if (!isFinishing &&!isDestroyed) tvActiveSessionsCount.text = if (count > 0) "$count activa(s)" else "Inactivo"
         }
         switchGlobalAudio.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUiFromCode) return@setOnCheckedChangeListener
             if (isChecked) {
                 GlobalAudioService.start(this)
                 tvGlobalAudioStatus.text = "Activo • Procesando sistema"
@@ -392,6 +421,7 @@ class EqActivity : AppCompatActivity() {
 
     private fun setupMdrcControls() {
         switchMdrc.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUiFromCode) return@setOnCheckedChangeListener
             prefs.edit().putBoolean("mdrc_enabled", isChecked).apply()
             updateMdrcControlsAlpha(isChecked)
             syncGlobalAudioDsp()
@@ -429,7 +459,6 @@ class EqActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(s: SeekBar?) {}
             })
         }
-        debounceHandler.post(mdrcGainReductionTicker)
     }
 
     private fun debounceMdrcDynamics() {
@@ -560,7 +589,6 @@ class EqActivity : AppCompatActivity() {
             val master = prefs.getBoolean("master_enabled", true)
             switchMasterDsp.isChecked = master
             SjbzAudioEngine.setMasterEnabled(master)
-            updateControlsAlpha(master)
             val preamp = prefs.getFloat("preamp_db", 0f)
             seekBarPreamp.progress = (preamp * 10f + 120).toInt().coerceIn(0, 240)
             tvPreampValue.text = String.format("%+.1f dB", preamp)
@@ -613,8 +641,7 @@ class EqActivity : AppCompatActivity() {
         if (match!= null) {
             loadPresetIntoUi(match)
         } else {
-            SjbzAudioEngine.eqWrapper.applyPreset(name)
-            // FIX: no usar toEqPreset con firma rota, construir manual
+            try { SjbzAudioEngine.eqWrapper.applyPreset(name) } catch (_: Exception) {}
             val isBass = name.equals("Bass", ignoreCase = true)
             val gains = List(EqualizerProcessor.BAND_COUNT) { i ->
                 when {
@@ -623,15 +650,7 @@ class EqActivity : AppCompatActivity() {
                     else -> 0f
                 }
             }
-            val preset = EqPreset(
-                name,
-                0f,
-                gains,
-                true,
-                isBass,
-                85f,
-                if (isBass) 8f else 4f
-            )
+            val preset = EqPreset(name, 0f, gains, true, isBass, 85f, if (isBass) 8f else 4f)
             loadPresetIntoUi(preset)
         }
     }
@@ -706,12 +725,4 @@ class EqActivity : AppCompatActivity() {
         switchMdrc.isEnabled = enabled
         updateMdrcControlsAlpha(enabled && switchMdrc.isChecked)
     }
-
-    override fun onResume() { super.onResume(); updateEmuStatus(); debounceHandler.post(mdrcGainReductionTicker) }
-    override fun onPause() { super.onPause(); debounceHandler.removeCallbacks(mdrcGainReductionTicker) }
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { finish(); return true }
-        return super.onOptionsItemSelected(item)
-    }
-    override fun onDestroy() { debounceHandler.removeCallbacksAndMessages(null); super.onDestroy() }
 }

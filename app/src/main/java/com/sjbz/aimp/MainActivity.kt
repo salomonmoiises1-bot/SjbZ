@@ -39,21 +39,6 @@ import kotlin.random.Random
 
 /**
  * MainActivity: Professional SB-Z Global System Equalizer & DSP Studio.
- *
- * Captures and processes system-wide audio (audioSessionId = 0) for apps like
- * Spotify, YouTube, YouTube Music, Chrome, and local players.
- *
- * Features:
- * - 32-Band ISO Equalizer (20 Hz - 20,000 Hz) with vertical sliders
- * - Per-band Q-ratio bandwidth control (Narrow / Standard / Wide)
- * - Master Input / Preamp Gain (-12 dB to +12 dB)
- * - Anti-Clipping Limiter (threshold, fast peak attack, brickwall ratio)
- * - AutoGain loudness leveler between apps (-23 LUFS to -9 LUFS target)
- * - Bass Boost (60, 85, 120 Hz) & Virtualizer 3D Surround
- * - Per-App Profiles with automatic foreground app detection
- * - GlobalAudioService foreground service execution & BootReceiver auto-start
- * - Real-time 60fps Spectrum Visualizer and Stereo VU Meters
- * - Jetpack DataStore persistent state
  */
 class MainActivity : AppCompatActivity() {
 
@@ -86,20 +71,16 @@ class MainActivity : AppCompatActivity() {
     // Master Controls
     private lateinit var seekBarGlobalGain: SeekBar
     private lateinit var tvGlobalGainValue: TextView
-
     private lateinit var switchLimiter: SwitchCompat
     private lateinit var seekBarLimiterThreshold: SeekBar
     private lateinit var tvLimiterThresholdValue: TextView
-
     private lateinit var switchAutoGain: SwitchCompat
     private lateinit var seekBarAutoGainTarget: SeekBar
     private lateinit var tvAutoGainTargetValue: TextView
-
     private lateinit var switchBassBoost: SwitchCompat
     private lateinit var spinnerBassFreq: Spinner
     private lateinit var seekBarBassBoost: SeekBar
     private lateinit var tvBassBoostValue: TextView
-
     private lateinit var seekBarVirtualizer: SeekBar
     private lateinit var tvVirtualizerValue: TextView
 
@@ -115,7 +96,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnToggleQMode: Button
     private val bandSeekBars = mutableListOf<SeekBar>()
     private val bandValueLabels = mutableListOf<TextView>()
-    private var currentQMode: Float = 1.414f // 0.707 (Wide), 1.414 (Std), 2.828 (Narrow)
+    private var currentQMode: Float = 1.414f
 
     // Drawer items
     private lateinit var switchAutoStartBoot: SwitchCompat
@@ -129,7 +110,7 @@ class MainActivity : AppCompatActivity() {
     private val vuMeterRunnable = object : Runnable {
         override fun run() {
             updateVuMeters()
-            uiHandler.postDelayed(this, 80) // ~12 fps VU meter smoothing
+            uiHandler.postDelayed(this, 80)
         }
     }
 
@@ -150,23 +131,16 @@ class MainActivity : AppCompatActivity() {
         build32BandSliders()
         setupDrawerSettings()
 
-        // Synchronize UI with current manager state
         syncAllUiFromManager()
 
-        // Listen for profile changes from background auto-detector
         audioSessionManager.onProfileChangedListener = { profile ->
-            runOnUiThread {
-                syncAllUiFromManager()
-            }
+            runOnUiThread { syncAllUiFromManager() }
         }
 
         audioSessionManager.onActiveSessionsChangedListener = { count, pkgs ->
-            runOnUiThread {
-                updateSessionStatusBanner(count, pkgs)
-            }
+            runOnUiThread { updateSessionStatusBanner(count, pkgs) }
         }
 
-        // Start GlobalAudioService by default if enabled
         if (audioSessionManager.isGlobalAudioEnabled) {
             GlobalAudioService.start(this)
         }
@@ -190,48 +164,37 @@ class MainActivity : AppCompatActivity() {
         btnMenuDrawer = findViewById(R.id.btnMenuDrawer)
         btnOpenEqualizer = findViewById(R.id.btnOpenEqualizer)
         etSearchTracks = findViewById(R.id.etSearchTracks)
-
         tvDspActiveStatus = findViewById(R.id.tvDspActiveStatus)
         viewDspIndicator = findViewById(R.id.viewDspIndicator)
         switchMasterDsp = findViewById(R.id.switchMasterDsp)
-
         spinnerAppProfiles = findViewById(R.id.spinnerAppProfiles)
         btnSaveAppProfile = findViewById(R.id.btnSaveAppProfile)
         tvActiveAppDetection = findViewById(R.id.tvActiveAppDetection)
-
         visualizerView = findViewById(R.id.visualizerView)
         vuMeterLeftBar = findViewById(R.id.vuMeterLeftBar)
         vuMeterRightBar = findViewById(R.id.vuMeterRightBar)
         tvVuPeakText = findViewById(R.id.tvVuPeakText)
-
         seekBarGlobalGain = findViewById(R.id.seekBarGlobalGain)
         tvGlobalGainValue = findViewById(R.id.tvGlobalGainValue)
-
         switchLimiter = findViewById(R.id.switchLimiter)
         seekBarLimiterThreshold = findViewById(R.id.seekBarLimiterThreshold)
         tvLimiterThresholdValue = findViewById(R.id.tvLimiterThresholdValue)
-
         switchAutoGain = findViewById(R.id.switchAutoGain)
         seekBarAutoGainTarget = findViewById(R.id.seekBarAutoGainTarget)
         tvAutoGainTargetValue = findViewById(R.id.tvAutoGainTargetValue)
-
         switchBassBoost = findViewById(R.id.switchBassBoost)
         spinnerBassFreq = findViewById(R.id.spinnerBassFreq)
         seekBarBassBoost = findViewById(R.id.seekBarBassBoost)
         tvBassBoostValue = findViewById(R.id.tvBassBoostValue)
-
         seekBarVirtualizer = findViewById(R.id.seekBarVirtualizer)
         tvVirtualizerValue = findViewById(R.id.tvVirtualizerValue)
-
         btnPresetFlat = findViewById(R.id.btnPresetFlat)
         btnPresetBass = findViewById(R.id.btnPresetBass)
         btnPresetRock = findViewById(R.id.btnPresetRock)
         btnPresetVocal = findViewById(R.id.btnPresetVocal)
         btnResetEq = findViewById(R.id.btnResetEq)
-
         llEqBandsContainer = findViewById(R.id.llEqBandsContainer)
         btnToggleQMode = findViewById(R.id.btnToggleQMode)
-
         switchAutoStartBoot = findViewById(R.id.switchAutoStartBoot)
         seekBarSystemVolume = findViewById(R.id.seekBarSystemVolume)
     }
@@ -244,18 +207,14 @@ class MainActivity : AppCompatActivity() {
                 drawerLayout.openDrawer(GravityCompat.START)
             }
         }
-
         btnOpenEqualizer.setOnClickListener {
-            // Scroll to the 32-band deck
             Toast.makeText(this, "Ecualizador de 32 Bandas ISO Activo", Toast.LENGTH_SHORT).show()
         }
-
         etSearchTracks.hint = "Buscar perfiles (Spotify, YouTube...)"
     }
 
     private fun setupMasterSwitch() {
         switchMasterDsp.isChecked = audioSessionManager.isGlobalAudioEnabled
-
         switchMasterDsp.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUiProgrammatically) return@setOnCheckedChangeListener
             audioSessionManager.setGlobalAudioEnabled(isChecked)
@@ -275,7 +234,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupAppProfiles() {
         refreshProfilesSpinner()
-
         spinnerAppProfiles.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (isUpdatingUiProgrammatically) return
@@ -286,13 +244,9 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "Perfil: ${profile.appName}", Toast.LENGTH_SHORT).show()
                 }
             }
-
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-
-        btnSaveAppProfile.setOnClickListener {
-            showSaveProfileDialog()
-        }
+        btnSaveAppProfile.setOnClickListener { showSaveProfileDialog() }
     }
 
     private fun refreshProfilesSpinner() {
@@ -308,9 +262,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSaveProfileDialog() {
-        val input = EditText(this).apply {
-            hint = "Nombre del perfil (ej. Spotify Bass, Podcast YouTube)"
-        }
+        val input = EditText(this).apply { hint = "Nombre del perfil (ej. Spotify Bass, Podcast YouTube)" }
         AlertDialog.Builder(this)
             .setTitle("Guardar Nuevo Perfil")
             .setMessage("Guarda la configuración actual de 32 bandas, Gain, Limiter y AutoGain.")
@@ -328,7 +280,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupMasterDynamicsControls() {
-        // Gain Global: -12.0 dB to +12.0 dB (progress 0 to 240, 120 is 0.0 dB)
         seekBarGlobalGain.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val db = (progress - 120) / 10.0f
@@ -337,11 +288,14 @@ class MainActivity : AppCompatActivity() {
                     audioSessionManager.setGlobalGain(db)
                 }
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(false)
+            }
         })
 
-        // Limiter Anti-Clipping
         switchLimiter.setOnCheckedChangeListener { _, isChecked ->
             val thresh = (seekBarLimiterThreshold.progress - 120) / 10.0f
             if (!isUpdatingUiProgrammatically) {
@@ -350,7 +304,6 @@ class MainActivity : AppCompatActivity() {
             seekBarLimiterThreshold.isEnabled = isChecked
         }
 
-        // Limiter Threshold: -12.0 dB to 0.0 dB (progress 0 to 120 -> db = progress - 120 / 10)
         seekBarLimiterThreshold.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val db = (progress - 120) / 10.0f
@@ -359,11 +312,14 @@ class MainActivity : AppCompatActivity() {
                     audioSessionManager.setLimiter(switchLimiter.isChecked, db)
                 }
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(false)
+            }
         })
 
-        // AutoGain Normalizer
         switchAutoGain.setOnCheckedChangeListener { _, isChecked ->
             val target = -23.0f + seekBarAutoGainTarget.progress
             if (!isUpdatingUiProgrammatically) {
@@ -372,7 +328,6 @@ class MainActivity : AppCompatActivity() {
             seekBarAutoGainTarget.isEnabled = isChecked
         }
 
-        // AutoGain Target LUFS: -23 LUFS to -9 LUFS (progress 0 to 14)
         seekBarAutoGainTarget.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val lufs = -23.0f + progress
@@ -381,8 +336,12 @@ class MainActivity : AppCompatActivity() {
                     audioSessionManager.setAutoGain(switchAutoGain.isChecked, lufs)
                 }
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(false)
+            }
         })
     }
 
@@ -392,7 +351,6 @@ class MainActivity : AppCompatActivity() {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
         spinnerBassFreq.adapter = adapter
-
         spinnerBassFreq.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (isUpdatingUiProgrammatically) return
@@ -425,8 +383,12 @@ class MainActivity : AppCompatActivity() {
                     audioSessionManager.setBassBoost(if (switchBassBoost.isChecked) db else 0f, getSelectedBassFreq())
                 }
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(false)
+            }
         })
 
         seekBarVirtualizer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -437,8 +399,12 @@ class MainActivity : AppCompatActivity() {
                     audioSessionManager.setVirtualizer(progress)
                 }
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(false)
+            }
         })
     }
 
@@ -471,15 +437,12 @@ class MainActivity : AppCompatActivity() {
             for (i in 12..22) vocalBands[i] = 3.5f
             applyPresetValues(vocalBands, "Vocal")
         }
-        btnResetEq.setOnClickListener {
-            applyPresetValues(FloatArray(32) { 0.0f }, "Reset 0 dB")
-        }
-
+        btnResetEq.setOnClickListener { applyPresetValues(FloatArray(32) { 0.0f }, "Reset 0 dB") }
         btnToggleQMode.setOnClickListener {
             currentQMode = when (currentQMode) {
-                1.414f -> 2.828f // Narrow
-                2.828f -> 0.707f // Wide
-                else -> 1.414f  // Standard
+                1.414f -> 2.828f
+                2.828f -> 0.707f
+                else -> 1.414f
             }
             val label = when (currentQMode) {
                 2.828f -> "Modo Q: Estrecho (2.8)"
@@ -503,13 +466,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Builds 32 vertical ISO faders dynamically in the HorizontalScrollView.
+     * Builds 32 vertical ISO faders dynamically with touch intercept disallow fix.
      */
     private fun build32BandSliders() {
         llEqBandsContainer.removeAllViews()
         bandSeekBars.clear()
         bandValueLabels.clear()
-
         val density = resources.displayMetrics.density
         val cyanColor = Color.parseColor("#00E5FF")
 
@@ -524,7 +486,6 @@ class MainActivity : AppCompatActivity() {
                 setPadding(2, 6, 2, 6)
             }
 
-            // Top Gain value label
             val tvGain = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -537,7 +498,6 @@ class MainActivity : AppCompatActivity() {
             }
             bandCol.addView(tvGain)
 
-            // Vertical SeekBar container
             val seekBarContainer = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -547,15 +507,14 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER
             }
 
-            // Standard Android SeekBar rotated 270 degrees
             val seekBar = SeekBar(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     (density * 160).toInt(),
                     (density * 36).toInt()
                 )
                 rotation = 270f
-                max = 240 // -12.0 dB to +12.0 dB
-                progress = 120 // 0.0 dB center
+                max = 240
+                progress = 120
                 progressTintList = android.content.res.ColorStateList.valueOf(cyanColor)
                 thumbTintList = android.content.res.ColorStateList.valueOf(cyanColor)
             }
@@ -569,14 +528,21 @@ class MainActivity : AppCompatActivity() {
                         audioSessionManager.setBandGain(bandIndex, gain)
                     }
                 }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
+
+                override fun onStartTrackingTouch(sb: SeekBar?) {
+                    // Bloquea el desplazamiento del ScrollView padre mientras se mueve el fader
+                    sb?.parent?.requestDisallowInterceptTouchEvent(true)
+                }
+
+                override fun onStopTrackingTouch(sb: SeekBar?) {
+                    // Restablece el comportamiento de desplazamiento
+                    sb?.parent?.requestDisallowInterceptTouchEvent(false)
+                }
             })
 
             seekBarContainer.addView(seekBar)
             bandCol.addView(seekBarContainer)
 
-            // Frequency label at bottom
             val tvFreq = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -596,33 +562,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupDrawerSettings() {
-        scope.launch {
-            switchAutoStartBoot.isChecked = dataStore.loadAutoStartBoot()
-        }
-
+        scope.launch { switchAutoStartBoot.isChecked = dataStore.loadAutoStartBoot() }
         switchAutoStartBoot.setOnCheckedChangeListener { _, isChecked ->
-            scope.launch {
-                dataStore.saveAutoStartBoot(isChecked)
-            }
+            scope.launch { dataStore.saveAutoStartBoot(isChecked) }
         }
 
         val curVol = audioSessionManager.getSystemVolume()
         val maxVol = audioSessionManager.getMaxSystemVolume()
         seekBarSystemVolume.max = maxVol
         seekBarSystemVolume.progress = curVol
-
         seekBarSystemVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
                     audioSessionManager.setSystemVolume(progress)
                 }
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                sb?.parent?.requestDisallowInterceptTouchEvent(false)
+            }
         })
 
         findViewById<View>(R.id.drawerExportM3U8).setOnClickListener {
-            // Reset to factory defaults
             AlertDialog.Builder(this)
                 .setTitle("Reiniciar DSP a Valores de Fábrica")
                 .setMessage("¿Deseas restaurar todas las 32 bandas, Gain, Limiter y AutoGain?")
@@ -639,30 +602,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun syncAllUiFromManager() {
         isUpdatingUiProgrammatically = true
-
         val profile = audioSessionManager.currentProfile
         switchMasterDsp.isChecked = audioSessionManager.isGlobalAudioEnabled
 
-        // Gain Global (-12 dB to +12 dB)
         val gainProg = ((audioSessionManager.globalGainDb * 10) + 120).toInt().coerceIn(0, 240)
         seekBarGlobalGain.progress = gainProg
         tvGlobalGainValue.text = String.format("%+.1f dB", audioSessionManager.globalGainDb)
 
-        // Limiter
         switchLimiter.isChecked = audioSessionManager.isLimiterEnabled
         val limProg = ((audioSessionManager.limiterThresholdDb * 10) + 120).toInt().coerceIn(0, 120)
         seekBarLimiterThreshold.progress = limProg
         tvLimiterThresholdValue.text = String.format("%.1f dB", audioSessionManager.limiterThresholdDb)
         seekBarLimiterThreshold.isEnabled = audioSessionManager.isLimiterEnabled
 
-        // AutoGain
         switchAutoGain.isChecked = audioSessionManager.isAutoGainEnabled
         val autoGainProg = (audioSessionManager.autoGainTargetLufs + 23.0f).toInt().coerceIn(0, 14)
         seekBarAutoGainTarget.progress = autoGainProg
         tvAutoGainTargetValue.text = String.format("%.0f LUFS", audioSessionManager.autoGainTargetLufs)
         seekBarAutoGainTarget.isEnabled = audioSessionManager.isAutoGainEnabled
 
-        // Bass Boost
         switchBassBoost.isChecked = audioSessionManager.bassBoostDb > 0.1f
         val bassProg = (audioSessionManager.bassBoostDb * 10).toInt().coerceIn(0, 120)
         seekBarBassBoost.progress = bassProg
@@ -674,16 +632,11 @@ class MainActivity : AppCompatActivity() {
         }
         spinnerBassFreq.setSelection(freqIdx)
 
-        // Virtualizer
         seekBarVirtualizer.progress = audioSessionManager.virtualizerStrength
         tvVirtualizerValue.text = "${audioSessionManager.virtualizerStrength / 10}%"
 
-        // 32 Bands
         syncBandSlidersOnly()
-
-        // Profile spinner
         refreshProfilesSpinner()
-
         isUpdatingUiProgrammatically = false
     }
 
@@ -714,13 +667,10 @@ class MainActivity : AppCompatActivity() {
             tvVuPeakText.text = "-inf dB"
             return
         }
-
-        // Realistic studio VU dynamics based on current Gain & Limiter
         val baseL = 40 + Random.nextInt(25)
         val baseR = 42 + Random.nextInt(25)
         vuMeterLeftBar.progress = baseL
         vuMeterRightBar.progress = baseR
-
         val peakDb = if (audioSessionManager.isLimiterEnabled) {
             audioSessionManager.limiterThresholdDb
         } else {

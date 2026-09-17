@@ -1,7 +1,6 @@
 package com.sjbz.aimp.audio;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 public class SjbzDspProcessor {
 
@@ -95,7 +94,9 @@ public class SjbzDspProcessor {
     private float sampleRate = 48000.0f;
     private volatile boolean masterEnabled = true;
     private volatile boolean globalBypass = false;
-    private volatile boolean limiterEnabled = true; // PARCHE 1
+    private volatile boolean limiterEnabled = true;
+    private volatile float limiterThresholdDb = -1.0f;
+    private volatile float limiterThresholdLinear = 0.89125f;
 
     private float preGainBassDb=0, preGainMidDb=0, preGainTrebleDb=0;
     private final Biquad preGainBassFilter=new Biquad();
@@ -120,7 +121,6 @@ public class SjbzDspProcessor {
     private float mdrcGainReduction=0, mdrcEnvelope=0;
     private float preampDb=0, effectivePreampDb=0, linearEffectivePreamp=1.0f;
     private float limiterEnvelope=0;
-    private static final float LIMITER_THRESHOLD=0.89125f;
     private final float limiterAttackCoeff, limiterReleaseCoeff;
     private FftListener fftListener; private ClippingListener clippingListener;
     private final float[] visualizerBuffer=new float[256]; private int visualizerIndex=0;
@@ -136,10 +136,13 @@ public class SjbzDspProcessor {
         updateMdrcCrossovers(); updateAutoHeadroom();
     }
 
-    // PARCHE 1: metodos faltantes
     public void setLimiterEnabled(boolean e){ this.limiterEnabled=e; }
-    public void setLimiterThreshold(float db){}
+    public void setLimiterThreshold(float db){
+        this.limiterThresholdDb = Math.max(-12.0f, Math.min(0.0f, db));
+        this.limiterThresholdLinear = (float)Math.pow(10.0, limiterThresholdDb/20.0);
+    }
     public boolean isLimiterEnabled(){ return limiterEnabled; }
+    public float getLimiterThresholdDb(){ return limiterThresholdDb; }
 
     public synchronized void setSampleRate(float sr){
         if(sr>8000.0f && Math.abs(this.sampleRate-sr)>1.0f){
@@ -221,6 +224,7 @@ public class SjbzDspProcessor {
         final boolean runEmu=(emulationEnabled&&!bluetoothAutoBypass);
         final boolean runMdrc=mdrcEnabled;
         final float thLin=(float)Math.pow(10.0,mdrcThresholdDb/20.0);
+        final float limThresh = this.limiterThresholdLinear;
         int total=frameCount*channels;
         for(int i=0;i<total;i+=channels){
             for(int ch=0;ch<channels;ch++){
@@ -238,7 +242,6 @@ public class SjbzDspProcessor {
                     if(s>0.5f) s=0.5f+(float)Math.tanh(s-0.5f)*0.5f;
                     else if(s<-0.5f) s=-0.5f+(float)Math.tanh(s+0.5f)*0.5f;
                 }
-                // PARCHE 4: trim MDRC
                 float trim=(mdrcBandGainsDb[0]+mdrcBandGainsDb[1]+mdrcBandGainsDb[2]+mdrcBandGainsDb[3]+mdrcBandGainsDb[4])/5.0f;
                 if(Math.abs(trim)>0.01f) s*=(float)Math.pow(10.0,trim/40.0);
                 if(runMdrc){
@@ -254,12 +257,10 @@ public class SjbzDspProcessor {
                 float as=Math.abs(s);
                 if(as>limiterEnvelope) limiterEnvelope=as+limiterAttackCoeff*(limiterEnvelope-as);
                 else limiterEnvelope=as+limiterReleaseCoeff*(limiterEnvelope-as);
-                // PARCHE 2: limiterEnabled
-                if(limiterEnabled && limiterEnvelope>LIMITER_THRESHOLD){ s*=LIMITER_THRESHOLD/limiterEnvelope; clipping=true; }
+                if(limiterEnabled && limiterEnvelope>limThresh){ s*=limThresh/limiterEnvelope; clipping=true; }
                 if(s>1.0f){ s=1.0f; clipping=true; } else if(s<-1.0f){ s=-1.0f; clipping=true; }
                 if(Float.isNaN(s)||Float.isInfinite(s)){ s=0; resetFilterStates(); }
                 buffer[idx]=s;
-                // PARCHE 3: sanity cada 512
                 if((i&511)==0){ for(int b=0;b<BAND_COUNT;b++) eqBiquads[b].checkSanity(); }
                 if(ch==0&&fftListener!=null){ visualizerBuffer[visualizerIndex++]=s; if(visualizerIndex>=visualizerBuffer.length){ visualizerIndex=0; fftListener.onFftData(visualizerBuffer.clone()); } }
             }
@@ -274,7 +275,7 @@ public class SjbzDspProcessor {
         process(fb,ch,fc);
         for(int i=0;i<sc;i++){ int bi=off+i*2; float f=Math.max(-1.0f,Math.min(1.0f,fb[i])); short sv=(short)Math.round(f*32767.0f); pcm[bi]=(byte)(sv&0xFF); pcm[bi+1]=(byte)((sv>>8)&0xFF); }
     }
-    public void processByteBuffer(ByteBuffer bb,int ch){
+    public void processByteBuffer(java.nio.ByteBuffer bb,int ch){
         if(!masterEnabled||globalBypass||bb==null||!bb.hasRemaining()) return;
         int rem=bb.remaining(); byte[] t=new byte[rem]; int pos=bb.position(); bb.get(t);
         processPcm16(t,0,rem,ch); bb.position(pos); bb.put(t);

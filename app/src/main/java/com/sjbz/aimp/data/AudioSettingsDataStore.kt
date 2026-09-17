@@ -18,11 +18,6 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "sbz_audio_settings")
 
-/**
- * AudioSettingsDataStore: Manages asynchronous, persistent audio parameters using Jetpack DataStore.
- * Ensures all EQ bands, Q ratios, Limiter thresholds, AutoGain parameters, and Per-App profiles
- * survive device reboots without loss.
- */
 class AudioSettingsDataStore(private val context: Context) {
 
     private val gson = Gson()
@@ -48,29 +43,13 @@ class AudioSettingsDataStore(private val context: Context) {
         val KEY_CUSTOM_PRESETS_JSON = stringPreferencesKey("custom_presets_json")
     }
 
-    val globalEnabledFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_GLOBAL_ENABLED] ?: true
-    }
-
-    val autoStartBootFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_AUTO_START_BOOT] ?: true
-    }
-
-    val globalGainFlow: Flow<Float> = context.dataStore.data.map { prefs ->
-        prefs[KEY_GLOBAL_GAIN] ?: 0.0f
-    }
-
-    val limiterEnabledFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_LIMITER_ENABLED] ?: true
-    }
-
-    val limiterThresholdFlow: Flow<Float> = context.dataStore.data.map { prefs ->
-        prefs[KEY_LIMITER_THRESHOLD] ?: -0.5f
-    }
-
-    val autoGainEnabledFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_AUTOGAIN_ENABLED] ?: true
-    }
+    val globalEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[KEY_GLOBAL_ENABLED]?: true }
+    val autoStartBootFlow: Flow<Boolean> = context.dataStore.data.map { it[KEY_AUTO_START_BOOT]?: true }
+    val globalGainFlow: Flow<Float> = context.dataStore.data.map { it[KEY_GLOBAL_GAIN]?: 0.0f }
+    val limiterEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[KEY_LIMITER_ENABLED]?: true }
+    val limiterThresholdFlow: Flow<Float> = context.dataStore.data.map { it[KEY_LIMITER_THRESHOLD]?: -0.5f }
+    val autoGainEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[KEY_AUTOGAIN_ENABLED]?: true }
+    val autoGainTargetFlow: Flow<Float> = context.dataStore.data.map { it[KEY_AUTOGAIN_TARGET]?: -14f }
 
     suspend fun saveGlobalEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_GLOBAL_ENABLED] = enabled }
@@ -81,13 +60,13 @@ class AudioSettingsDataStore(private val context: Context) {
     }
 
     suspend fun saveGlobalGain(gainDb: Float) {
-        context.dataStore.edit { it[KEY_GLOBAL_GAIN] = gainDb }
+        context.dataStore.edit { it[KEY_GLOBAL_GAIN] = gainDb.coerceIn(-12f, 12f) }
     }
 
     suspend fun saveLimiter(enabled: Boolean, thresholdDb: Float) {
         context.dataStore.edit {
             it[KEY_LIMITER_ENABLED] = enabled
-            it[KEY_LIMITER_THRESHOLD] = thresholdDb
+            it[KEY_LIMITER_THRESHOLD] = thresholdDb.coerceIn(-12f, 0f)
         }
     }
 
@@ -100,18 +79,27 @@ class AudioSettingsDataStore(private val context: Context) {
 
     suspend fun saveBassAndVirtualizer(bassDb: Float, bassFreq: Float, virtualizer: Int) {
         context.dataStore.edit {
-            it[KEY_BASS_BOOST_DB] = bassDb
-            it[KEY_BASS_FREQ_HZ] = bassFreq
-            it[KEY_VIRTUALIZER_STRENGTH] = virtualizer
+            it[KEY_BASS_BOOST_DB] = bassDb.coerceIn(0f, 12f)
+            it[KEY_BASS_FREQ_HZ] = bassFreq.coerceIn(20f, 500f)
+            it[KEY_VIRTUALIZER_STRENGTH] = virtualizer.coerceIn(0, 1000)
         }
     }
 
-    suspend fun saveBands(gains: FloatArray, qs: FloatArray) {
-        val gainsList = gains.toList()
-        val qsList = qs.toList()
+    suspend fun saveMdrc(enabled: Boolean, gains: List<Float>) {
         context.dataStore.edit {
-            it[KEY_BAND_GAINS_JSON] = gson.toJson(gainsList)
-            it[KEY_BAND_QS_JSON] = gson.toJson(qsList)
+            it[KEY_MDRC_ENABLED] = enabled
+            it[KEY_MDRC_GAINS_JSON] = gson.toJson(gains)
+        }
+    }
+
+    suspend fun saveAtsEmu(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_ATS2835P_EMU] = enabled }
+    }
+
+    suspend fun saveBands(gains: FloatArray, qs: FloatArray) {
+        context.dataStore.edit {
+            it[KEY_BAND_GAINS_JSON] = gson.toJson(gains.toList())
+            it[KEY_BAND_QS_JSON] = gson.toJson(qs.toList())
         }
     }
 
@@ -119,21 +107,18 @@ class AudioSettingsDataStore(private val context: Context) {
         val prefs = context.dataStore.data.first()
         val gainsJson = prefs[KEY_BAND_GAINS_JSON]
         val qsJson = prefs[KEY_BAND_QS_JSON]
-
-        val gains = if (!gainsJson.isNullOrEmpty()) {
-            val list: List<Float> = gson.fromJson(gainsJson, object : TypeToken<List<Float>>() {}.type)
-            list.toFloatArray()
-        } else {
-            FloatArray(32) { 0f }
-        }
-
-        val qs = if (!qsJson.isNullOrEmpty()) {
-            val list: List<Float> = gson.fromJson(qsJson, object : TypeToken<List<Float>>() {}.type)
-            list.toFloatArray()
-        } else {
-            FloatArray(32) { 1.414f }
-        }
-
+        val gains = try {
+            if (!gainsJson.isNullOrEmpty()) {
+                val list: List<Float> = gson.fromJson(gainsJson, object : TypeToken<List<Float>>() {}.type)
+                list.toFloatArray()
+            } else FloatArray(32) { 0f }
+        } catch (_: Exception) { FloatArray(32) { 0f } }
+        val qs = try {
+            if (!qsJson.isNullOrEmpty()) {
+                val list: List<Float> = gson.fromJson(qsJson, object : TypeToken<List<Float>>() {}.type)
+                list.toFloatArray()
+            } else FloatArray(32) { 1.414f }
+        } catch (_: Exception) { FloatArray(32) { 1.414f } }
         return Pair(gains, qs)
     }
 
@@ -147,8 +132,8 @@ class AudioSettingsDataStore(private val context: Context) {
         val json = prefs[KEY_PROFILES_JSON]
         return if (!json.isNullOrEmpty()) {
             try {
-                gson.fromJson(json, object : TypeToken<List<AppProfile>>() {}.type)
-            } catch (e: Exception) {
+                gson.fromJson(json, object : TypeToken<List<AppProfile>>() {}.type)?: AppProfile.createDefaultProfiles()
+            } catch (_: Exception) {
                 AppProfile.createDefaultProfiles()
             }
         } else {
@@ -162,16 +147,14 @@ class AudioSettingsDataStore(private val context: Context) {
 
     suspend fun loadCurrentProfileId(): String {
         val prefs = context.dataStore.data.first()
-        return prefs[KEY_CURRENT_PROFILE_ID] ?: "prof_global"
+        return prefs[KEY_CURRENT_PROFILE_ID]?: "prof_global"
     }
 
     suspend fun loadAutoStartBoot(): Boolean {
-        val prefs = context.dataStore.data.first()
-        return prefs[KEY_AUTO_START_BOOT] ?: true
+        return context.dataStore.data.first()[KEY_AUTO_START_BOOT]?: true
     }
 
     suspend fun loadGlobalEnabled(): Boolean {
-        val prefs = context.dataStore.data.first()
-        return prefs[KEY_GLOBAL_ENABLED] ?: true
+        return context.dataStore.data.first()[KEY_GLOBAL_ENABLED]?: true
     }
 }

@@ -50,7 +50,8 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     private val scope = CoroutineScope(Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    val dspProcessor: SjbzDspProcessor = Companion.getDspProcessor()
+    // Se declara privada para evitar colisión de firmas JVM con el método Companion.getDspProcessor()
+    private val dspProcessor: SjbzDspProcessor = Companion.getDspProcessor()
 
     @Volatile
     var isGlobalAudioEnabled: Boolean = false
@@ -137,7 +138,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             val (savedGains, savedQs) = dataStore.loadBands()
             System.arraycopy(savedGains, 0, bandGains, 0, minOf(savedGains.size, bandGains.size))
             System.arraycopy(savedQs, 0, bandQs, 0, minOf(savedQs.size, bandQs.size))
-            
+
             val currentId = dataStore.loadCurrentProfileId()
             val found = allProfiles.find { it.id == currentId } ?: allProfiles.firstOrNull()
             if (found != null) {
@@ -154,7 +155,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     // -------------------------------------------------------------------------
     fun getSystemVolume(): Int = try { audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) } catch (_: Exception) { 0 }
     fun getMaxSystemVolume(): Int = try { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) } catch (_: Exception) { 15 }
-    
+
     fun setSystemVolume(volume: Int) {
         try {
             val clamped = volume.coerceIn(0, getMaxSystemVolume())
@@ -225,7 +226,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         dspProcessor.setMasterGain(gainDb)
     }
 
-    // Alias directo para compatibilidad con MainActivity.kt
     fun setGlobalGain(gainDb: Float) {
         setMasterGain(gainDb)
     }
@@ -250,7 +250,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         }
     }
 
-    // Sobrecargas de BassBoost para llamadas de 1, 2 o 3 argumentos
     fun setBassBoost(gainDb: Float, freqHz: Float) {
         setBassBoost(gainDb > 0.05f, gainDb, freqHz)
     }
@@ -266,7 +265,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         dspProcessor.setBassBoost(enabled, freqHz, this.bassBoostDb)
     }
 
-    // Sobrecargas de Virtualizer (Entrada Int 0..100 desde SeekBar)
     fun setVirtualizer(strengthProgress: Int) {
         val floatStrength = (strengthProgress / 100.0f).coerceIn(0.0f, 1.0f)
         this.virtualizerStrength = strengthProgress
@@ -334,9 +332,9 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         isLimiterEnabled = profile.isLimiterEnabled
         ats2835pEmuEnabled = profile.isAts2835pEnabled
         ats2835pEmuAmount = profile.ats2835pAmount
-        
+
         syncAllParamsToDsp()
-        
+
         if (saveSelection) {
             scope.launch { dataStore.saveCurrentProfileId(profile.id) }
         }

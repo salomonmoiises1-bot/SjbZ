@@ -6,7 +6,6 @@
     android:background="@color/studio_black"
     android:orientation="vertical">
 
-    <!-- EQ Header / Toolbar -->
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/eqToolbar"
         android:layout_width="match_parent"
@@ -44,7 +43,6 @@
                     android:textSize="10sp" />
             </LinearLayout>
 
-            <!-- Master DSP Switch -->
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/switchMasterDsp"
                 android:layout_width="wrap_content"
@@ -56,6 +54,7 @@
     </androidx.appcompat.widget.Toolbar>
 
     <ScrollView
+        android:id="@+id/scrollRoot"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true">
@@ -66,7 +65,6 @@
             android:orientation="vertical"
             android:padding="12dp">
 
-            <!-- 1. Real-time 60fps Spectrum Analyzer View -->
             <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="120dp"
@@ -94,7 +92,6 @@
                     android:textStyle="bold" />
             </FrameLayout>
 
-            <!-- 2. Musical Genre Recognition Card -->
             <LinearLayout
                 android:id="@+id/layoutGenreCard"
                 android:layout_width="match_parent"
@@ -163,7 +160,6 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <!-- 3. Quick Preset Buttons: Flat, Bass, Rock, Vocal -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -234,7 +230,6 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- Full Preset Selector & Actions -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -249,7 +244,6 @@
                         android:layout_marginEnd="6dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_studio_card"
-                        android:dropDownSelector="@color/studio_cyan_alpha"
                         android:popupBackground="@color/studio_surface" />
 
                     <ImageButton
@@ -272,7 +266,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- 4. Master Controls (Preamp & Bass Boost Low-Shelf RBJ) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -281,7 +274,6 @@
                 android:orientation="vertical"
                 android:padding="12dp">
 
-                <!-- Preamp Section -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -323,7 +315,6 @@
                     android:layout_marginVertical="8dp"
                     android:background="@color/studio_border" />
 
-                <!-- Bass Boost Section (RBJ Low-Shelf) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -358,7 +349,6 @@
                         app:trackTint="@color/studio_cyan_alpha" />
                 </LinearLayout>
 
-                <!-- Frequency selector: 60, 85, 120 Hz -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -383,7 +373,6 @@
                         android:popupBackground="@color/studio_surface" />
                 </LinearLayout>
 
-                <!-- Bass Boost Gain Slider (0 to 12 dB) -->
                 <SeekBar
                     android:id="@+id/seekBarBassBoost"
                     android:layout_width="match_parent"
@@ -395,7 +384,6 @@
                     android:thumbTint="@color/studio_cyan" />
             </LinearLayout>
 
-            <!-- 5. ATS2835P Hardware Emulation Mode Card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -452,7 +440,6 @@
                         app:trackTint="@color/studio_cyan_alpha" />
                 </LinearLayout>
 
-                <!-- Amount Slider (0 to 100%) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -479,7 +466,6 @@
                         android:thumbTint="@color/studio_cyan" />
                 </LinearLayout>
 
-                <!-- Bluetooth Auto-Bypass Toggle -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -518,10 +504,8 @@
                         app:thumbTint="@color/studio_cyan"
                         app:trackTint="@color/studio_cyan_alpha" />
                 </LinearLayout>
-
             </LinearLayout>
 
-            <!-- 6. Control de Audio del Sistema (Global FX) Card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -578,7 +562,6 @@
                         app:trackTint="@color/studio_cyan_alpha" />
                 </LinearLayout>
 
-                <!-- System Media Volume Slider -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -617,7 +600,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- 7. Compresor Multi-Banda MDRC (5 Bandas ATS2835P) Card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -674,14 +656,12 @@
                         app:trackTint="@color/studio_cyan_alpha" />
                 </LinearLayout>
 
-                <!-- MDRC Global Dynamics: Threshold & Ratio -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:orientation="horizontal">
 
-                    <!-- Threshold -->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -722,11 +702,8 @@
                             android:thumbTint="@color/studio_cyan" />
                     </LinearLayout>
 
-                    <View
-                        android:layout_width="12dp"
-                        android:layout_height="1dp" />
+                    <View android:layout_width="12dp" android:layout_height="1dp" />
 
-                    <!-- Ratio -->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -768,7 +745,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 5 Crossover Bands Gains -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -778,178 +754,33 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="10.5sp" />
 
-                <!-- Band 0: Sub (<120Hz) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="88dp"
-                        android:layout_height="wrap_content"
-                        android:text="1. Sub (&lt;120Hz)"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9.5sp" />
-
-                    <SeekBar
-                        android:id="@+id/seekBarMdrcBand0"
-                        android:layout_width="0dp"
-                        android:layout_height="24dp"
-                        android:layout_weight="1"
-                        android:max="240"
-                        android:progress="120"
-                        android:progressTint="@color/studio_cyan"
-                        android:thumbTint="@color/studio_cyan" />
-
-                    <TextView
-                        android:id="@+id/tvMdrcBand0Value"
-                        android:layout_width="38dp"
-                        android:layout_height="wrap_content"
-                        android:gravity="end"
-                        android:text="0.0 dB"
-                        android:textColor="@color/text_primary"
-                        android:textSize="9.5sp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="1. Sub (&lt;120Hz)" android:textColor="@color/text_muted" android:textSize="9.5sp" />
+                    <SeekBar android:id="@+id/seekBarMdrcBand0" android:layout_width="0dp" android:layout_height="24dp" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                    <TextView android:id="@+id/tvMdrcBand0Value" android:layout_width="38dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/text_primary" android:textSize="9.5sp" />
                 </LinearLayout>
-
-                <!-- Band 1: Low (120-500Hz) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="88dp"
-                        android:layout_height="wrap_content"
-                        android:text="2. Low (120-500)"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9.5sp" />
-
-                    <SeekBar
-                        android:id="@+id/seekBarMdrcBand1"
-                        android:layout_width="0dp"
-                        android:layout_height="24dp"
-                        android:layout_weight="1"
-                        android:max="240"
-                        android:progress="120"
-                        android:progressTint="@color/studio_cyan"
-                        android:thumbTint="@color/studio_cyan" />
-
-                    <TextView
-                        android:id="@+id/tvMdrcBand1Value"
-                        android:layout_width="38dp"
-                        android:layout_height="wrap_content"
-                        android:gravity="end"
-                        android:text="0.0 dB"
-                        android:textColor="@color/text_primary"
-                        android:textSize="9.5sp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="2. Low (120-500)" android:textColor="@color/text_muted" android:textSize="9.5sp" />
+                    <SeekBar android:id="@+id/seekBarMdrcBand1" android:layout_width="0dp" android:layout_height="24dp" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                    <TextView android:id="@+id/tvMdrcBand1Value" android:layout_width="38dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/text_primary" android:textSize="9.5sp" />
                 </LinearLayout>
-
-                <!-- Band 2: Mid (500-2kHz) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="88dp"
-                        android:layout_height="wrap_content"
-                        android:text="3. Mid (500-2k)"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9.5sp" />
-
-                    <SeekBar
-                        android:id="@+id/seekBarMdrcBand2"
-                        android:layout_width="0dp"
-                        android:layout_height="24dp"
-                        android:layout_weight="1"
-                        android:max="240"
-                        android:progress="120"
-                        android:progressTint="@color/studio_cyan"
-                        android:thumbTint="@color/studio_cyan" />
-
-                    <TextView
-                        android:id="@+id/tvMdrcBand2Value"
-                        android:layout_width="38dp"
-                        android:layout_height="wrap_content"
-                        android:gravity="end"
-                        android:text="0.0 dB"
-                        android:textColor="@color/text_primary"
-                        android:textSize="9.5sp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="3. Mid (500-2k)" android:textColor="@color/text_muted" android:textSize="9.5sp" />
+                    <SeekBar android:id="@+id/seekBarMdrcBand2" android:layout_width="0dp" android:layout_height="24dp" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                    <TextView android:id="@+id/tvMdrcBand2Value" android:layout_width="38dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/text_primary" android:textSize="9.5sp" />
                 </LinearLayout>
-
-                <!-- Band 3: High (2k-8kHz) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="88dp"
-                        android:layout_height="wrap_content"
-                        android:text="4. High (2k-8k)"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9.5sp" />
-
-                    <SeekBar
-                        android:id="@+id/seekBarMdrcBand3"
-                        android:layout_width="0dp"
-                        android:layout_height="24dp"
-                        android:layout_weight="1"
-                        android:max="240"
-                        android:progress="120"
-                        android:progressTint="@color/studio_cyan"
-                        android:thumbTint="@color/studio_cyan" />
-
-                    <TextView
-                        android:id="@+id/tvMdrcBand3Value"
-                        android:layout_width="38dp"
-                        android:layout_height="wrap_content"
-                        android:gravity="end"
-                        android:text="0.0 dB"
-                        android:textColor="@color/text_primary"
-                        android:textSize="9.5sp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="4. High (2k-8k)" android:textColor="@color/text_muted" android:textSize="9.5sp" />
+                    <SeekBar android:id="@+id/seekBarMdrcBand3" android:layout_width="0dp" android:layout_height="24dp" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                    <TextView android:id="@+id/tvMdrcBand3Value" android:layout_width="38dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/text_primary" android:textSize="9.5sp" />
                 </LinearLayout>
-
-                <!-- Band 4: Air (>8kHz) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="88dp"
-                        android:layout_height="wrap_content"
-                        android:text="5. Air (&gt;8kHz)"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9.5sp" />
-
-                    <SeekBar
-                        android:id="@+id/seekBarMdrcBand4"
-                        android:layout_width="0dp"
-                        android:layout_height="24dp"
-                        android:layout_weight="1"
-                        android:max="240"
-                        android:progress="120"
-                        android:progressTint="@color/studio_cyan"
-                        android:thumbTint="@color/studio_cyan" />
-
-                    <TextView
-                        android:id="@+id/tvMdrcBand4Value"
-                        android:layout_width="38dp"
-                        android:layout_height="wrap_content"
-                        android:gravity="end"
-                        android:text="0.0 dB"
-                        android:textColor="@color/text_primary"
-                        android:textSize="9.5sp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="5. Air (&gt;8kHz)" android:textColor="@color/text_muted" android:textSize="9.5sp" />
+                    <SeekBar android:id="@+id/seekBarMdrcBand4" android:layout_width="0dp" android:layout_height="24dp" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                    <TextView android:id="@+id/tvMdrcBand4Value" android:layout_width="38dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/text_primary" android:textSize="9.5sp" />
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- 8. 32-Band ISO Equalizer with HorizontalScrollView -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -983,14 +814,15 @@
                         android:textSize="10sp" />
                 </LinearLayout>
 
-                <!-- Horizontal scroll with 32 vertical sliders -->
                 <HorizontalScrollView
                     android:id="@+id/scrollEqBands"
                     android:layout_width="match_parent"
-                    android:layout_height="220dp"
+                    android:layout_height="240dp"
                     android:layout_marginTop="4dp"
                     android:fillViewport="true"
-                    android:scrollbars="horizontal">
+                    android:scrollbars="none"
+                    android:overScrollMode="never"
+                    android:nestedScrollingEnabled="true">
 
                     <LinearLayout
                         android:id="@+id/llEqBandsContainer"
@@ -1004,5 +836,4 @@
 
         </LinearLayout>
     </ScrollView>
-
 </LinearLayout>

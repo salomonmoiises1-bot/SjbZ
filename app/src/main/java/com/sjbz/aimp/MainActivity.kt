@@ -1,8 +1,10 @@
 package com.sjbz.aimp
 
+import android.Manifest
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -23,6 +25,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.sjbz.aimp.audio.EqualizerProcessor
@@ -45,6 +49,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var audioSessionManager: GlobalAudioSessionManager
     private lateinit var dataStore: AudioSettingsDataStore
     private val scope = CoroutineScope(Dispatchers.Main)
+
+    private val PERMISSION_REQUEST_CODE = 101
 
     // UI - Main & Drawer
     private lateinit var drawerLayout: DrawerLayout
@@ -133,6 +139,9 @@ class MainActivity : AppCompatActivity() {
 
         syncAllUiFromManager()
 
+        // Solicitar permiso de micrófono/grabación para habilitar la mezcla global del sistema
+        checkAndRequestAudioPermissions()
+
         audioSessionManager.onProfileChangedListener = { profile ->
             runOnUiThread { syncAllUiFromManager() }
         }
@@ -143,6 +152,41 @@ class MainActivity : AppCompatActivity() {
 
         if (audioSessionManager.isGlobalAudioEnabled) {
             GlobalAudioService.start(this)
+        }
+    }
+
+    private fun checkAndRequestAudioPermissions() {
+        val permissionsNeeded = mutableListOf<String>()
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(Manifest.permission.RECORD_AUDIO)
+        }
+
+        if (permissionsNeeded.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                permissionsNeeded.toTypedArray(),
+                PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Permiso de audio concedido", Toast.LENGTH_SHORT).show()
+                if (audioSessionManager.isGlobalAudioEnabled) {
+                    GlobalAudioService.start(this)
+                }
+            } else {
+                Toast.makeText(this, "Se requiere el permiso para procesar el audio del sistema", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -465,9 +509,6 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Preset aplicado: $name", Toast.LENGTH_SHORT).show()
     }
 
-    /**
-     * Builds 32 vertical ISO faders dynamically with touch intercept disallow fix.
-     */
     private fun build32BandSliders() {
         llEqBandsContainer.removeAllViews()
         bandSeekBars.clear()
@@ -530,12 +571,12 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onStartTrackingTouch(sb: SeekBar?) {
-                    // Bloquea el desplazamiento del ScrollView padre mientras se mueve el fader
+                    // Bloquea la captura del desplazamiento por parte del ScrollView padre
                     sb?.parent?.requestDisallowInterceptTouchEvent(true)
                 }
 
                 override fun onStopTrackingTouch(sb: SeekBar?) {
-                    // Restablece el comportamiento de desplazamiento
+                    // Libera la restricción del evento de toque
                     sb?.parent?.requestDisallowInterceptTouchEvent(false)
                 }
             })

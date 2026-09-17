@@ -556,8 +556,8 @@ class MainActivity : AppCompatActivity() {
                 rotation = 270f
                 max = 240 // -12.0 dB to +12.0 dB
                 progress = 120 // 0.0 dB center
-                progressTint = android.content.res.ColorStateList.valueOf(cyanColor)
-                thumbTint = android.content.res.ColorStateList.valueOf(cyanColor)
+                progressTintList = android.content.res.ColorStateList.valueOf(cyanColor)
+                thumbTintList = android.content.res.ColorStateList.valueOf(cyanColor)
             }
 
             val bandIndex = i

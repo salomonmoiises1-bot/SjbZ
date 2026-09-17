@@ -74,8 +74,8 @@ class GlobalAudioService : Service() {
         audioSessionManager = GlobalAudioSessionManager.getInstance(this)
         createNotificationChannel()
 
-        // Asegurar que el motor DSP esté inicializado al crear el servicio
-        audioSessionManager.initAudioEngine()
+        // (Corregido) Se eliminó la llamada a initAudioEngine() que no existía en el Manager.
+        // La inicialización se maneja internamente en el constructor/init del Singleton.
 
         audioSessionManager.onProfileChangedListener = { profile ->
             updateNotification(profile.appName, profile.presetName)

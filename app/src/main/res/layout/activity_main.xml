@@ -5,722 +5,142 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/studio_black">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <include
-            android:id="@+id/includedToolbar"
-            layout="@layout/toolbar" />
-
-        <LinearLayout
-            android:id="@+id/bannerDspStatus"
-            android:layout_width="match_parent"
-            android:layout_height="32dp"
-            android:background="#141923"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="14dp">
-
-            <View
-                android:id="@+id/viewDspIndicator"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:background="@color/studio_cyan" />
-
-            <TextView
-                android:id="@+id/tvDspActiveStatus"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:fontFamily="sans-serif-medium"
-                android:text="SB-Z Global DSP • Session 0 (Mezcla del Sistema)"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switchMasterDsp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                app:thumbTint="@color/studio_cyan"
-                app:trackTint="@color/studio_cyan_alpha" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+        <include android:id="@+id/includedToolbar" layout="@layout/toolbar" />
+        <LinearLayout android:id="@+id/bannerDspStatus" android:layout_width="match_parent" android:layout_height="32dp" android:background="#141923" android:gravity="center_vertical" android:paddingHorizontal="14dp">
+            <View android:id="@+id/viewDspIndicator" android:layout_width="8dp" android:layout_height="8dp" android:background="@color/studio_cyan" />
+            <TextView android:id="@+id/tvDspActiveStatus" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:fontFamily="sans-serif-medium" android:text="SB-Z Global DSP • Session 0 (Mezcla del Sistema)" android:textColor="@color/text_secondary" android:textSize="11sp" />
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchMasterDsp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" app:thumbTint="@color/studio_cyan" app:trackTint="@color/studio_cyan_alpha" />
         </LinearLayout>
+        <ScrollView android:id="@+id/scrollRootMain" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
 
-        <ScrollView
-            android:id="@+id/scrollRootMain"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:fillViewport="true">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="12dp">
-
-                <LinearLayout
-                    android:id="@+id/layoutProfileSelector"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="10dp"
-                    android:background="@drawable/bg_studio_card"
-                    android:orientation="vertical"
-                    android:padding="10dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="sans-serif-bold"
-                            android:text="Perfil de Aplicación (Auto-Switch)"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="11sp" />
-
-                        <TextView
-                            android:id="@+id/tvActiveAppDetection"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@color/studio_charcoal"
-                            android:fontFamily="sans-serif-medium"
-                            android:paddingHorizontal="6dp"
-                            android:paddingVertical="2dp"
-                            android:text="Detección Automática ON"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="10sp" />
+                <LinearLayout android:id="@+id/layoutProfileSelector" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="10dp" android:background="@drawable/bg_studio_card" android:orientation="vertical" android:padding="10dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:fontFamily="sans-serif-bold" android:text="Perfil de Aplicación (Auto-Switch)" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                        <TextView android:id="@+id/tvActiveAppDetection" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@color/studio_charcoal" android:fontFamily="sans-serif-medium" android:paddingHorizontal="6dp" android:paddingVertical="2dp" android:text="Detección Automática ON" android:textColor="@color/studio_cyan" android:textSize="10sp" />
                     </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="40dp"
-                        android:layout_marginTop="6dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <Spinner
-                            android:id="@+id/spinnerAppProfiles"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="1"
-                            android:background="@drawable/bg_aimp_card" />
-
-                        <Button
-                            android:id="@+id/btnSaveAppProfile"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:layout_marginStart="8dp"
-                            android:backgroundTint="@color/studio_cyan_alpha"
-                            android:text="+ Perfil"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="11sp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:layout_marginTop="6dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <Spinner android:id="@+id/spinnerAppProfiles" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bg_aimp_card" />
+                        <Button android:id="@+id/btnSaveAppProfile" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="wrap_content" android:layout_height="36dp" android:layout_marginStart="8dp" android:backgroundTint="@color/studio_cyan_alpha" android:text="+ Perfil" android:textColor="@color/studio_cyan" android:textSize="11sp" />
                     </LinearLayout>
                 </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="10dp"
-                    android:background="@drawable/bg_studio_card"
-                    android:orientation="vertical"
-                    android:padding="8dp">
-
-                    <FrameLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="100dp"
-                        android:background="#080C14">
-
-                        <com.sjbz.aimp.ui.AudioSpectrumVisualizerView
-                            android:id="@+id/visualizerView"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="top|end"
-                            android:layout_margin="4dp"
-                            android:background="#88000000"
-                            android:paddingHorizontal="6dp"
-                            android:paddingVertical="2dp"
-                            android:text="60 FPS • 2048 FFT"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="9sp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="10dp" android:background="@drawable/bg_studio_card" android:orientation="vertical" android:padding="8dp">
+                    <FrameLayout android:layout_width="match_parent" android:layout_height="100dp" android:background="#080C14">
+                        <com.sjbz.aimp.ui.AudioSpectrumVisualizerView android:id="@+id/visualizerView" android:layout_width="match_parent" android:layout_height="match_parent" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="top|end" android:layout_margin="4dp" android:background="#88000000" android:paddingHorizontal="6dp" android:paddingVertical="2dp" android:text="60 FPS • 2048 FFT" android:textColor="@color/studio_cyan" android:textSize="9sp" />
                     </FrameLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="22dp"
-                        android:layout_marginTop="6dp"
-                        android:background="#080C14"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingHorizontal="8dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="sans-serif-black"
-                            android:text="L"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="9sp" />
-
-                        <ProgressBar
-                            android:id="@+id/vuMeterLeftBar"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="0dp"
-                            android:layout_height="8dp"
-                            android:layout_marginStart="6dp"
-                            android:layout_weight="1"
-                            android:max="100"
-                            android:progress="42"
-                            android:progressTint="@color/vu_green" />
-
-                        <TextView
-                            android:id="@+id/tvVuPeakText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="8dp"
-                            android:fontFamily="sans-serif-mono"
-                            android:text="-0.5 dB"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="9sp" />
-
-                        <ProgressBar
-                            android:id="@+id/vuMeterRightBar"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="0dp"
-                            android:layout_height="8dp"
-                            android:layout_marginEnd="6dp"
-                            android:layout_weight="1"
-                            android:max="100"
-                            android:progress="45"
-                            android:progressTint="@color/vu_green" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="sans-serif-black"
-                            android:text="R"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="9sp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="22dp" android:layout_marginTop="6dp" android:background="#080C14" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="8dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-black" android:text="L" android:textColor="@color/studio_cyan" android:textSize="9sp" />
+                        <ProgressBar android:id="@+id/vuMeterLeftBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="0dp" android:layout_height="8dp" android:layout_marginStart="6dp" android:layout_weight="1" android:max="100" android:progress="42" android:progressTint="@color/vu_green" />
+                        <TextView android:id="@+id/tvVuPeakText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginHorizontal="8dp" android:fontFamily="sans-serif-mono" android:text="-0.5 dB" android:textColor="@color/studio_cyan" android:textSize="9sp" />
+                        <ProgressBar android:id="@+id/vuMeterRightBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="0dp" android:layout_height="8dp" android:layout_marginEnd="6dp" android:layout_weight="1" android:max="100" android:progress="45" android:progressTint="@color/vu_green" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-black" android:text="R" android:textColor="@color/studio_cyan" android:textSize="9sp" />
                     </LinearLayout>
                 </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="10dp"
-                    android:background="@drawable/bg_studio_card"
-                    android:orientation="vertical"
-                    android:padding="12dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-bold"
-                        android:text="Dinámica Global &amp; Protección Anti-Clipping"
-                        android:textColor="@color/studio_cyan"
-                        android:textSize="12sp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="85dp"
-                            android:layout_height="wrap_content"
-                            android:text="Gain Global:"
-                            android:textColor="@color/text_primary"
-                            android:textSize="11sp" />
-
-                        <SeekBar
-                            android:id="@+id/seekBarGlobalGain"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:max="240"
-                            android:progress="120"
-                            android:progressTint="@color/studio_cyan"
-                            android:thumbTint="@color/studio_cyan" />
-
-                        <TextView
-                            android:id="@+id/tvGlobalGainValue"
-                            android:layout_width="50dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="end"
-                            android:text="0.0 dB"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="11sp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="10dp" android:background="@drawable/bg_studio_card" android:orientation="vertical" android:padding="12dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-bold" android:text="Dinámica Global &amp; Protección Anti-Clipping" android:textColor="@color/studio_cyan" android:textSize="12sp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="85dp" android:layout_height="wrap_content" android:text="Gain Global:" android:textColor="@color/text_primary" android:textSize="11sp" />
+                        <SeekBar android:id="@+id/seekBarGlobalGain" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                        <TextView android:id="@+id/tvGlobalGainValue" android:layout_width="50dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/studio_cyan" android:textSize="11sp" />
                     </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="85dp"
-                            android:layout_height="wrap_content"
-                            android:text="Limiter:"
-                            android:textColor="@color/text_primary"
-                            android:textSize="11sp" />
-
-                        <androidx.appcompat.widget.SwitchCompat
-                            android:id="@+id/switchLimiter"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checked="true"
-                            app:thumbTint="@color/studio_cyan"
-                            app:trackTint="@color/studio_cyan_alpha" />
-
-                        <SeekBar
-                            android:id="@+id/seekBarLimiterThreshold"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:max="120"
-                            android:progress="115"
-                            android:progressTint="@color/studio_cyan"
-                            android:thumbTint="@color/studio_cyan" />
-
-                        <TextView
-                            android:id="@+id/tvLimiterThresholdValue"
-                            android:layout_width="50dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="end"
-                            android:text="-0.5 dB"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="11sp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="85dp" android:layout_height="wrap_content" android:text="Limiter:" android:textColor="@color/text_primary" android:textSize="11sp" />
+                        <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchLimiter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" app:thumbTint="@color/studio_cyan" app:trackTint="@color/studio_cyan_alpha" />
+                        <SeekBar android:id="@+id/seekBarLimiterThreshold" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="120" android:progress="115" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                        <TextView android:id="@+id/tvLimiterThresholdValue" android:layout_width="50dp" android:layout_height="wrap_content" android:gravity="end" android:text="-0.5 dB" android:textColor="@color/studio_cyan" android:textSize="11sp" />
                     </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="85dp"
-                            android:layout_height="wrap_content"
-                            android:text="AutoGain:"
-                            android:textColor="@color/text_primary"
-                            android:textSize="11sp" />
-
-                        <androidx.appcompat.widget.SwitchCompat
-                            android:id="@+id/switchAutoGain"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checked="true"
-                            app:thumbTint="@color/studio_cyan"
-                            app:trackTint="@color/studio_cyan_alpha" />
-
-                        <SeekBar
-                            android:id="@+id/seekBarAutoGainTarget"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:max="14"
-                            android:progress="9"
-                            android:progressTint="@color/studio_cyan"
-                            android:thumbTint="@color/studio_cyan" />
-
-                        <TextView
-                            android:id="@+id/tvAutoGainTargetValue"
-                            android:layout_width="50dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="end"
-                            android:text="-14 LUFS"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="11sp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="85dp" android:layout_height="wrap_content" android:text="AutoGain:" android:textColor="@color/text_primary" android:textSize="11sp" />
+                        <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchAutoGain" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" app:thumbTint="@color/studio_cyan" app:trackTint="@color/studio_cyan_alpha" />
+                        <SeekBar android:id="@+id/seekBarAutoGainTarget" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="14" android:progress="9" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                        <TextView android:id="@+id/tvAutoGainTargetValue" android:layout_width="50dp" android:layout_height="wrap_content" android:gravity="end" android:text="-14 LUFS" android:textColor="@color/studio_cyan" android:textSize="11sp" />
                     </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:orientation="horizontal">
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginEnd="6dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="Bass Boost"
-                                    android:textColor="@color/text_secondary"
-                                    android:textSize="11sp" />
-
-                                <androidx.appcompat.widget.SwitchCompat
-                                    android:id="@+id/switchBassBoost"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    app:thumbTint="@color/studio_cyan" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="6dp" android:layout_weight="1" android:orientation="vertical">
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Bass Boost" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchBassBoost" android:layout_width="wrap_content" android:layout_height="wrap_content" app:thumbTint="@color/studio_cyan" />
                             </LinearLayout>
-
-                            <Spinner
-                                android:id="@+id/spinnerBassFreq"
-                                android:layout_width="match_parent"
-                                android:layout_height="32dp"
-                                android:layout_marginTop="2dp"
-                                android:background="@drawable/bg_aimp_card" />
-
-                            <SeekBar
-                                android:id="@+id/seekBarBassBoost"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:max="120"
-                                android:progress="0"
-                                android:progressTint="@color/studio_cyan"
-                                android:thumbTint="@color/studio_cyan" />
-
-                            <TextView
-                                android:id="@+id/tvBassBoostValue"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center"
-                                android:text="0.0 dB"
-                                android:textColor="@color/studio_cyan"
-                                android:textSize="10sp" />
+                            <Spinner android:id="@+id/spinnerBassFreq" android:layout_width="match_parent" android:layout_height="32dp" android:layout_marginTop="2dp" android:background="@drawable/bg_aimp_card" />
+                            <SeekBar android:id="@+id/seekBarBassBoost" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:max="120" android:progress="0" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
+                            <TextView android:id="@+id/tvBassBoostValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="0.0 dB" android:textColor="@color/studio_cyan" android:textSize="10sp" />
                         </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="6dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="Virtualizer 3D"
-                                    android:textColor="@color/text_secondary"
-                                    android:textSize="11sp" />
-
-                                <TextView
-                                    android:id="@+id/tvVirtualizerValue"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="0%"
-                                    android:textColor="@color/studio_cyan"
-                                    android:textSize="10sp" />
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:layout_weight="1" android:orientation="vertical">
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Virtualizer 3D" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                                <TextView android:id="@+id/tvVirtualizerValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0%" android:textColor="@color/studio_cyan" android:textSize="10sp" />
                             </LinearLayout>
-
-                            <SeekBar
-                                android:id="@+id/seekBarVirtualizer"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="8dp"
-                                android:max="1000"
-                                android:progress="0"
-                                android:progressTint="@color/studio_cyan"
-                                android:thumbTint="@color/studio_cyan" />
+                            <SeekBar android:id="@+id/seekBarVirtualizer" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:max="1000" android:progress="0" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="10dp"
-                    android:background="@drawable/bg_studio_card"
-                    android:orientation="vertical"
-                    android:padding="10dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="sans-serif-bold"
-                            android:text="Presets Rápidos"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="11sp" />
-
-                        <Button
-                            android:id="@+id/btnResetEq"
-                            style="@style/Widget.Material3.Button.TextButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="32dp"
-                            android:text="Reset 0 dB"
-                            android:textColor="@color/text_muted"
-                            android:textSize="10sp" />
+                <!-- PRE-AMP TONO AGREGADO -->
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="10dp" android:background="@drawable/bg_studio_card" android:orientation="vertical" android:padding="12dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-bold" android:text="Pre-amp Tono Global (Bass / Mid / Treble)" android:textColor="@color/studio_cyan" android:textSize="12sp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:layout_marginTop="6dp">
+                        <TextView android:layout_width="60dp" android:layout_height="wrap_content" android:text="Bass" android:textColor="@color/text_secondary" android:textSize="11sp"/>
+                        <SeekBar android:id="@+id/seekBarToneBass" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan"/>
+                        <TextView android:id="@+id/tvToneBassValue" android:layout_width="52dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/studio_cyan" android:textSize="11sp" android:fontFamily="sans-serif-bold"/>
                     </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:orientation="horizontal">
-
-                        <Button
-                            android:id="@+id/btnPresetFlat"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="36dp"
-                            android:layout_marginEnd="4dp"
-                            android:layout_weight="1"
-                            android:paddingHorizontal="2dp"
-                            android:text="Flat"
-                            android:textColor="@color/text_primary"
-                            android:textSize="10sp" />
-
-                        <Button
-                            android:id="@+id/btnPresetBass"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="36dp"
-                            android:layout_marginEnd="4dp"
-                            android:layout_weight="1"
-                            android:paddingHorizontal="2dp"
-                            android:text="Bass"
-                            android:textColor="@color/text_primary"
-                            android:textSize="10sp" />
-
-                        <Button
-                            android:id="@+id/btnPresetRock"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="36dp"
-                            android:layout_marginEnd="4dp"
-                            android:layout_weight="1"
-                            android:paddingHorizontal="2dp"
-                            android:text="Rock"
-                            android:textColor="@color/text_primary"
-                            android:textSize="10sp" />
-
-                        <Button
-                            android:id="@+id/btnPresetVocal"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="36dp"
-                            android:layout_weight="1"
-                            android:paddingHorizontal="2dp"
-                            android:text="Vocal"
-                            android:textColor="@color/text_primary"
-                            android:textSize="10sp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="60dp" android:layout_height="wrap_content" android:text="Mid" android:textColor="@color/text_secondary" android:textSize="11sp"/>
+                        <SeekBar android:id="@+id/seekBarToneMid" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan"/>
+                        <TextView android:id="@+id/tvToneMidValue" android:layout_width="52dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/studio_cyan" android:textSize="11sp" android:fontFamily="sans-serif-bold"/>
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="60dp" android:layout_height="wrap_content" android:text="Treble" android:textColor="@color/text_secondary" android:textSize="11sp"/>
+                        <SeekBar android:id="@+id/seekBarToneTreble" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="240" android:progress="120" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan"/>
+                        <TextView android:id="@+id/tvToneTrebleValue" android:layout_width="52dp" android:layout_height="wrap_content" android:gravity="end" android:text="0.0 dB" android:textColor="@color/studio_cyan" android:textSize="11sp" android:fontFamily="sans-serif-bold"/>
                     </LinearLayout>
                 </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_studio_card"
-                    android:orientation="vertical"
-                    android:padding="12dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="sans-serif-bold"
-                            android:text="Ecualizador 32 Bandas ISO"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="11sp" />
-
-                        <Button
-                            android:id="@+id/btnToggleQMode"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="32dp"
-                            android:backgroundTint="@color/studio_charcoal"
-                            android:text="Modo Q: 1.41"
-                            android:textColor="@color/studio_cyan"
-                            android:textSize="10sp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="10dp" android:background="@drawable/bg_studio_card" android:orientation="vertical" android:padding="10dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:fontFamily="sans-serif-bold" android:text="Presets Rápidos" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                        <Button android:id="@+id/btnResetEq" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="32dp" android:text="Reset 0 dB" android:textColor="@color/text_muted" android:textSize="10sp" />
                     </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:orientation="horizontal">
+                        <Button android:id="@+id/btnPresetFlat" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="36dp" android:layout_marginEnd="4dp" android:layout_weight="1" android:paddingHorizontal="2dp" android:text="Flat" android:textColor="@color/text_primary" android:textSize="10sp" />
+                        <Button android:id="@+id/btnPresetBass" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="36dp" android:layout_marginEnd="4dp" android:layout_weight="1" android:paddingHorizontal="2dp" android:text="Bass" android:textColor="@color/text_primary" android:textSize="10sp" />
+                        <Button android:id="@+id/btnPresetRock" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="36dp" android:layout_marginEnd="4dp" android:layout_weight="1" android:paddingHorizontal="2dp" android:text="Rock" android:textColor="@color/text_primary" android:textSize="10sp" />
+                        <Button android:id="@+id/btnPresetVocal" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:paddingHorizontal="2dp" android:text="Vocal" android:textColor="@color/text_primary" android:textSize="10sp" />
+                    </LinearLayout>
+                </LinearLayout>
 
-                    <HorizontalScrollView
-                        android:id="@+id/scrollEqBandsMain"
-                        android:layout_width="match_parent"
-                        android:layout_height="260dp"
-                        android:layout_marginTop="8dp"
-                        android:fillViewport="true"
-                        android:scrollbars="none"
-                        android:overScrollMode="never"
-                        android:nestedScrollingEnabled="true">
-
-                        <LinearLayout
-                            android:id="@+id/llEqBandsContainer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="8dp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_studio_card" android:orientation="vertical" android:padding="12dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:fontFamily="sans-serif-bold" android:text="Ecualizador 32 Bandas ISO" android:textColor="@color/studio_cyan" android:textSize="11sp" />
+                        <Button android:id="@+id/btnToggleQMode" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="wrap_content" android:layout_height="32dp" android:backgroundTint="@color/studio_charcoal" android:text="Modo Q: 1.41" android:textColor="@color/studio_cyan" android:textSize="10sp" />
+                    </LinearLayout>
+                    <HorizontalScrollView android:id="@+id/scrollEqBandsMain" android:layout_width="match_parent" android:layout_height="260dp" android:layout_marginTop="8dp" android:fillViewport="true" android:scrollbars="none" android:overScrollMode="never" android:nestedScrollingEnabled="true">
+                        <LinearLayout android:id="@+id/llEqBandsContainer" android:layout_width="wrap_content" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="8dp" />
                     </HorizontalScrollView>
                 </LinearLayout>
-
             </LinearLayout>
         </ScrollView>
     </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/navDrawerView"
-        android:layout_width="280dp"
-        android:layout_height="match_parent"
-        android:layout_gravity="start"
-        android:background="@color/studio_surface"
-        android:orientation="vertical"
-        android:paddingTop="32dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingBottom="20dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-black"
-                android:text="SB-Z"
-                android:textColor="@color/studio_cyan"
-                android:textSize="26sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Ecualizador Global del Sistema"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
+    <LinearLayout android:id="@+id/navDrawerView" android:layout_width="280dp" android:layout_height="match_parent" android:layout_gravity="start" android:background="@color/studio_surface" android:orientation="vertical" android:paddingTop="32dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="20dp" android:paddingBottom="20dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-black" android:text="SB-Z" android:textColor="@color/studio_cyan" android:textSize="26sp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ecualizador Global del Sistema" android:textColor="@color/text_secondary" android:textSize="12sp" />
         </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/studio_border" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="20dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Auto-iniciar al encender"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp" />
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switchAutoStartBoot"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                app:thumbTint="@color/studio_cyan" />
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/studio_border" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="52dp" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="20dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Auto-iniciar al encender" android:textColor="@color/text_primary" android:textSize="13sp" />
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchAutoStartBoot" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" app:thumbTint="@color/studio_cyan" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/drawerItemPlaylists"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackground"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:text="Perfiles por Aplicación"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/drawerItemFavorites"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackground"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:text="Presets del Sistema"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginVertical="10dp"
-            android:background="@color/studio_border" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingVertical="10dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Volumen Multimedia del Sistema"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-
-            <SeekBar
-                android:id="@+id/seekBarSystemVolume"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:max="15"
-                android:progress="8"
-                android:progressTint="@color/studio_cyan"
-                android:thumbTint="@color/studio_cyan" />
+        <TextView android:id="@+id/drawerItemPlaylists" android:layout_width="match_parent" android:layout_height="48dp" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingHorizontal="20dp" android:text="Perfiles por Aplicación" android:textColor="@color/text_primary" android:textSize="14sp" />
+        <TextView android:id="@+id/drawerItemFavorites" android:layout_width="match_parent" android:layout_height="48dp" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingHorizontal="20dp" android:text="Presets del Sistema" android:textColor="@color/text_primary" android:textSize="14sp" />
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="10dp" android:background="@color/studio_border" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="20dp" android:paddingVertical="10dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Volumen Multimedia del Sistema" android:textColor="@color/text_secondary" android:textSize="12sp" />
+            <SeekBar android:id="@+id/seekBarSystemVolume" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:max="15" android:progress="8" android:progressTint="@color/studio_cyan" android:thumbTint="@color/studio_cyan" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/drawerExportM3U8"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackground"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:text="Reiniciar DSP a Valores de Fábrica"
-            android:textColor="@color/studio_cyan"
-            android:textSize="13sp" />
+        <TextView android:id="@+id/drawerExportM3U8" android:layout_width="match_parent" android:layout_height="48dp" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingHorizontal="20dp" android:text="Reiniciar DSP a Valores de Fábrica" android:textColor="@color/studio_cyan" android:textSize="13sp" />
     </LinearLayout>
 </androidx.drawerlayout.widget.DrawerLayout>

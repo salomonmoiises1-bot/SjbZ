@@ -6,18 +6,15 @@
     android:layout_height="match_parent"
     android:background="@color/studio_black">
 
-    <!-- Main Content Area: Global Equalizer Studio -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Top Toolbar -->
         <include
             android:id="@+id/includedToolbar"
             layout="@layout/toolbar" />
 
-        <!-- Status & Active Profile Banner -->
         <LinearLayout
             android:id="@+id/bannerDspStatus"
             android:layout_width="match_parent"
@@ -43,7 +40,6 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="11sp" />
 
-            <!-- Master Global Audio FX Switch -->
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/switchMasterDsp"
                 android:layout_width="wrap_content"
@@ -53,8 +49,8 @@
                 app:trackTint="@color/studio_cyan_alpha" />
         </LinearLayout>
 
-        <!-- Main Scrollable Studio Controls -->
         <ScrollView
+            android:id="@+id/scrollRootMain"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
@@ -66,7 +62,6 @@
                 android:orientation="vertical"
                 android:padding="12dp">
 
-                <!-- 1. Per-App Profiles Quick Selector Bar -->
                 <LinearLayout
                     android:id="@+id/layoutProfileSelector"
                     android:layout_width="match_parent"
@@ -131,7 +126,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 2. Real-Time Audio Spectrum Analyzer & Stereo VU Meters -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -163,7 +157,6 @@
                             android:textSize="9sp" />
                     </FrameLayout>
 
-                    <!-- Stereo VU Meters Row -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="22dp"
@@ -223,7 +216,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 3. Master Controls: Gain Global, Limiter Anti-Clipping, AutoGain -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -240,7 +232,6 @@
                         android:textColor="@color/studio_cyan"
                         android:textSize="12sp" />
 
-                    <!-- Global Gain Slider -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -275,7 +266,6 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
-                    <!-- Limiter Anti-Clipping -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -318,7 +308,6 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
-                    <!-- AutoGain Loudness Leveler -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -361,14 +350,12 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
-                    <!-- Bass Boost & Virtualizer Row -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:orientation="horizontal">
 
-                        <!-- Bass Boost Column -->
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -424,7 +411,6 @@
                                 android:textSize="10sp" />
                         </LinearLayout>
 
-                        <!-- Virtualizer 3D Surround Column -->
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -468,7 +454,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 4. Quick Presets Bar -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -557,7 +542,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 5. 32-Band ISO Equalizer Deck (20 Hz - 20 kHz) with Q-Ratio -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -576,7 +560,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:fontFamily="sans-serif-bold"
-                            android:text="Ecualizador 32 Bandas ISO (Desplaza Horizontalmente)"
+                            android:text="Ecualizador 32 Bandas ISO"
                             android:textColor="@color/studio_cyan"
                             android:textSize="11sp" />
 
@@ -591,17 +575,21 @@
                             android:textSize="10sp" />
                     </LinearLayout>
 
-                    <!-- Horizontal ScrollView containing 32 vertical sliders -->
                     <HorizontalScrollView
+                        android:id="@+id/scrollEqBandsMain"
                         android:layout_width="match_parent"
-                        android:layout_height="250dp"
+                        android:layout_height="260dp"
                         android:layout_marginTop="8dp"
-                        android:scrollbars="horizontal">
+                        android:fillViewport="true"
+                        android:scrollbars="none"
+                        android:overScrollMode="never"
+                        android:nestedScrollingEnabled="true">
 
                         <LinearLayout
                             android:id="@+id/llEqBandsContainer"
                             android:layout_width="wrap_content"
                             android:layout_height="match_parent"
+                            android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingHorizontal="8dp" />
                     </HorizontalScrollView>
@@ -609,10 +597,8 @@
 
             </LinearLayout>
         </ScrollView>
-
     </LinearLayout>
 
-    <!-- Navigation Drawer (Perfiles, Auto-Boot, Ajustes) -->
     <LinearLayout
         android:id="@+id/navDrawerView"
         android:layout_width="280dp"
@@ -650,7 +636,6 @@
             android:layout_height="1dp"
             android:background="@color/studio_border" />
 
-        <!-- Auto-start on boot switch row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
@@ -702,7 +687,6 @@
             android:layout_marginVertical="10dp"
             android:background="@color/studio_border" />
 
-        <!-- System Volume Control in Drawer -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -738,7 +722,5 @@
             android:text="Reiniciar DSP a Valores de Fábrica"
             android:textColor="@color/studio_cyan"
             android:textSize="13sp" />
-
     </LinearLayout>
-
 </androidx.drawerlayout.widget.DrawerLayout>

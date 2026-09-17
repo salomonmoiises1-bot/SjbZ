@@ -3,11 +3,8 @@ package com.sjbz.aimp.audio
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.log10
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * 5-Band Multi-Band Dynamic Range Compressor (MDRC) Processor.
@@ -37,11 +34,12 @@ class MDRCProcessor {
         val CENTER_FREQS = floatArrayOf(60f, 250f, 1000f, 4000f, 12000f)
     }
 
+    // Se declara var isEnabled y se evita la duplicación de getters/setters en la JVM
     var isEnabled: Boolean = true
 
-    var enabled: Boolean
-        get() = isEnabled
-        set(value) { isEnabled = value }
+    fun setMdrcEnabled(value: Boolean) {
+        isEnabled = value
+    }
 
     fun isMdrcEnabled(): Boolean = isEnabled
 

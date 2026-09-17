@@ -54,7 +54,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     private val dspProcessor: SjbzDspProcessor = Companion.getDspProcessor()
 
     @Volatile
-    var isGlobalAudioEnabled: Boolean = false
+    var isGlobalAudioEnabled: Boolean = true // CORREGIDO: Inicia activo por defecto para evitar bypass inicial
         private set
 
     private val activeSessions = mutableMapOf<Int, String>()
@@ -126,6 +126,9 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
         scope.launch { loadPersistedSettings() }
         syncAllParamsToDsp()
+        
+        // CORREGIDO: Aplica el estado inicial para evitar que el motor arrancar silenciado o en bypass
+        checkAndApplyGlobalBypass()
     }
 
     private suspend fun loadPersistedSettings() {

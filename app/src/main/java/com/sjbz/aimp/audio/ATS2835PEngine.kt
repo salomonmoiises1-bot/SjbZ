@@ -85,8 +85,8 @@ class ATS2835PEngine(
 
     fun getMdrcBandGain(bandIndex: Int): Float = dspProcessor.getMdrcBandGain(bandIndex)
 
-    fun setMdrcDynamics(thresholdDb: Float, ratio: Float, attackMs: Float = 10f, releaseMs: Float = 80f) {
-        dspProcessor.setMdrcDynamics(thresholdDb, ratio, attackMs, releaseMs)
+    fun setMdrcDynamics(thresholdDb: Float, ratio: Float) {
+        dspProcessor.setMdrcDynamics(thresholdDb, ratio)
     }
 
     fun getMdrcThreshold(): Float = dspProcessor.getMdrcThreshold()

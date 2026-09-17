@@ -39,6 +39,12 @@ class MDRCProcessor {
 
     var isEnabled: Boolean = true
 
+    var enabled: Boolean
+        get() = isEnabled
+        set(value) { isEnabled = value }
+
+    fun isMdrcEnabled(): Boolean = isEnabled
+
     // Dynamics Parameters
     var thresholdDb: Float = -14.0f // -36dB to 0dB
     var ratio: Float = 3.0f         // 1.0 to 8.0:1
@@ -105,6 +111,16 @@ class MDRCProcessor {
         this.releaseMs = rel.coerceIn(10.0f, 500.0f)
         isDirty = true
     }
+
+    fun setGlobalDynamics(thresholdDb: Float, ratio: Float) {
+        this.thresholdDb = thresholdDb.coerceIn(-36.0f, 0.0f)
+        this.ratio = ratio.coerceIn(1.0f, 10.0f)
+        isDirty = true
+    }
+
+    fun getGainReductionDb(): Float = currentGainReductionDb
+    fun getMdrcThreshold(): Float = thresholdDb
+    fun getMdrcRatio(): Float = ratio
 
     fun reset() {
         s1.fill(0.0f)

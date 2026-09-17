@@ -36,6 +36,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     companion object {
         private const val TAG = "GlobalAudioSession"
+        const val CONFIG_VARIANT_FAVOR_FREQUENCY_RESOLUTION = 0
 
         @Volatile
         private var instance: GlobalAudioSessionManager? = null
@@ -391,11 +392,39 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         scope.launch { dataStore.saveGlobalGain(gainDb) }
     }
 
+    fun setLimiter(enabled: Boolean) {
+        setLimiter(enabled, limiterThresholdDb, limiterReleaseMs)
+    }
+
     fun setLimiter(enabled: Boolean, thresholdDb: Float) {
+        setLimiter(enabled, thresholdDb, limiterReleaseMs)
+    }
+
+    fun setLimiter(enabled: Boolean, thresholdDb: Float, releaseMs: Float) {
         this.isLimiterEnabled = enabled
         this.limiterThresholdDb = thresholdDb
+        this.limiterReleaseMs = releaseMs
         reapplyAllParams()
         scope.launch { dataStore.saveLimiter(enabled, thresholdDb) }
+    }
+
+    fun setPreEqBand(bandIndex: Int, gainDb: Float) {
+        setBandGain(bandIndex, gainDb)
+    }
+
+    fun setPreEqBand(channelIndex: Int, bandIndex: Int, gainDb: Float) {
+        setBandGain(bandIndex, gainDb)
+    }
+
+    fun setBobcBand(bandIndex: Int, gainDb: Float) {
+        setBobcBand(0, bandIndex, gainDb)
+    }
+
+    fun setBobcBand(channelIndex: Int, bandIndex: Int, gainDb: Float) {
+        if (bandIndex in 0 until 5) {
+            mdrcGains[bandIndex] = gainDb.coerceIn(-12f, 12f)
+            reapplyAllParams()
+        }
     }
 
     fun setAutoGain(enabled: Boolean, targetLufs: Float = -14.0f) {
@@ -486,7 +515,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                 val eqBandCount = 32
 
                 val builder = DynamicsProcessing.Config.Builder(
-                    DynamicsProcessing.CONFIG_VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+                    DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
                     channelCount,
                     true, // preEqInUse
                     eqBandCount,
@@ -703,3 +732,32 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// DynamicsProcessing Extension Helpers (API 28+)
+// -----------------------------------------------------------------------------
+
+private fun DynamicsProcessing.setPreEqBand(channelIndex: Int, bandIndex: Int, band: DynamicsProcessing.EqBand) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        setPreEqBandByChannelIndex(channelIndex, bandIndex, band)
+    }
+}
+
+private fun DynamicsProcessing.setMbcBand(channelIndex: Int, bandIndex: Int, band: DynamicsProcessing.MbcBand) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        setMbcBandByChannelIndex(channelIndex, bandIndex, band)
+    }
+}
+
+private fun DynamicsProcessing.setBobcBand(channelIndex: Int, bandIndex: Int, band: DynamicsProcessing.MbcBand) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        setMbcBandByChannelIndex(channelIndex, bandIndex, band)
+    }
+}
+
+private fun DynamicsProcessing.setLimiter(channelIndex: Int, limiter: DynamicsProcessing.Limiter) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        setLimiterByChannelIndex(channelIndex, limiter)
+    }
+}
+

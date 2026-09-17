@@ -49,6 +49,10 @@ class SjbzDspProcessor {
     // Master switch
     var masterEnabled: Boolean = true
 
+    var enabled: Boolean
+        get() = masterEnabled
+        set(value) { masterEnabled = value }
+
     // Preamp parameter (-12 dB to +12 dB)
     private var preampDb: Float = 0.0f
     private var linearPreamp: Float = 1.0f
@@ -270,6 +274,10 @@ class SjbzDspProcessor {
         }
     }
 
+    fun isBassBoostEnabled(): Boolean = bassEnabled
+    fun getBassBoostFreq(): Float = bassFreqHz
+    fun getBassBoostGain(): Float = bassGainDb
+
     fun setBandGain(index: Int, gainDb: Float) {
         if (index in 0 until BAND_COUNT) {
             val clamped = gainDb.coerceIn(-12.0f, 12.0f)
@@ -329,17 +337,32 @@ class SjbzDspProcessor {
         mdrcProcessor.enabled = enabled
     }
 
+    fun isMdrcEnabled(): Boolean = mdrcProcessor.isEnabled
+
     fun setMdrcDynamics(thresholdDb: Float, ratio: Float) {
         mdrcProcessor.setGlobalDynamics(thresholdDb, ratio)
+    }
+
+    fun setGlobalDynamics(thresholdDb: Float, ratio: Float) {
+        setMdrcDynamics(thresholdDb, ratio)
     }
 
     fun setMdrcBandGain(bandIndex: Int, gainDb: Float) {
         mdrcProcessor.setBandGain(bandIndex, gainDb)
     }
 
+    fun getMdrcBandGain(bandIndex: Int): Float {
+        return mdrcProcessor.getBandGain(bandIndex)
+    }
+
+    fun getMdrcThreshold(): Float = mdrcProcessor.getMdrcThreshold()
+    fun getMdrcRatio(): Float = mdrcProcessor.getMdrcRatio()
+
     fun getMdrcGainReduction(): Float {
         return mdrcProcessor.getGainReductionDb()
     }
+
+    fun getGainReductionDb(): Float = getMdrcGainReduction()
 
     // -------------------------------------------------------------------------
     // Biquad Coefficient Computation

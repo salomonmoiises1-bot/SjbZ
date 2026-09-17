@@ -6,8 +6,11 @@ import java.util.Arrays
 /**
  * 32-band ISO precision audio equalizer for SjbZ.
  * Center frequencies from 20 Hz to 20,000 Hz with Preamp control (-12dB to +12dB).
+ * Wrapper sincronizado con SjbzDspProcessor para evitar doble estado.
  */
-class EqualizerProcessor {
+class EqualizerProcessor(
+    private val dsp: SjbzDspProcessor? = null
+) {
 
     companion object {
         const val BAND_COUNT = 32
@@ -28,15 +31,29 @@ class EqualizerProcessor {
     }
 
     var isEnabled: Boolean = true
+        set(value) {
+            field = value
+            dsp?.masterEnabled = value
+        }
+
     var preampDb: Float = 0.0f
         set(value) {
             field = value.coerceIn(-12.0f, 12.0f)
+            dsp?.setPreamp(field)
         }
 
     private val bandGains = FloatArray(BAND_COUNT)
 
     init {
         applyPreset("Studio Master")
+        syncToDsp()
+    }
+
+    private fun syncToDsp() {
+        if (dsp == null) return
+        dsp.setPreamp(preampDb)
+        dsp.setAllBands(bandGains.toList())
+        dsp.masterEnabled = isEnabled
     }
 
     fun getBandGain(index: Int): Float {
@@ -45,7 +62,9 @@ class EqualizerProcessor {
 
     fun setBandGain(index: Int, gainDb: Float) {
         if (index in 0 until BAND_COUNT) {
-            bandGains[index] = gainDb.coerceIn(-12.0f, 12.0f)
+            val v = gainDb.coerceIn(-12.0f, 12.0f)
+            bandGains[index] = v
+            dsp?.setBandGain(index, v)
         }
     }
 
@@ -57,6 +76,7 @@ class EqualizerProcessor {
         for (i in 0 until minOf(gains.size, BAND_COUNT)) {
             bandGains[i] = gains[i].coerceIn(-12.0f, 12.0f)
         }
+        dsp?.setAllBands(bandGains.toList())
     }
 
     fun applyPreset(presetName: String) {
@@ -159,6 +179,7 @@ class EqualizerProcessor {
                 System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
             }
         }
+        syncToDsp()
     }
 
     fun toEqPreset(

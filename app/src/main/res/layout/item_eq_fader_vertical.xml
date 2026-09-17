@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="48dp"
+    android:layout_height="match_parent"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingVertical="4dp">
+
+    <!-- Ganancia actual de la banda -->
+    <TextView
+        android:id="@+id/tvFaderGain"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:text="0.0"
+        android:textColor="@color/studio_cyan"
+        android:textSize="10sp" />
+
+    <!-- SeekBar Vertical -->
+    <SeekBar
+        android:id="@+id/verticalSeekBar"
+        android:layout_width="160dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:layout_marginVertical="50dp"
+        android:rotation="270"
+        android:progressBackgroundTint="@color/studio_charcoal_light"
+        android:progressTint="@color/studio_cyan"
+        android:thumbTint="@color/studio_cyan" />
+
+    <!-- Frecuencia ISO de la banda -->
+    <TextView
+        android:id="@+id/tvFaderFreq"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="sans-serif-bold"
+        android:text="1k"
+        android:textColor="@color/text_primary"
+        android:textSize="11sp" />
+
+</LinearLayout>

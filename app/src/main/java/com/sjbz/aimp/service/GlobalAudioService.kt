@@ -15,13 +15,6 @@ import com.sjbz.aimp.MainActivity
 import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
 
-/**
- * GlobalAudioService: Foreground Service that processes audio system-wide.
- * Captures audio mix on audioSessionId = 0 (and dynamic third-party app sessions),
- * applying the 32-Band Equalizer, Anti-Clipping Limiter, and AutoGain leveler.
- *
- * Runs as a foreground service with low battery overhead and persistent notification.
- */
 class GlobalAudioService : Service() {
 
     companion object {
@@ -35,13 +28,6 @@ class GlobalAudioService : Service() {
         @Volatile
         var isServiceRunning: Boolean = false
             private set
-
-        @JvmStatic
-        var isGlobalAudioEnabled: Boolean
-            get() = isServiceRunning
-            set(value) {
-                isServiceRunning = value
-            }
 
         fun start(context: Context) {
             val intent = Intent(context, GlobalAudioService::class.java).apply {
@@ -77,7 +63,6 @@ class GlobalAudioService : Service() {
         super.onCreate()
         audioSessionManager = GlobalAudioSessionManager.getInstance(this)
         createNotificationChannel()
-
         audioSessionManager.onProfileChangedListener = { profile ->
             updateNotification(profile.appName, profile.presetName)
         }
@@ -166,7 +151,6 @@ class GlobalAudioService : Service() {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
         val stopIntent = Intent(this, GlobalAudioService::class.java).apply {
             action = ACTION_STOP
         }
@@ -176,10 +160,8 @@ class GlobalAudioService : Service() {
             stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
         val limiterStatus = if (audioSessionManager.isLimiterEnabled) " • Limiter ON" else ""
         val autoGainStatus = if (audioSessionManager.isAutoGainEnabled) " • AutoGain ON" else ""
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_equalizer)
             .setContentTitle("SB-Z Ecualizador Global Activo")

@@ -39,17 +39,14 @@ class MDRCProcessor {
 
     var isEnabled: Boolean = true
 
-    var enabled: Boolean
-        get() = isEnabled
-        set(value) { isEnabled = value }
-
+    fun setEnabled(value: Boolean) { isEnabled = value }
     fun isMdrcEnabled(): Boolean = isEnabled
 
     // Dynamics Parameters
     var thresholdDb: Float = -14.0f // -36dB to 0dB
-    var ratio: Float = 3.0f         // 1.0 to 8.0:1
-    var attackMs: Float = 10.0f     // 1 to 50ms
-    var releaseMs: Float = 80.0f    // 20 to 300ms
+    var ratio: Float = 3.0f // 1.0 to 8.0:1
+    var attackMs: Float = 10.0f // 1 to 50ms
+    var releaseMs: Float = 80.0f // 20 to 300ms
 
     // Per-Band Makeup Gains (-12 dB to +12 dB)
     private val bandGainsDb = floatArrayOf(0.0f, 0.0f, 0.0f, 0.0f, 0.0f)
@@ -132,25 +129,13 @@ class MDRCProcessor {
 
     fun updateCoefficients() {
         val sr = sampleRate
-        // Envelope smoothing coefficients
         alphaAtt = kotlin.math.exp(-1.0f / (sr * (attackMs / 1000.0f)))
         alphaRel = kotlin.math.exp(-1.0f / (sr * (releaseMs / 1000.0f)))
-
-        // 1. Band 0: Low-Pass @ 120Hz (Butterworth Q=0.7071)
         computeLowPass(0, 120.0f, 0.7071f, sr)
-
-        // 2. Band 1: Band-Pass centered at 245Hz, Q=0.8
         computeBandPass(1, 245.0f, 0.8f, sr)
-
-        // 3. Band 2: Band-Pass centered at 1000Hz, Q=0.8
         computeBandPass(2, 1000.0f, 0.8f, sr)
-
-        // 4. Band 3: Band-Pass centered at 4000Hz, Q=0.8
         computeBandPass(3, 4000.0f, 0.8f, sr)
-
-        // 5. Band 4: High-Pass @ 8000Hz (Butterworth Q=0.7071)
         computeHighPass(4, 8000.0f, 0.7071f, sr)
-
         isDirty = false
     }
 
@@ -190,42 +175,29 @@ class MDRCProcessor {
         a2[idx] = (1.0f - alpha) / a0
     }
 
-    /**
-     * Process a single audio sample for a given channel through the 5-Band MDRC.
-     * Zero allocations.
-     */
     fun processSample(x: Float, ch: Int): Float {
         if (!isEnabled) return x
         if (isDirty) updateCoefficients()
-
         val chOffset = ch * BAND_COUNT
         var summedOutput = 0.0f
         var maxGrDb = 0.0f
-
         val thresh = thresholdDb
         val rat = ratio
         val compSlope = 1.0f - (1.0f / rat)
         val att = alphaAtt
         val rel = alphaRel
-
         for (band in 0 until BAND_COUNT) {
             val stateIdx = chOffset + band
-
-            // 1. Crossover Filter Split (Direct Form II Transposed)
             val fb0 = b0[band]
             val fb1 = b1[band]
             val fb2 = b2[band]
             val fa1 = a1[band]
             val fa2 = a2[band]
-
             val st1 = s1[stateIdx]
             val st2 = s2[stateIdx]
-
             val yBand = fb0 * x + st1
             s1[stateIdx] = fb1 * x - fa1 * yBand + st2
             s2[stateIdx] = fb2 * x - fa2 * yBand
-
-            // 2. Envelope Detection (Attack / Release smoothing on absolute level)
             val absY = abs(yBand)
             var env = envelope[stateIdx]
             if (absY > env) {
@@ -234,8 +206,6 @@ class MDRCProcessor {
                 env = rel * env + (1.0f - rel) * absY
             }
             envelope[stateIdx] = env
-
-            // 3. Dynamic Compression
             var bandGainMult = bandLinearGains[band]
             if (env > 1e-5f) {
                 val levelDb = 20.0f * log10(env)
@@ -247,10 +217,8 @@ class MDRCProcessor {
                     bandGainMult *= compGainLin
                 }
             }
-
             summedOutput += yBand * bandGainMult
         }
-
         currentGainReductionDb = maxGrDb
         return summedOutput
     }

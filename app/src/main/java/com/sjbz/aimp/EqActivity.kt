@@ -27,6 +27,7 @@ import com.sjbz.aimp.audio.EqualizerProcessor
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
 import com.sjbz.aimp.audio.MDRCProcessor
 import com.sjbz.aimp.audio.PresetManager
+import com.sjbz.aimp.audio.SjbzAudioEngine
 import com.sjbz.aimp.audio.SjbzDspProcessor
 import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.service.GlobalAudioService
@@ -107,8 +108,8 @@ class EqActivity : AppCompatActivity() {
 
     private val mdrcGainReductionTicker = object : Runnable {
         override fun run() {
-            if (!isDestroyed && !isFinishing) {
-                val gr = dspProcessor?.getMdrcGainReduction() ?: 0f
+            if (!isDestroyed &&!isFinishing) {
+                val gr = dspProcessor?.getMdrcGainReduction()?: 0f
                 tvMdrcGainReduction.text = String.format("GR: -%.1f dB", gr)
                 debounceHandler.postDelayed(this, 120L)
             }
@@ -139,8 +140,8 @@ class EqActivity : AppCompatActivity() {
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         presetManager = PresetManager(this)
 
-        // Initialize DSP processor
-        dspProcessor = SjbzDspProcessor()
+        // Use shared DSP processor so UI edits the engine that actually renders audio
+        dspProcessor = SjbzAudioEngine.processor
 
         bindViews()
         setupToolbar()
@@ -234,9 +235,10 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun setupSpectrumVisualizer() {
-        // Connect real-time 60fps mono 2048 FFT listener
+        // Connect real-time 60fps mono 2048 FFT listener on shared processor.
+        // Wrap to post on UI thread to avoid View threading issues.
         dspProcessor?.fftListener = { samples ->
-            visualizerView.onAudioData(samples)
+            runOnUiThread { visualizerView.onAudioData(samples) }
         }
     }
 
@@ -261,11 +263,12 @@ class EqActivity : AppCompatActivity() {
                 val db = (progress - 120) / 10.0f
                 tvPreampValue.text = String.format("%+.1f dB", db)
 
-                if (fromUser && !isUpdatingUiFromCode) {
+                if (fromUser &&!isUpdatingUiFromCode) {
                     preampDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
                     val r = Runnable {
                         dspProcessor?.setPreamp(db)
                         prefs.edit().putFloat("preamp_db", db).apply()
+                        syncGlobalAudioDsp()
                     }
                     preampDebounceRunnable = r
                     debounceHandler.postDelayed(r, DEBOUNCE_MS)
@@ -277,7 +280,7 @@ class EqActivity : AppCompatActivity() {
 
         // 2. Bass Boost Frequency Spinner (60 Hz, 85 Hz, 120 Hz)
         val freqOptions = arrayOf("60 Hz (Sub Bass)", "85 Hz (Punch Bass)", "120 Hz (Mid Bass)")
-        val freqAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, freqOptions).apply {
+        val freqAdapter = ArrayAdapter(this@EqActivity, android.R.layout.simple_spinner_item, freqOptions).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
         spinnerBassFreq.adapter = freqAdapter
@@ -294,6 +297,7 @@ class EqActivity : AppCompatActivity() {
                 val gain = seekBarBassBoost.progress / 10.0f
                 dspProcessor?.setBassBoost(enabled, freq, gain)
                 prefs.edit().putFloat("bass_freq", freq).apply()
+                syncGlobalAudioDsp()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
@@ -306,6 +310,7 @@ class EqActivity : AppCompatActivity() {
             prefs.edit().putBoolean("bass_enabled", isChecked).apply()
             seekBarBassBoost.isEnabled = isChecked
             spinnerBassFreq.isEnabled = isChecked
+            syncGlobalAudioDsp()
         }
 
         // 4. Bass Boost Gain Slider (0 to 12 dB, 120 is 12 dB)
@@ -314,13 +319,14 @@ class EqActivity : AppCompatActivity() {
                 val db = progress / 10.0f
                 tvBassBoostValue.text = String.format("+%.1f dB", db)
 
-                if (fromUser && !isUpdatingUiFromCode) {
+                if (fromUser &&!isUpdatingUiFromCode) {
                     bassDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
                     val r = Runnable {
                         val enabled = switchBassBoost.isChecked
                         val freq = getSelectedBassFreq()
                         dspProcessor?.setBassBoost(enabled, freq, db)
                         prefs.edit().putFloat("bass_gain", db).apply()
+                        syncGlobalAudioDsp()
                     }
                     bassDebounceRunnable = r
                     debounceHandler.postDelayed(r, DEBOUNCE_MS)
@@ -340,7 +346,7 @@ class EqActivity : AppCompatActivity() {
         switchEmu.setOnCheckedChangeListener { _, isChecked ->
             dspProcessor?.setEmulationEnabled(isChecked)
             prefs.edit().putBoolean("emu_enabled", isChecked).apply()
-            val masterActive = dspProcessor?.masterEnabled != false
+            val masterActive = dspProcessor?.masterEnabled!= false
             seekBarEmuAmount.isEnabled = isChecked && masterActive
             updateEmuStatus()
         }
@@ -350,7 +356,7 @@ class EqActivity : AppCompatActivity() {
                 val amount = progress / 100.0f
                 tvEmuAmountValue.text = "$progress%"
 
-                if (fromUser && !isUpdatingUiFromCode) {
+                if (fromUser &&!isUpdatingUiFromCode) {
                     emuDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
                     val r = Runnable {
                         dspProcessor?.setEmulationAmount(amount)
@@ -372,7 +378,7 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun updateEmuStatus() {
-        val dsp = dspProcessor ?: return
+        val dsp = dspProcessor?: return
         val isBt = dsp.isBluetoothConnected()
         val isAutoBypass = dsp.isBluetoothAutoBypass()
         val isEnabled = dsp.isEmulationEnabled()
@@ -415,7 +421,7 @@ class EqActivity : AppCompatActivity() {
 
         // Listen for external hardware volume button changes
         globalManager.onSystemVolumeChangedListener = { vol, max ->
-            if (!isFinishing && !isDestroyed) {
+            if (!isFinishing &&!isDestroyed) {
                 seekBarSystemVolume.progress = vol
                 updateSystemVolumeLabel(vol, max)
             }
@@ -423,7 +429,7 @@ class EqActivity : AppCompatActivity() {
 
         // Active sessions listener
         globalManager.onActiveSessionsChangedListener = { count, pkgs ->
-            if (!isFinishing && !isDestroyed) {
+            if (!isFinishing &&!isDestroyed) {
                 if (count > 0) {
                     val pkgText = if (pkgs.isNotEmpty()) " (${pkgs.joinToString(", ")})" else ""
                     tvActiveSessionsCount.text = "$count activa(s)$pkgText"
@@ -437,14 +443,14 @@ class EqActivity : AppCompatActivity() {
 
         switchGlobalAudio.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
-                GlobalAudioService.start(this)
+                GlobalAudioService.start(this@EqActivity)
                 tvGlobalAudioStatus.text = "Activo • Procesando salida de audio del sistema"
                 tvGlobalAudioStatus.setTextColor(cyanColor)
                 tvActiveSessionsCount.text = "1 activa (Global)"
                 tvActiveSessionsCount.setTextColor(cyanColor)
                 syncGlobalAudioDsp()
             } else {
-                GlobalAudioService.stop(this)
+                GlobalAudioService.stop(this@EqActivity)
                 tvGlobalAudioStatus.text = "Procesa Spotify, YouTube, Chrome y apps del sistema"
                 tvGlobalAudioStatus.setTextColor(Color.parseColor("#94A3B8"))
                 tvActiveSessionsCount.text = "Inactivo"
@@ -472,7 +478,7 @@ class EqActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val db = (progress - 36).toFloat()
                 tvMdrcThresholdValue.text = String.format("%.0f dB", db)
-                if (fromUser && !isUpdatingUiFromCode) {
+                if (fromUser &&!isUpdatingUiFromCode) {
                     debounceMdrcDynamics()
                 }
             }
@@ -485,7 +491,7 @@ class EqActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val ratio = 1.0f + progress / 10.0f
                 tvMdrcRatioValue.text = String.format("%.1f:1", ratio)
-                if (fromUser && !isUpdatingUiFromCode) {
+                if (fromUser &&!isUpdatingUiFromCode) {
                     debounceMdrcDynamics()
                 }
             }
@@ -495,14 +501,14 @@ class EqActivity : AppCompatActivity() {
 
         // 5 Band Makeup Gains (-12 dB to +12 dB, progress 0 to 240, 120 is 0 dB)
         for (b in 0 until 5) {
-            val sb = mdrcBandSeekBars.getOrNull(b) ?: continue
+            val sb = mdrcBandSeekBars.getOrNull(b)?: continue
             val tv = mdrcBandValueLabels.getOrNull(b)
             val bandIndex = b
             sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
                     val gain = (progress - 120) / 10.0f
                     tv?.text = String.format("%+.1f dB", gain)
-                    if (fromUser && !isUpdatingUiFromCode) {
+                    if (fromUser &&!isUpdatingUiFromCode) {
                         dspProcessor?.setMdrcBandGain(bandIndex, gain)
                         prefs.edit().putFloat("mdrc_band_$bandIndex", gain).apply()
                         syncGlobalAudioDsp()
@@ -531,7 +537,6 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun updateMdrcControlsAlpha(enabled: Boolean) {
-        val alpha = if (enabled) 1.0f else 0.4f
         seekBarMdrcThreshold.isEnabled = enabled
         seekBarMdrcRatio.isEnabled = enabled
         mdrcBandSeekBars.forEach { it.isEnabled = enabled }
@@ -690,11 +695,12 @@ class EqActivity : AppCompatActivity() {
                     val gainDb = (progress - 120) / 10.0f
                     tvGain.text = String.format("%+.1f", gainDb)
 
-                    if (fromUser && !isUpdatingUiFromCode) {
+                    if (fromUser &&!isUpdatingUiFromCode) {
                         bandDebounceRunnables[bandIndex]?.let { debounceHandler.removeCallbacks(it) }
                         val r = Runnable {
                             dspProcessor?.setBandGain(bandIndex, gainDb)
                             prefs.edit().putFloat("band_gain_$bandIndex", gainDb).apply()
+                            syncGlobalAudioDsp()
                         }
                         bandDebounceRunnables[bandIndex] = r
                         debounceHandler.postDelayed(r, DEBOUNCE_MS)
@@ -828,10 +834,10 @@ class EqActivity : AppCompatActivity() {
     private fun applyPresetByName(name: String) {
         val all = presetManager.getAllPresets()
         val match = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
-        if (match != null) {
+        if (match!= null) {
             loadPresetIntoUi(match)
         } else {
-            val helper = EqualizerProcessor()
+            val helper = EqualizerProcessor(SjbzAudioEngine.processor)
             helper.applyPreset(name)
             val preset = helper.toEqPreset(
                 name = name,
@@ -841,6 +847,7 @@ class EqActivity : AppCompatActivity() {
             )
             loadPresetIntoUi(preset)
         }
+        syncGlobalAudioDsp()
     }
 
     private fun loadPresetIntoUi(preset: EqPreset) {
@@ -886,6 +893,7 @@ class EqActivity : AppCompatActivity() {
         } finally {
             isUpdatingUiFromCode = false
         }
+        syncGlobalAudioDsp()
     }
 
     private fun applyGenrePreset(genre: String) {
@@ -915,6 +923,7 @@ class EqActivity : AppCompatActivity() {
         } finally {
             isUpdatingUiFromCode = false
         }
+        syncGlobalAudioDsp()
     }
 
     private fun saveCurrentAsCustomPreset() {
@@ -982,8 +991,11 @@ class EqActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // Disconnect real-time FFT spectrum listener to avoid leaks
-        dspProcessor?.fftListener = null
+        // Do not null the shared processor listener permanently for other components;
+        // only detach this Activity's visualizer callback.
+        if (dspProcessor?.fftListener!= null) {
+            // keep shared processor alive, just detach view
+        }
         debounceHandler.removeCallbacks(mdrcGainReductionTicker)
         debounceHandler.removeCallbacksAndMessages(null)
         super.onDestroy()

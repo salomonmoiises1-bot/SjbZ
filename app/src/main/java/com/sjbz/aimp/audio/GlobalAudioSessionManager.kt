@@ -42,8 +42,8 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         private var instance: GlobalAudioSessionManager? = null
 
         fun getInstance(context: Context): GlobalAudioSessionManager {
-            return instance ?: synchronized(this) {
-                instance ?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
+            return instance?: synchronized(this) {
+                instance?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
             }
         }
     }
@@ -146,8 +146,8 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             System.arraycopy(savedQs, 0, bandQs, 0, minOf(savedQs.size, bandQs.size))
 
             val currentId = dataStore.loadCurrentProfileId()
-            val found = allProfiles.find { it.id == currentId } ?: allProfiles.firstOrNull()
-            if (found != null) {
+            val found = allProfiles.find { it.id == currentId }?: allProfiles.firstOrNull()
+            if (found!= null) {
                 applyProfileInMemory(found, saveSelection = false)
             }
         } catch (e: Exception) {
@@ -221,7 +221,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             Log.i(TAG, "Attached to audio session $sessionId (pkg: $packageName)")
 
             // Check if active package has a tailored profile
-            if (packageName != null) {
+            if (packageName!= null) {
                 switchProfileForPackage(packageName)
             }
 
@@ -261,7 +261,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     fun switchProfileForPackage(pkg: String) {
         val matchedProfile = allProfiles.find { it.packageName == pkg }
-        if (matchedProfile != null && matchedProfile.id != currentProfile.id) {
+        if (matchedProfile!= null && matchedProfile.id!= currentProfile.id) {
             Log.i(TAG, "Auto-switching EQ profile to: ${matchedProfile.appName} (${matchedProfile.presetName})")
             applyProfile(matchedProfile)
         }
@@ -332,7 +332,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             mdrcGains = mdrcGains.toList(),
             ats2835pEmuEnabled = ats2835pEmuEnabled
         )
-        allProfiles.removeAll { it.id == newId || (it.packageName == targetPackage && it.packageName != AppProfile.PACKAGE_GLOBAL) }
+        allProfiles.removeAll { it.id == newId || (it.packageName == targetPackage && it.packageName!= AppProfile.PACKAGE_GLOBAL) }
         allProfiles.add(newProfile)
         currentProfile = newProfile
 
@@ -357,7 +357,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                     time
                 )
                 val topApp = stats?.maxByOrNull { it.lastTimeUsed }?.packageName
-                if (!topApp.isNullOrEmpty() && topApp != context.packageName) {
+                if (!topApp.isNullOrEmpty() && topApp!= context.packageName) {
                     switchProfileForPackage(topApp)
                 }
             }
@@ -372,7 +372,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     fun setBandGain(index: Int, gainDb: Float) {
         if (index in 0 until 32) {
-            bandGains[index] = gainDb
+            bandGains[index] = gainDb.coerceIn(-15f, 15f)
             reapplyBand(index)
             scope.launch { dataStore.saveBands(bandGains, bandQs) }
         }
@@ -380,14 +380,14 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     fun setBandQ(index: Int, q: Float) {
         if (index in 0 until 32) {
-            bandQs[index] = q
+            bandQs[index] = q.coerceIn(0.5f, 4f)
             reapplyBand(index)
             scope.launch { dataStore.saveBands(bandGains, bandQs) }
         }
     }
 
     fun setGlobalGain(gainDb: Float) {
-        this.globalGainDb = gainDb
+        this.globalGainDb = gainDb.coerceIn(-12f, 12f)
         reapplyAllParams()
         scope.launch { dataStore.saveGlobalGain(gainDb) }
     }
@@ -402,8 +402,8 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     fun setLimiter(enabled: Boolean, thresholdDb: Float, releaseMs: Float) {
         this.isLimiterEnabled = enabled
-        this.limiterThresholdDb = thresholdDb
-        this.limiterReleaseMs = releaseMs
+        this.limiterThresholdDb = thresholdDb.coerceIn(-12f, 0f)
+        this.limiterReleaseMs = releaseMs.coerceIn(10f, 200f)
         reapplyAllParams()
         scope.launch { dataStore.saveLimiter(enabled, thresholdDb) }
     }
@@ -429,21 +429,21 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     fun setAutoGain(enabled: Boolean, targetLufs: Float = -14.0f) {
         this.isAutoGainEnabled = enabled
-        this.autoGainTargetLufs = targetLufs
+        this.autoGainTargetLufs = targetLufs.coerceIn(-23f, -9f)
         calculateAutoGainOffset()
         reapplyAllParams()
         scope.launch { dataStore.saveAutoGain(enabled, targetLufs) }
     }
 
     fun setBassBoost(gainDb: Float, freqHz: Float) {
-        this.bassBoostDb = gainDb
-        this.bassFreqHz = freqHz
+        this.bassBoostDb = gainDb.coerceIn(0f, 12f)
+        this.bassFreqHz = freqHz.coerceIn(20f, 500f)
         reapplyAllParams()
         scope.launch { dataStore.saveBassAndVirtualizer(bassBoostDb, bassFreqHz, virtualizerStrength) }
     }
 
     fun setVirtualizer(strength: Int) {
-        this.virtualizerStrength = strength
+        this.virtualizerStrength = strength.coerceIn(0, 1000)
         reapplyAllParams()
         scope.launch { dataStore.saveBassAndVirtualizer(bassBoostDb, bassFreqHz, virtualizerStrength) }
     }
@@ -458,15 +458,15 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         mdrcThresholdDb: Float = -14f,
         mdrcRatio: Float = 3f
     ) {
-        this.globalGainDb = preampDb
+        this.globalGainDb = preampDb.coerceIn(-12f, 12f)
         for (i in 0 until minOf(32, gains.size)) {
-            this.bandGains[i] = gains[i]
+            this.bandGains[i] = gains[i].coerceIn(-15f, 15f)
         }
-        this.bassBoostDb = bassDb
-        this.bassFreqHz = bassFreqHz
+        this.bassBoostDb = bassDb.coerceIn(0f, 12f)
+        this.bassFreqHz = bassFreqHz.coerceIn(20f, 500f)
         this.isMdrcEnabled = mdrcEnabled
         for (i in 0 until minOf(5, mdrcGains.size)) {
-            this.mdrcGains[i] = mdrcGains[i]
+            this.mdrcGains[i] = mdrcGains[i].coerceIn(-12f, 12f)
         }
         reapplyAllParams()
     }
@@ -481,7 +481,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         val avgBandGain = bandGains.average().toFloat()
         val estimatedLufs = -18.0f + avgBandGain + globalGainDb
         val delta = (autoGainTargetLufs - estimatedLufs).coerceIn(-6.0f, 6.0f)
-        currentAutoGainOffsetDb = delta * 0.5f // gentle 50% leveling step
+        currentAutoGainOffsetDb = (delta * 0.5f).coerceIn(-6f, 6f) // gentle 50% leveling step
         mainHandler.post {
             onAutoGainAdjustmentListener?.invoke(currentAutoGainOffsetDb)
         }
@@ -507,6 +507,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     // -------------------------------------------------------------------------
 
     private fun initEffectsForSession(holder: SessionHolder) {
+        var dpOk = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 // DynamicsProcessing with 32 EQ Bands + 5-Band Multiband Compressor + Limiter
@@ -523,31 +524,32 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                     mbcBandCount,
                     false, // postEqInUse
                     0,
-                    true  // limiterInUse (Anti-clipping protection!)
+                    true // limiterInUse (Anti-clipping protection!)
                 )
                 val config = builder.build()
                 val dp = DynamicsProcessing(0, holder.sessionId, config)
-                dp.enabled = true
                 holder.dynamicsProcessing = dp
+                dpOk = true
                 Log.d(TAG, "Initialized DynamicsProcessing with Limiter for session ${holder.sessionId}")
             } catch (e: Exception) {
                 Log.w(TAG, "DynamicsProcessing unavailable on session ${holder.sessionId}: ${e.message}")
+                holder.dynamicsProcessing = null
             }
         }
 
-        // Standard Equalizer fallback
-        try {
-            val eq = Equalizer(0, holder.sessionId)
-            eq.enabled = true
-            holder.equalizer = eq
-        } catch (e: Exception) {
-            Log.w(TAG, "Standard Equalizer fallback unavailable for session ${holder.sessionId}: ${e.message}")
+        // Standard Equalizer fallback: only if DP failed, to avoid double processing mute
+        if (!dpOk) {
+            try {
+                val eq = Equalizer(0, holder.sessionId)
+                holder.equalizer = eq
+            } catch (e: Exception) {
+                Log.w(TAG, "Standard Equalizer fallback unavailable for session ${holder.sessionId}: ${e.message}")
+            }
         }
 
         // Standard BassBoost
         try {
             val bb = BassBoost(0, holder.sessionId)
-            bb.enabled = true
             holder.bassBoost = bb
         } catch (e: Exception) {
             Log.w(TAG, "BassBoost unavailable for session ${holder.sessionId}: ${e.message}")
@@ -556,32 +558,36 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         // Virtualizer 3D Surround
         try {
             val virt = Virtualizer(0, holder.sessionId)
-            virt.enabled = true
             holder.virtualizer = virt
         } catch (e: Exception) {
             Log.w(TAG, "Virtualizer unavailable for session ${holder.sessionId}: ${e.message}")
         }
 
         applyParamsToHolder(holder)
+
+        try { holder.dynamicsProcessing?.enabled = true } catch (_: Exception) {}
+        try { holder.equalizer?.enabled = holder.dynamicsProcessing == null } catch (_: Exception) {}
+        try { holder.bassBoost?.enabled = bassBoostDb > 0.1f } catch (_: Exception) {}
+        try { holder.virtualizer?.enabled = virtualizerStrength > 0 } catch (_: Exception) {}
     }
 
     private fun applyParamsToHolder(holder: SessionHolder) {
-        val totalPreamp = globalGainDb + currentAutoGainOffsetDb
+        val totalPreamp = (globalGainDb + currentAutoGainOffsetDb).coerceIn(-12f, 12f)
 
         // 1. DynamicsProcessing (Android 9.0+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && holder.dynamicsProcessing != null) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && holder.dynamicsProcessing!= null) {
             val dp = holder.dynamicsProcessing!!
             try {
                 for (ch in 0 until 2) {
-                    // Pre-EQ 32 Bands with Q-ratio calculation
+                    try { dp.setInputGainByChannelIndex(ch, totalPreamp) } catch (_: Exception) {}
+                    // Pre-EQ 32 Bands with Q-ratio calculation (preamp NOT added per band)
                     for (i in 0 until 32) {
                         val freq = SjbzDspProcessor.ISO_FREQUENCIES[i]
-                        val qFactor = bandQs[i]
+                        val qFactor = bandQs[i].coerceIn(0.5f, 4f)
                         // Q-factor shaping: narrower Q tightens the peak gain
-                        val shapedGain = bandGains[i] * (1.414f / qFactor.coerceAtLeast(0.5f))
-                        val finalGain = (shapedGain + totalPreamp).coerceIn(-24f, 24f)
+                        val shapedGain = (bandGains[i] * (1.414f / qFactor)).coerceIn(-15f, 15f)
 
-                        val eqBand = DynamicsProcessing.EqBand(true, freq, finalGain)
+                        val eqBand = DynamicsProcessing.EqBand(true, freq, shapedGain)
                         dp.setPreEqBand(ch, i, eqBand)
                     }
 
@@ -589,7 +595,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                     val mbcCutoffs = MDRCProcessor.SPLIT_FREQS
                     for (b in 0 until 5) {
                         val cutoff = if (b < mbcCutoffs.size) mbcCutoffs[b] else 20000f
-                        val mbcGain = if (isMdrcEnabled && b < mdrcGains.size) mdrcGains[b] else 0f
+                        val mbcGain = if (isMdrcEnabled && b < mdrcGains.size) mdrcGains[b].coerceIn(-12f, 12f) else 0f
                         val mbcBand = DynamicsProcessing.MbcBand(
                             isMdrcEnabled,
                             cutoff,
@@ -607,15 +613,16 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                     }
 
                     // Anti-Clipping Limiter (prevents digital distortion on high boosts)
+                    val limThresh = if (isLimiterEnabled) limiterThresholdDb.coerceIn(-12f, 0f) else 0f
                     val limiter = DynamicsProcessing.Limiter(
                         isLimiterEnabled,
                         isLimiterEnabled,
                         0,
                         1.0f, // 1ms fast peak attack
-                        limiterReleaseMs,
+                        limiterReleaseMs.coerceIn(10f, 200f),
                         10.0f, // 10:1 brickwall ratio
-                        limiterThresholdDb,
-                        0.0f  // postGain
+                        limThresh,
+                        0.0f // postGain
                     )
                     dp.setLimiter(ch, limiter)
                 }
@@ -624,26 +631,28 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             }
         }
 
-        // 2. Standard Equalizer fallback
-        holder.equalizer?.let { eq ->
-            try {
-                val numBands = eq.numberOfBands.toInt()
-                for (b in 0 until numBands) {
-                    val bandFreq = eq.getCenterFreq(b.toShort()) / 1000f
-                    var closestIdx = 0
-                    var minDist = Float.MAX_VALUE
-                    for (i in SjbzDspProcessor.ISO_FREQUENCIES.indices) {
-                        val dist = kotlin.math.abs(SjbzDspProcessor.ISO_FREQUENCIES[i] - bandFreq)
-                        if (dist < minDist) {
-                            minDist = dist
-                            closestIdx = i
+        // 2. Standard Equalizer fallback (only when DP not present)
+        if (holder.dynamicsProcessing == null) {
+            holder.equalizer?.let { eq ->
+                try {
+                    val numBands = eq.numberOfBands.toInt()
+                    for (b in 0 until numBands) {
+                        val bandFreq = eq.getCenterFreq(b.toShort()) / 1000f
+                        var closestIdx = 0
+                        var minDist = Float.MAX_VALUE
+                        for (i in SjbzDspProcessor.ISO_FREQUENCIES.indices) {
+                            val dist = kotlin.math.abs(SjbzDspProcessor.ISO_FREQUENCIES[i] - bandFreq)
+                            if (dist < minDist) {
+                                minDist = dist
+                                closestIdx = i
+                            }
                         }
+                        val gainMilliBels = ((bandGains[closestIdx] + totalPreamp) * 100).toInt().coerceIn(-1200, 1200)
+                        eq.setBandLevel(b.toShort(), gainMilliBels.toShort())
                     }
-                    val gainMilliBels = ((bandGains[closestIdx] + totalPreamp) * 100).toInt().coerceIn(-1200, 1200)
-                    eq.setBandLevel(b.toShort(), gainMilliBels.toShort())
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error applying Equalizer level: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Error applying Equalizer level: ${e.message}")
             }
         }
 
@@ -678,21 +687,22 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     }
 
     private fun applySingleBandToHolder(holder: SessionHolder, bandIndex: Int) {
-        val totalPreamp = globalGainDb + currentAutoGainOffsetDb
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && holder.dynamicsProcessing != null) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && holder.dynamicsProcessing!= null) {
             val dp = holder.dynamicsProcessing!!
             try {
                 val freq = SjbzDspProcessor.ISO_FREQUENCIES[bandIndex]
-                val qFactor = bandQs[bandIndex]
-                val shapedGain = bandGains[bandIndex] * (1.414f / qFactor.coerceAtLeast(0.5f))
-                val finalGain = (shapedGain + totalPreamp).coerceIn(-24f, 24f)
-                val eqBand = DynamicsProcessing.EqBand(true, freq, finalGain)
+                val qFactor = bandQs[bandIndex].coerceIn(0.5f, 4f)
+                val shapedGain = (bandGains[bandIndex] * (1.414f / qFactor)).coerceIn(-15f, 15f)
+                val eqBand = DynamicsProcessing.EqBand(true, freq, shapedGain)
                 for (ch in 0 until 2) {
                     dp.setPreEqBand(ch, bandIndex, eqBand)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Error updating single band $bandIndex: ${e.message}")
             }
+        } else {
+            // fallback: reapply all for classic Equalizer
+            applyParamsToHolder(holder)
         }
     }
 
@@ -760,4 +770,3 @@ private fun DynamicsProcessing.setLimiter(channelIndex: Int, limiter: DynamicsPr
         setLimiterByChannelIndex(channelIndex, limiter)
     }
 }
-

@@ -1,0 +1,66 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.9"
+        android:scaleY="0.9"
+        android:translateX="5.4"
+        android:translateY="5.4">
+        
+        <!-- Outer High-Fidelity Audio Hexagon Frame -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="3.5"
+            android:strokeLineJoin="round"
+            android:pathData="M54,18 L86,36 L86,72 L54,90 L22,72 L22,36 Z" />
+            
+        <!-- Audio Waves / Dynamic EQ Bars behind logo -->
+        <path
+            android:fillColor="#00E5FF"
+            android:fillAlpha="0.25"
+            android:pathData="M32,54h4v8h-4z M40,48h4v14h-4z M64,48h4v14h-4z M72,54h4v8h-4z" />
+
+        <!-- S of SB-Z -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M43,40 L34,40 C31,40 31,48 37,49 C44,50 44,59 39,60 L31,60" />
+
+        <!-- B of SB-Z -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M49,40 L49,60 M49,40 L56,40 C59,40 59,50 49,50 M49,50 L57,50 C60,50 60,60 49,60" />
+
+        <!-- Dash - of SB-Z -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#10B981"
+            android:strokeWidth="3.5"
+            android:strokeLineCap="round"
+            android:pathData="M63,50 L68,50" />
+
+        <!-- Z of SB-Z -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M72,40 L83,40 L72,60 L83,60" />
+
+        <!-- Hi-Res Audio Subtext dot -->
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M54,77m-2.5,0a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" />
+    </group>
+</vector>

@@ -27,6 +27,7 @@ import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.sjbz.aimp.audio.EqualizerProcessor
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
+import com.sjbz.aimp.audio.SjbzAudioEngine
 import com.sjbz.aimp.audio.SjbzDspProcessor
 import com.sjbz.aimp.data.AudioSettingsDataStore
 import com.sjbz.aimp.model.AppProfile
@@ -154,15 +155,20 @@ class MainActivity : AppCompatActivity() {
         syncAllUiFromManager()
 
         // Listen for profile changes from background auto-detector
+        // Use a chained listener so we don't clobber listeners set by EqActivity
+        val prevProfileListener = audioSessionManager.onProfileChangedListener
         audioSessionManager.onProfileChangedListener = { profile ->
+            prevProfileListener?.invoke(profile)
             runOnUiThread {
-                syncAllUiFromManager()
+                if (!isFinishing &&!isDestroyed) syncAllUiFromManager()
             }
         }
 
+        val prevSessionListener = audioSessionManager.onActiveSessionsChangedListener
         audioSessionManager.onActiveSessionsChangedListener = { count, pkgs ->
+            prevSessionListener?.invoke(count, pkgs)
             runOnUiThread {
-                updateSessionStatusBanner(count, pkgs)
+                if (!isFinishing &&!isDestroyed) updateSessionStatusBanner(count, pkgs)
             }
         }
 
@@ -170,10 +176,16 @@ class MainActivity : AppCompatActivity() {
         if (audioSessionManager.isGlobalAudioEnabled) {
             GlobalAudioService.start(this)
         }
+
+        // Connect spectrum to shared engine FFT when available, fallback to mock
+        SjbzAudioEngine.processor.fftListener = { samples ->
+            runOnUiThread { visualizerView.onAudioData(samples) }
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        // Only use mock visualizer if shared engine has no real audio flowing
         visualizerView.startMockVisualizer()
         uiHandler.post(vuMeterRunnable)
         syncAllUiFromManager()
@@ -246,8 +258,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnOpenEqualizer.setOnClickListener {
-            // Scroll to the 32-band deck
-            Toast.makeText(this, "Ecualizador de 32 Bandas ISO Activo", Toast.LENGTH_SHORT).show()
+            // Open full EqActivity studio instead of just a toast
+            try {
+                startActivity(Intent(this, EqActivity::class.java))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Ecualizador de 32 Bandas ISO Activo", Toast.LENGTH_SHORT).show()
+            }
         }
 
         etSearchTracks.hint = "Buscar perfiles (Spotify, YouTube...)"
@@ -255,21 +271,31 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupMasterSwitch() {
         switchMasterDsp.isChecked = audioSessionManager.isGlobalAudioEnabled
+        updateMasterBanner(audioSessionManager.isGlobalAudioEnabled)
 
         switchMasterDsp.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUiProgrammatically) return@setOnCheckedChangeListener
             audioSessionManager.setGlobalAudioEnabled(isChecked)
+            // Keep local DSP master in sync to avoid double-mute confusion
+            SjbzAudioEngine.processor.masterEnabled = isChecked
             if (isChecked) {
                 GlobalAudioService.start(this)
-                viewDspIndicator.setBackgroundColor(Color.parseColor("#00E5FF"))
-                tvDspActiveStatus.text = "SB-Z Global DSP ACTIVO • Session 0 (Mezcla Global)"
-                tvDspActiveStatus.setTextColor(Color.parseColor("#00E5FF"))
             } else {
                 GlobalAudioService.stop(this)
-                viewDspIndicator.setBackgroundColor(Color.parseColor("#64748B"))
-                tvDspActiveStatus.text = "SB-Z Global DSP EN PAUSA (Bypass)"
-                tvDspActiveStatus.setTextColor(Color.parseColor("#94A3B8"))
             }
+            updateMasterBanner(isChecked)
+        }
+    }
+
+    private fun updateMasterBanner(isChecked: Boolean) {
+        if (isChecked) {
+            viewDspIndicator.setBackgroundColor(Color.parseColor("#00E5FF"))
+            tvDspActiveStatus.text = "SB-Z Global DSP ACTIVO • Session 0 (Mezcla Global)"
+            tvDspActiveStatus.setTextColor(Color.parseColor("#00E5FF"))
+        } else {
+            viewDspIndicator.setBackgroundColor(Color.parseColor("#64748B"))
+            tvDspActiveStatus.text = "SB-Z Global DSP EN PAUSA (Bypass)"
+            tvDspActiveStatus.setTextColor(Color.parseColor("#94A3B8"))
         }
     }
 
@@ -280,7 +306,7 @@ class MainActivity : AppCompatActivity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (isUpdatingUiProgrammatically) return
                 val profile = audioSessionManager.allProfiles.getOrNull(position)
-                if (profile != null && profile.id != audioSessionManager.currentProfile.id) {
+                if (profile!= null && profile.id!= audioSessionManager.currentProfile.id) {
                     audioSessionManager.applyProfile(profile)
                     syncAllUiFromManager()
                     Toast.makeText(this@MainActivity, "Perfil: ${profile.appName}", Toast.LENGTH_SHORT).show()
@@ -312,19 +338,19 @@ class MainActivity : AppCompatActivity() {
             hint = "Nombre del perfil (ej. Spotify Bass, Podcast YouTube)"
         }
         AlertDialog.Builder(this)
-            .setTitle("Guardar Nuevo Perfil")
-            .setMessage("Guarda la configuración actual de 32 bandas, Gain, Limiter y AutoGain.")
-            .setView(input)
-            .setPositiveButton("Guardar") { _, _ ->
+           .setTitle("Guardar Nuevo Perfil")
+           .setMessage("Guarda la configuración actual de 32 bandas, Gain, Limiter y AutoGain.")
+           .setView(input)
+           .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
-                    val newProfile = audioSessionManager.saveCurrentAsProfile(name)
+                    audioSessionManager.saveCurrentAsProfile(name)
                     refreshProfilesSpinner()
                     Toast.makeText(this, "Perfil guardado: $name", Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("Cancelar", null)
-            .show()
+           .setNegativeButton("Cancelar", null)
+           .show()
     }
 
     private fun setupMasterDynamicsControls() {
@@ -333,8 +359,9 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val db = (progress - 120) / 10.0f
                 tvGlobalGainValue.text = String.format("%+.1f dB", db)
-                if (fromUser && !isUpdatingUiProgrammatically) {
+                if (fromUser &&!isUpdatingUiProgrammatically) {
                     audioSessionManager.setGlobalGain(db)
+                    SjbzAudioEngine.processor.setPreamp(db)
                 }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
@@ -350,12 +377,12 @@ class MainActivity : AppCompatActivity() {
             seekBarLimiterThreshold.isEnabled = isChecked
         }
 
-        // Limiter Threshold: -12.0 dB to 0.0 dB (progress 0 to 120 -> db = progress - 120 / 10)
+        // Limiter Threshold: -12.0 dB to 0.0 dB
         seekBarLimiterThreshold.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val db = (progress - 120) / 10.0f
                 tvLimiterThresholdValue.text = String.format("%.1f dB", db)
-                if (fromUser && !isUpdatingUiProgrammatically) {
+                if (fromUser &&!isUpdatingUiProgrammatically) {
                     audioSessionManager.setLimiter(switchLimiter.isChecked, db)
                 }
             }
@@ -377,7 +404,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val lufs = -23.0f + progress
                 tvAutoGainTargetValue.text = String.format("%.0f LUFS", lufs)
-                if (fromUser && !isUpdatingUiProgrammatically) {
+                if (fromUser &&!isUpdatingUiProgrammatically) {
                     audioSessionManager.setAutoGain(switchAutoGain.isChecked, lufs)
                 }
             }
@@ -421,7 +448,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val db = progress / 10.0f
                 tvBassBoostValue.text = String.format("+%.1f dB", db)
-                if (fromUser && !isUpdatingUiProgrammatically) {
+                if (fromUser &&!isUpdatingUiProgrammatically) {
                     audioSessionManager.setBassBoost(if (switchBassBoost.isChecked) db else 0f, getSelectedBassFreq())
                 }
             }
@@ -433,7 +460,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val pct = progress / 10
                 tvVirtualizerValue.text = "$pct%"
-                if (fromUser && !isUpdatingUiProgrammatically) {
+                if (fromUser &&!isUpdatingUiProgrammatically) {
                     audioSessionManager.setVirtualizer(progress)
                 }
             }
@@ -479,7 +506,7 @@ class MainActivity : AppCompatActivity() {
             currentQMode = when (currentQMode) {
                 1.414f -> 2.828f // Narrow
                 2.828f -> 0.707f // Wide
-                else -> 1.414f  // Standard
+                else -> 1.414f // Standard
             }
             val label = when (currentQMode) {
                 2.828f -> "Modo Q: Estrecho (2.8)"
@@ -497,6 +524,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyPresetValues(gains: FloatArray, name: String) {
         for (i in 0 until minOf(32, gains.size)) {
             audioSessionManager.setBandGain(i, gains[i])
+            SjbzAudioEngine.processor.setBandGain(i, gains[i])
         }
         syncBandSlidersOnly()
         Toast.makeText(this, "Preset aplicado: $name", Toast.LENGTH_SHORT).show()
@@ -524,7 +552,6 @@ class MainActivity : AppCompatActivity() {
                 setPadding(2, 6, 2, 6)
             }
 
-            // Top Gain value label
             val tvGain = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -537,7 +564,6 @@ class MainActivity : AppCompatActivity() {
             }
             bandCol.addView(tvGain)
 
-            // Vertical SeekBar container
             val seekBarContainer = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -547,15 +573,14 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER
             }
 
-            // Standard Android SeekBar rotated 270 degrees
             val seekBar = SeekBar(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     (density * 160).toInt(),
                     (density * 36).toInt()
                 )
                 rotation = 270f
-                max = 240 // -12.0 dB to +12.0 dB
-                progress = 120 // 0.0 dB center
+                max = 240
+                progress = 120
                 progressTintList = android.content.res.ColorStateList.valueOf(cyanColor)
                 thumbTintList = android.content.res.ColorStateList.valueOf(cyanColor)
             }
@@ -565,8 +590,9 @@ class MainActivity : AppCompatActivity() {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     val gain = (progress - 120) / 10.0f
                     tvGain.text = String.format("%+.1f", gain)
-                    if (fromUser && !isUpdatingUiProgrammatically) {
+                    if (fromUser &&!isUpdatingUiProgrammatically) {
                         audioSessionManager.setBandGain(bandIndex, gain)
+                        SjbzAudioEngine.processor.setBandGain(bandIndex, gain)
                     }
                 }
                 override fun onStartTrackingTouch(sb: SeekBar?) {}
@@ -576,7 +602,6 @@ class MainActivity : AppCompatActivity() {
             seekBarContainer.addView(seekBar)
             bandCol.addView(seekBarContainer)
 
-            // Frequency label at bottom
             val tvFreq = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -622,47 +647,42 @@ class MainActivity : AppCompatActivity() {
         })
 
         findViewById<View>(R.id.drawerExportM3U8).setOnClickListener {
-            // Reset to factory defaults
             AlertDialog.Builder(this)
-                .setTitle("Reiniciar DSP a Valores de Fábrica")
-                .setMessage("¿Deseas restaurar todas las 32 bandas, Gain, Limiter y AutoGain?")
-                .setPositiveButton("Restaurar") { _, _ ->
+               .setTitle("Reiniciar DSP a Valores de Fábrica")
+               .setMessage("¿Deseas restaurar todas las 32 bandas, Gain, Limiter y AutoGain?")
+               .setPositiveButton("Restaurar") { _, _ ->
                     val defaultProfile = AppProfile.createDefaultProfiles().first()
                     audioSessionManager.applyProfile(defaultProfile)
                     syncAllUiFromManager()
                     Toast.makeText(this, "DSP Restaurado a Valores de Fábrica", Toast.LENGTH_SHORT).show()
                 }
-                .setNegativeButton("Cancelar", null)
-                .show()
+               .setNegativeButton("Cancelar", null)
+               .show()
         }
     }
 
     private fun syncAllUiFromManager() {
         isUpdatingUiProgrammatically = true
 
-        val profile = audioSessionManager.currentProfile
         switchMasterDsp.isChecked = audioSessionManager.isGlobalAudioEnabled
+        updateMasterBanner(audioSessionManager.isGlobalAudioEnabled)
 
-        // Gain Global (-12 dB to +12 dB)
         val gainProg = ((audioSessionManager.globalGainDb * 10) + 120).toInt().coerceIn(0, 240)
         seekBarGlobalGain.progress = gainProg
         tvGlobalGainValue.text = String.format("%+.1f dB", audioSessionManager.globalGainDb)
 
-        // Limiter
         switchLimiter.isChecked = audioSessionManager.isLimiterEnabled
         val limProg = ((audioSessionManager.limiterThresholdDb * 10) + 120).toInt().coerceIn(0, 120)
         seekBarLimiterThreshold.progress = limProg
         tvLimiterThresholdValue.text = String.format("%.1f dB", audioSessionManager.limiterThresholdDb)
         seekBarLimiterThreshold.isEnabled = audioSessionManager.isLimiterEnabled
 
-        // AutoGain
         switchAutoGain.isChecked = audioSessionManager.isAutoGainEnabled
         val autoGainProg = (audioSessionManager.autoGainTargetLufs + 23.0f).toInt().coerceIn(0, 14)
         seekBarAutoGainTarget.progress = autoGainProg
         tvAutoGainTargetValue.text = String.format("%.0f LUFS", audioSessionManager.autoGainTargetLufs)
         seekBarAutoGainTarget.isEnabled = audioSessionManager.isAutoGainEnabled
 
-        // Bass Boost
         switchBassBoost.isChecked = audioSessionManager.bassBoostDb > 0.1f
         val bassProg = (audioSessionManager.bassBoostDb * 10).toInt().coerceIn(0, 120)
         seekBarBassBoost.progress = bassProg
@@ -674,14 +694,10 @@ class MainActivity : AppCompatActivity() {
         }
         spinnerBassFreq.setSelection(freqIdx)
 
-        // Virtualizer
         seekBarVirtualizer.progress = audioSessionManager.virtualizerStrength
         tvVirtualizerValue.text = "${audioSessionManager.virtualizerStrength / 10}%"
 
-        // 32 Bands
         syncBandSlidersOnly()
-
-        // Profile spinner
         refreshProfilesSpinner()
 
         isUpdatingUiProgrammatically = false
@@ -700,11 +716,13 @@ class MainActivity : AppCompatActivity() {
         if (!audioSessionManager.isGlobalAudioEnabled) {
             tvDspActiveStatus.text = "SB-Z Global DSP EN PAUSA"
             tvDspActiveStatus.setTextColor(Color.parseColor("#94A3B8"))
+            viewDspIndicator.setBackgroundColor(Color.parseColor("#64748B"))
             return
         }
         val appDetail = if (pkgs.isNotEmpty()) " (${pkgs.joinToString(", ")})" else ""
         tvDspActiveStatus.text = "Procesando Mezcla Global (0)$appDetail • Limiter ON"
         tvDspActiveStatus.setTextColor(Color.parseColor("#00E5FF"))
+        viewDspIndicator.setBackgroundColor(Color.parseColor("#00E5FF"))
     }
 
     private fun updateVuMeters() {
@@ -714,8 +732,6 @@ class MainActivity : AppCompatActivity() {
             tvVuPeakText.text = "-inf dB"
             return
         }
-
-        // Realistic studio VU dynamics based on current Gain & Limiter
         val baseL = 40 + Random.nextInt(25)
         val baseR = 42 + Random.nextInt(25)
         vuMeterLeftBar.progress = baseL

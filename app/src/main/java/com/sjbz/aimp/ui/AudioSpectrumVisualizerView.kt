@@ -7,8 +7,6 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
-import android.os.Handler
-import android.os.Looper
 import android.util.AttributeSet
 import android.view.View
 import kotlin.math.abs
@@ -62,37 +60,36 @@ class AudioSpectrumVisualizerView @JvmOverloads constructor(
     // Thread-safe lock for audio data updates
     private val lock = Any()
 
-    // Mock visualizer for UI preview when no real audio data is flowing
-    private val mockHandler = Handler(Looper.getMainLooper())
-    private var mockRunning = false
+    private var isMockRunning = false
     private val mockRunnable = object : Runnable {
         override fun run() {
-            if (!mockRunning) return
-            val fakeSamples = FloatArray(2048) { i ->
-                val t = i / 2048f
-                val base = kotlin.math.sin(t * Math.PI * 2 * 8).toFloat() * 0.4f
-                val noise = (Math.random() * 2 - 1).toFloat() * 0.25f
-                val envelope = (0.5f + 0.5f * kotlin.math.sin(System.currentTimeMillis() / 300.0 + t * 10).toFloat())
-                (base + noise) * envelope
-            }
-            onAudioData(fakeSamples)
-            mockHandler.postDelayed(this, 50)
+            if (!isMockRunning) return
+            val mockSamples = FloatArray(128) { (Math.random() * 0.4 - 0.2).toFloat() }
+            onAudioData(mockSamples)
+            postDelayed(this, 50)
         }
+    }
+
+    /**
+     * Starts synthetic spectrum animation for preview / mockup mode when audio is active.
+     */
+    fun startMockVisualizer() {
+        if (!isMockRunning) {
+            isMockRunning = true
+            post(mockRunnable)
+        }
+    }
+
+    /**
+     * Stops synthetic spectrum animation.
+     */
+    fun stopMockVisualizer() {
+        isMockRunning = false
+        removeCallbacks(mockRunnable)
     }
 
     init {
         setBackgroundColor(Color.parseColor("#0A0E17"))
-    }
-
-    fun startMockVisualizer() {
-        if (mockRunning) return
-        mockRunning = true
-        mockHandler.post(mockRunnable)
-    }
-
-    fun stopMockVisualizer() {
-        mockRunning = false
-        mockHandler.removeCallbacks(mockRunnable)
     }
 
     /**
@@ -148,7 +145,7 @@ class AudioSpectrumVisualizerView @JvmOverloads constructor(
                 intArrayOf(
                     Color.parseColor("#00E5FF"), // Bright Cyan
                     Color.parseColor("#0284C7"), // Deep Cyan
-                    Color.parseColor("#0F172A") // Base Slate
+                    Color.parseColor("#0F172A")  // Base Slate
                 ),
                 floatArrayOf(0.0f, 0.7f, 1.0f),
                 Shader.TileMode.CLAMP
@@ -227,10 +224,5 @@ class AudioSpectrumVisualizerView @JvmOverloads constructor(
         if (stillActive) {
             postInvalidateOnAnimation()
         }
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        stopMockVisualizer()
     }
 }

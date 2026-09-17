@@ -39,13 +39,6 @@
             </intent-filter>
         </activity>
 
-        <!-- 32-Band Equalizer Activity -->
-        <activity
-            android:name=".EqActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity"
-            android:theme="@style/Theme.SjbZ" />
-
         <!-- Global System Audio FX Service -->
         <service
             android:name=".service.GlobalAudioService"

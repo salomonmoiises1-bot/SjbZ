@@ -13,8 +13,8 @@ import kotlin.math.tanh
  * SjbZ Studio Professional Audio DSP Processor.
  *
  * Implements an uncompromising 32-bit floating-point audio processing chain:
- *   Input -> Preamp Gain -> Low-Shelf Bass (RBJ) -> 32-Band ISO Peaking EQ (RBJ, Q=1.4) ->
- *   Analog Warmth Soft Clipper (tanh) -> Output
+ * Input -> Preamp Gain -> Low-Shelf Bass (RBJ) -> 32-Band ISO Peaking EQ (RBJ, Q=1.4) ->
+ * Analog Warmth Soft Clipper (tanh) -> Output
  *
  * Fully standalone (no external framework dependencies):
  * - Zero heap allocations during audio processing loops.
@@ -142,7 +142,7 @@ class SjbzDspProcessor {
         val localMasterEnabled = masterEnabled
         val localLinearPreamp = linearPreamp
         val localListener = fftListener
-        val isEmuActive = localMasterEnabled && emulationEnabled && (!bluetoothAutoBypass || !bluetoothConnected)
+        val isEmuActive = localMasterEnabled && emulationEnabled && (!bluetoothAutoBypass ||!bluetoothConnected)
         val localEmuAmount = emulationAmount.coerceIn(0.0f, 1.0f)
         val localLimiterThresh = limiterThresholdLin
         val localAlphaAtt = limiterAlphaAtt
@@ -237,7 +237,7 @@ class SjbzDspProcessor {
                 frameMonoSum += x
             }
 
-            if (localListener != null) {
+            if (localListener!= null) {
                 fftRingBuffer[fftRingIndex] = frameMonoSum / chCount
                 fftRingIndex++
                 if (fftRingIndex >= FFT_BLOCK_SIZE) {
@@ -266,7 +266,7 @@ class SjbzDspProcessor {
     fun setBassBoost(enabled: Boolean, freqHz: Float, gainDb: Float) {
         val clampedGain = gainDb.coerceIn(0.0f, 12.0f)
         val clampedFreq = freqHz.coerceIn(20.0f, 500.0f)
-        if (bassEnabled != enabled || abs(bassFreqHz - clampedFreq) > 0.1f || abs(bassGainDb - clampedGain) > 0.01f) {
+        if (bassEnabled!= enabled || abs(bassFreqHz - clampedFreq) > 0.1f || abs(bassGainDb - clampedGain) > 0.01f) {
             bassEnabled = enabled
             bassFreqHz = clampedFreq
             bassGainDb = clampedGain
@@ -307,7 +307,7 @@ class SjbzDspProcessor {
     }
 
     fun setEmulationEnabled(enabled: Boolean) {
-        if (emulationEnabled != enabled) {
+        if (emulationEnabled!= enabled) {
             emulationEnabled = enabled
             isDirty = true
         }
@@ -334,7 +334,7 @@ class SjbzDspProcessor {
     fun isBluetoothConnected(): Boolean = bluetoothConnected
 
     fun setMdrcEnabled(enabled: Boolean) {
-        mdrcProcessor.enabled = enabled
+        mdrcProcessor.isEnabled = enabled
     }
 
     fun isMdrcEnabled(): Boolean = mdrcProcessor.isEnabled

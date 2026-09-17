@@ -42,7 +42,6 @@ class SjbzDspProcessor {
     private var preampDb: Float = 0.0f
     private var linearPreamp: Float = 1.0f
 
-    // Ganancia por canal para compat con GlobalAudioSessionManager
     private val channelInputGainsDb = FloatArray(MAX_CHANNELS) { 0f }
 
     private var bassEnabled: Boolean = true
@@ -222,12 +221,9 @@ class SjbzDspProcessor {
     }
     fun getPreamp(): Float = preampDb
 
-    // AGREGADO: fix para GlobalAudioSessionManager:553
     fun setInputGainByChannelIndex(channel: Int, gainDb: Float) {
         val ch = channel.coerceIn(0, MAX_CHANNELS - 1)
         channelInputGainsDb[ch] = gainDb.coerceIn(-12f, 12f)
-        // Por ahora aplica como preamp global para no romper el DSP
-        // TODO: aplicar ganancia por canal en processFloats si se necesita
         if (ch == 0) setPreamp(gainDb)
     }
 
@@ -285,6 +281,17 @@ class SjbzDspProcessor {
     fun getMdrcGainReduction(): Float = mdrcProcessor.getGainReductionDb()
     fun getGainReductionDb(): Float = getMdrcGainReduction()
 
+    // --- Compatibilidad con llamadas estilo Java ---
+    fun setMasterEnabled(enabled: Boolean) { masterEnabled = enabled }
+    fun getMasterEnabled(): Boolean = masterEnabled
+    fun isMasterEnabled(): Boolean = masterEnabled
+
+    fun setAllBandGains(gains: List<Float>) = setAllBands(gains)
+    fun setAllBandGains(gains: FloatArray) = setAllBands(gains.toList())
+
+    val mdrcGainReduction: Float
+        get() = getMdrcGainReduction()
+
     private fun recalculateCoefficients() {
         val fs = currentSampleRate
         if (bassEnabled && bassGainDb > 0.01f) computeLowShelfRbj(0, bassFreqHz, bassGainDb, fs) else setFilterBypass(0)
@@ -296,7 +303,7 @@ class SjbzDspProcessor {
         }
         for (f in 0 until TOTAL_FILTERS) {
             if (!b0Array[f].isFinite() ||!b1Array[f].isFinite() ||!b2Array[f].isFinite() ||
-              !a1Array[f].isFinite() ||!a2Array[f].isFinite()) {
+             !a1Array[f].isFinite() ||!a2Array[f].isFinite()) {
                 setFilterBypass(f)
             }
         }
@@ -306,7 +313,7 @@ class SjbzDspProcessor {
         computeEmuLowPassRbj(3, 18500.0f, 0.7071f, fs)
         for (ef in 0 until EMU_FILTERS) {
             if (!emuB0[ef].isFinite() ||!emuB1[ef].isFinite() ||!emuB2[ef].isFinite() ||
-              !emuA1[ef].isFinite() ||!emuA2[ef].isFinite()) {
+             !emuA1[ef].isFinite() ||!emuA2[ef].isFinite()) {
                 emuB0[ef]=1f; emuB1[ef]=0f; emuB2[ef]=0f; emuA1[ef]=0f; emuA2[ef]=0f
             }
         }

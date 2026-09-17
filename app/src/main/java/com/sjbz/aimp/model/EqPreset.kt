@@ -27,18 +27,20 @@ data class EqPreset(
     @SerializedName("color")
     val color: Int = generateRandomColor()
 ) {
-    init {
-        require(bandGains.size == 32) { "bandGains must have exactly 32 values" }
-    }
-
     fun withColor(newColor: Int): EqPreset = copy(color = newColor)
 
     fun sanitized(): EqPreset {
+        val fixedGains = when {
+            bandGains.size == 32 -> bandGains
+            bandGains.size > 32 -> bandGains.take(32)
+            else -> bandGains + List(32 - bandGains.size) { 0f }
+        }
         return copy(
             preampDb = preampDb.coerceIn(-12f, 12f),
-            bandGains = bandGains.map { it.coerceIn(-12f, 12f) },
+            bandGains = fixedGains.map { it.coerceIn(-12f, 12f) },
             bassBoostFreq = bassBoostFreq.coerceIn(20f, 500f),
-            bassBoostGain = bassBoostGain.coerceIn(0f, 12f)
+            bassBoostGain = bassBoostGain.coerceIn(0f, 12f),
+            color = if (color != 0) color else generateRandomColor()
         )
     }
 
@@ -57,5 +59,27 @@ data class EqPreset(
         )
 
         fun generateRandomColor(): Int = PALETTE.random()
+
+        fun fromUnsafe(
+            name: String,
+            preampDb: Float,
+            bandGains: List<Float>,
+            isCustom: Boolean,
+            bassBoostEnabled: Boolean,
+            bassBoostFreq: Float,
+            bassBoostGain: Float,
+            color: Int
+        ): EqPreset {
+            return EqPreset(
+                name = name,
+                preampDb = preampDb,
+                bandGains = bandGains,
+                isCustom = isCustom,
+                bassBoostEnabled = bassBoostEnabled,
+                bassBoostFreq = bassBoostFreq,
+                bassBoostGain = bassBoostGain,
+                color = color
+            ).sanitized()
+        }
     }
 }

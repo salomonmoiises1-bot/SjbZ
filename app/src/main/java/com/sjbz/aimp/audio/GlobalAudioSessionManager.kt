@@ -55,7 +55,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     var bassFreqHz: Float = 85.0f
     var virtualizerStrength: Int = 0
 
-    // Pre-amp Bass / Mid / Treble
     var bassPreampDb: Float = 0f
     var midPreampDb: Float = 0f
     var treblePreampDb: Float = 0f
@@ -63,6 +62,11 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     fun setBassPreamp(db: Float) { bassPreampDb = db.coerceIn(-12f,12f); reapplyAllParams() }
     fun setMidPreamp(db: Float) { midPreampDb = db.coerceIn(-12f,12f); reapplyAllParams() }
     fun setTreblePreamp(db: Float) { treblePreampDb = db.coerceIn(-12f,12f); reapplyAllParams() }
+
+    // Compatibilidad con EqActivity simplificado
+    fun setToneParams(bassDb: Float, midDb: Float, trebleDb: Float) {
+        setBassPreamp(bassDb); setMidPreamp(midDb); setTreblePreamp(trebleDb)
+    }
 
     var isLimiterEnabled: Boolean = true
     var limiterThresholdDb: Float = -0.5f
@@ -72,6 +76,8 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     var currentAutoGainOffsetDb: Float = 0.0f
     var isMdrcEnabled: Boolean = true
     val mdrcGains: FloatArray = FloatArray(5) { 0.0f }
+    var mdrcThresholdDb: Float = -14f
+    var mdrcRatio: Float = 3f
     var ats2835pEmuEnabled: Boolean = false
 
     var onSystemVolumeChangedListener: ((Int, Int) -> Unit)? = null
@@ -127,7 +133,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             val direction = if (increase) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
             audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
             onSystemVolumeChangedListener?.invoke(getSystemVolume(), getMaxSystemVolume())
-        } catch (e: Exception) {}
+        } catch (_: Exception) {}
     }
 
     fun setGlobalAudioEnabled(enabled: Boolean) {
@@ -265,13 +271,22 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         scope.launch { dataStore.saveBassAndVirtualizer(bassBoostDb, bassFreqHz, virtualizerStrength) }
     }
 
+    // Versión 6 parámetros (compat)
     fun updateEqParams(gains: FloatArray, preampDb: Float, bassDb: Float, bassFreqHz: Float,
         mdrcEnabled: Boolean = true, mdrcGains: FloatArray = FloatArray(5)) {
+        updateEqParams(gains, preampDb, bassDb, bassFreqHz, mdrcEnabled, mdrcGains, -14f, 3f)
+    }
+
+    // Versión 8 parámetros usada por EqActivity
+    fun updateEqParams(gains: FloatArray, preampDb: Float, bassDb: Float, bassFreqHz: Float,
+        mdrcEnabled: Boolean, mdrcGains: FloatArray, threshDb: Float, ratio: Float) {
         globalGainDb = preampDb.coerceIn(-12f,12f)
         for (i in 0 until minOf(32, gains.size)) bandGains[i] = gains[i].coerceIn(-15f,15f)
         bassBoostDb = bassDb.coerceIn(0f,12f); this.bassFreqHz = bassFreqHz.coerceIn(20f,500f)
         isMdrcEnabled = mdrcEnabled
         for (i in 0 until minOf(5, mdrcGains.size)) this.mdrcGains[i] = mdrcGains[i].coerceIn(-12f,12f)
+        mdrcThresholdDb = threshDb.coerceIn(-36f, 0f)
+        mdrcRatio = ratio.coerceIn(1f, 20f)
         reapplyAllParams()
     }
 
@@ -308,7 +323,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         }
         if (!dpOk) { try { holder.equalizer = Equalizer(0, holder.sessionId) } catch (_: Exception) {} }
         try { holder.bassBoost = BassBoost(0, holder.sessionId) } catch (_: Exception) {}
-        // FIX MUTE: no crear Virtualizer en session 0
         if (holder.sessionId!= 0) {
             try { holder.virtualizer = Virtualizer(0, holder.sessionId) } catch (_: Exception) {}
         } else { holder.virtualizer = null }
@@ -338,7 +352,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                     for (b in 0 until 5) {
                         val cutoff = if (b < cutoffs.size) cutoffs[b] else 20000f
                         val g = if (isMdrcEnabled && b < mdrcGains.size) mdrcGains[b].coerceIn(-12f,12f) else 0f
-                        dp.setMbcBand(ch, b, DynamicsProcessing.MbcBand(isMdrcEnabled, cutoff, 10f, 80f, 3f, -14f, 4f, -90f, 1f, 0f, g))
+                        dp.setMbcBand(ch, b, DynamicsProcessing.MbcBand(isMdrcEnabled, cutoff, 10f, 80f, mdrcRatio, mdrcThresholdDb, 4f, -90f, 1f, 0f, g))
                     }
                     val th = if (isLimiterEnabled) limiterThresholdDb.coerceIn(-12f,0f) else 0f
                     dp.setLimiter(ch, DynamicsProcessing.Limiter(isLimiterEnabled, isLimiterEnabled, 0, 1f, limiterReleaseMs.coerceIn(10f,200f), 10f, th, 0f))
@@ -360,7 +374,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                         val mb = ((bandGains[idx] + extra + totalPreamp) * 100).toInt().coerceIn(-1200,1200)
                         eq.setBandLevel(b.toShort(), mb.toShort())
                     }
-                } catch (e: Exception) {}
+                } catch (_: Exception) {}
             }
         }
         holder.bassBoost?.let { bb ->

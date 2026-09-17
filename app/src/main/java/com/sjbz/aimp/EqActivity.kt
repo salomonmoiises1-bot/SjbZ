@@ -54,23 +54,19 @@ private fun atsIsEnabled(): Boolean {
 }
 
 class EqActivity : AppCompatActivity() {
-
     companion object {
         private const val PREFS_NAME = "sjbz_dsp_pro"
         private const val DEBOUNCE_MS = 60L
     }
-
     private lateinit var prefs: SharedPreferences
     private lateinit var presetManager: PresetManager
     private var dspProcessor: SjbzDspProcessor? = null
-
     private lateinit var toolbar: Toolbar
     private lateinit var switchMasterDsp: SwitchCompat
     private lateinit var visualizerView: AudioSpectrumVisualizerView
     private lateinit var tvRecognizedGenre: TextView
     private lateinit var tvGenreTrackInfo: TextView
     private lateinit var btnAutoEqGenre: Button
-
     private lateinit var btnPresetFlat: Button
     private lateinit var btnPresetBass: Button
     private lateinit var btnPresetRock: Button
@@ -78,27 +74,23 @@ class EqActivity : AppCompatActivity() {
     private lateinit var spinnerPresets: Spinner
     private lateinit var btnSavePreset: ImageButton
     private lateinit var btnExportPreset: ImageButton
-
     private lateinit var tvPreampValue: TextView
     private lateinit var seekBarPreamp: SeekBar
     private lateinit var switchBassBoost: SwitchCompat
     private lateinit var tvBassBoostValue: TextView
     private lateinit var spinnerBassFreq: Spinner
     private lateinit var seekBarBassBoost: SeekBar
-
     private lateinit var switchEmu: SwitchCompat
     private lateinit var tvEmuStatus: TextView
     private lateinit var tvEmuAmountValue: TextView
     private lateinit var seekBarEmuAmount: SeekBar
     private lateinit var switchBtAutoBypass: SwitchCompat
     private lateinit var tvBtBypassStatus: TextView
-
     private lateinit var switchGlobalAudio: SwitchCompat
     private lateinit var tvGlobalAudioStatus: TextView
     private lateinit var tvActiveSessionsCount: TextView
     private lateinit var seekBarSystemVolume: SeekBar
     private lateinit var tvSystemVolumeValue: TextView
-
     private lateinit var switchMdrc: SwitchCompat
     private lateinit var tvMdrcStatus: TextView
     private lateinit var tvMdrcGainReduction: TextView
@@ -108,22 +100,18 @@ class EqActivity : AppCompatActivity() {
     private lateinit var tvMdrcRatioValue: TextView
     private val mdrcBandSeekBars = ArrayList<SeekBar>()
     private val mdrcBandValueLabels = ArrayList<TextView>()
-
     private lateinit var llEqBandsContainer: LinearLayout
     private lateinit var btnResetEq: Button
     private val bandSeekBars = ArrayList<SeekBar>()
     private val bandValueLabels = ArrayList<TextView>()
-
     private val debounceHandler = Handler(Looper.getMainLooper())
     private val bandDebounceRunnables = arrayOfNulls<Runnable>(EqualizerProcessor.BAND_COUNT)
     private var preampDebounceRunnable: Runnable? = null
     private var bassDebounceRunnable: Runnable? = null
     private var emuDebounceRunnable: Runnable? = null
     private var mdrcDebounceRunnable: Runnable? = null
-
     private var isUpdatingUiFromCode = false
     private val cyanColor = Color.parseColor("#00E5FF")
-
     private val mdrcGainReductionTicker = object : Runnable {
         override fun run() {
             if (!isDestroyed &&!isFinishing) {
@@ -135,7 +123,6 @@ class EqActivity : AppCompatActivity() {
             }
         }
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_eq)
@@ -155,30 +142,25 @@ class EqActivity : AppCompatActivity() {
         build32BandSliders()
         restoreAllDspParameters()
     }
-
     override fun onResume() {
         super.onResume()
         updateEmuStatus()
         debounceHandler.removeCallbacks(mdrcGainReductionTicker)
         debounceHandler.post(mdrcGainReductionTicker)
     }
-
     override fun onPause() {
         super.onPause()
         debounceHandler.removeCallbacks(mdrcGainReductionTicker)
         syncGlobalAudioDsp()
     }
-
     override fun onDestroy() {
         debounceHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
-
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == android.R.id.home) { finish(); return true }
         return super.onOptionsItemSelected(item)
     }
-
     private fun bindViews() {
         toolbar = findViewById(R.id.eqToolbar)
         switchMasterDsp = findViewById(R.id.switchMasterDsp)
@@ -231,7 +213,6 @@ class EqActivity : AppCompatActivity() {
         llEqBandsContainer = findViewById(R.id.llEqBandsContainer)
         btnResetEq = findViewById(R.id.btnResetEq)
     }
-
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -243,11 +224,9 @@ class EqActivity : AppCompatActivity() {
             updateControlsAlpha(isChecked)
         }
     }
-
     private fun setupSpectrumVisualizer() {
         dspProcessor?.fftListener = { samples -> runOnUiThread { visualizerView.onAudioData(samples) } }
     }
-
     private fun setupGenreRecognition() {
         val currentProfile = GlobalAudioSessionManager.getInstance(this).currentProfile
         tvRecognizedGenre.text = currentProfile.presetName
@@ -257,7 +236,6 @@ class EqActivity : AppCompatActivity() {
             Toast.makeText(this, "EQ adaptado: ${currentProfile.presetName}", Toast.LENGTH_SHORT).show()
         }
     }
-
     private fun setupMasterControls() {
         seekBarPreamp.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -319,7 +297,6 @@ class EqActivity : AppCompatActivity() {
         })
         btnResetEq.setOnClickListener { resetAllBandsToZero() }
     }
-
     private fun setupEmuControls() {
         switchEmu.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUiFromCode) return@setOnCheckedChangeListener
@@ -353,7 +330,6 @@ class EqActivity : AppCompatActivity() {
             updateEmuStatus()
         }
     }
-
     private fun updateEmuStatus() {
         val dsp = dspProcessor?: return
         val isBt = try { dsp.isBluetoothConnected() } catch (_: Exception) { false }
@@ -375,7 +351,6 @@ class EqActivity : AppCompatActivity() {
             }
         }
     }
-
     private fun setupGlobalAudioControls() {
         val gm = GlobalAudioSessionManager.getInstance(this)
         val maxVol = gm.getMaxSystemVolume()
@@ -414,11 +389,9 @@ class EqActivity : AppCompatActivity() {
             syncGlobalAudioDsp()
         }
     }
-
     private fun updateSystemVolumeLabel(cur: Int, max: Int) {
         tvSystemVolumeValue.text = "${if (max > 0) cur * 100 / max else 0}%"
     }
-
     private fun setupMdrcControls() {
         switchMdrc.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUiFromCode) return@setOnCheckedChangeListener
@@ -460,7 +433,6 @@ class EqActivity : AppCompatActivity() {
             })
         }
     }
-
     private fun debounceMdrcDynamics() {
         mdrcDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
         val r = Runnable {
@@ -472,14 +444,12 @@ class EqActivity : AppCompatActivity() {
         mdrcDebounceRunnable = r
         debounceHandler.postDelayed(r, DEBOUNCE_MS)
     }
-
     private fun updateMdrcControlsAlpha(enabled: Boolean) {
         seekBarMdrcThreshold.isEnabled = enabled
         seekBarMdrcRatio.isEnabled = enabled
         mdrcBandSeekBars.forEach { it.isEnabled = enabled }
         tvMdrcStatus.text = if (enabled) "Crossover 5 vías activo" else "MDRC desactivado"
     }
-
     private fun syncGlobalAudioDsp() {
         val gains = FloatArray(EqualizerProcessor.BAND_COUNT) { i ->
             bandSeekBars.getOrNull(i)?.let { (it.progress - 120) / 10f }?: 0f
@@ -496,11 +466,9 @@ class EqActivity : AppCompatActivity() {
         SjbzAudioEngine.setAllBandGains(gains)
         dspProcessor?.setPreamp(preamp)
     }
-
     private fun getSelectedBassFreq() = when (spinnerBassFreq.selectedItemPosition) {
         0 -> 60f; 1 -> 85f; else -> 120f
     }
-
     private fun setupPresetControls() {
         btnPresetFlat.setOnClickListener { applyPresetByName("Flat") }
         btnPresetBass.setOnClickListener { applyPresetByName("Bass") }
@@ -517,14 +485,12 @@ class EqActivity : AppCompatActivity() {
         btnSavePreset.setOnClickListener { saveCurrentAsCustomPreset() }
         btnExportPreset.setOnClickListener { Toast.makeText(this, "Presets en sjbz_dsp_pro", Toast.LENGTH_SHORT).show() }
     }
-
     private fun refreshPresetSpinner() {
         spinnerPresets.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item,
             presetManager.getAllPresets().map { it.name }).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
     }
-
     private fun build32BandSliders() {
         llEqBandsContainer.removeAllViews()
         bandSeekBars.clear(); bandValueLabels.clear()
@@ -582,7 +548,6 @@ class EqActivity : AppCompatActivity() {
             col.addView(tvFreq); llEqBandsContainer.addView(col)
         }
     }
-
     private fun restoreAllDspParameters() {
         isUpdatingUiFromCode = true
         try {
@@ -635,7 +600,6 @@ class EqActivity : AppCompatActivity() {
             syncGlobalAudioDsp()
         } finally { isUpdatingUiFromCode = false }
     }
-
     private fun applyPresetByName(name: String) {
         val match = presetManager.getAllPresets().firstOrNull { it.name.equals(name, ignoreCase = true) }
         if (match!= null) {
@@ -654,7 +618,6 @@ class EqActivity : AppCompatActivity() {
             loadPresetIntoUi(preset)
         }
     }
-
     private fun loadPresetIntoUi(preset: EqPreset) {
         isUpdatingUiFromCode = true
         try {
@@ -676,7 +639,6 @@ class EqActivity : AppCompatActivity() {
         } finally { isUpdatingUiFromCode = false }
         syncGlobalAudioDsp()
     }
-
     private fun applyGenrePreset(genre: String) {
         when (genre.lowercase()) {
             "rock", "metal" -> applyPresetByName("Rock")
@@ -685,7 +647,6 @@ class EqActivity : AppCompatActivity() {
             else -> applyPresetByName("Studio Master")
         }
     }
-
     private fun resetAllBandsToZero() {
         isUpdatingUiFromCode = true
         try {
@@ -700,7 +661,6 @@ class EqActivity : AppCompatActivity() {
         syncGlobalAudioDsp()
         Toast.makeText(this, "Bandas a 0 dB", Toast.LENGTH_SHORT).show()
     }
-
     private fun saveCurrentAsCustomPreset() {
         val gains = ArrayList<Float>()
         for (sb in bandSeekBars) gains.add((sb.progress - 120) / 10f)
@@ -713,7 +673,6 @@ class EqActivity : AppCompatActivity() {
         refreshPresetSpinner()
         Toast.makeText(this, "Guardado: ${preset.name}", Toast.LENGTH_SHORT).show()
     }
-
     private fun updateControlsAlpha(enabled: Boolean) {
         val a = if (enabled) 1f else 0.4f
         llEqBandsContainer.alpha = a

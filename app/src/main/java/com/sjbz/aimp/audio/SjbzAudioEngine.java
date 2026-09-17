@@ -2,23 +2,34 @@ package com.sjbz.aimp.audio;
 
 import android.content.Context;
 import android.util.Log;
+
 import com.sjbz.aimp.service.GlobalAudioService;
+
 import java.nio.ByteBuffer;
 
 /**
  * SjbzAudioEngine - Centralized Singleton Audio Processing Engine.
- * FIX: Unifica DSP con GlobalAudioSessionManager para evitar doble instancia.
+ *
+ * Responsibilities:
+ * 1. Strictly adheres to Singleton Pattern: PROHIBITED from instantiating its own processor.
+ *    Uses exclusively the single global instance exposed by GlobalAudioSessionManager.getDspProcessor().
+ * 2. Correct Global Bypass Logic: When GlobalAudioService is active (globalActive = true),
+ *    the DSP processor bypass is explicitly deactivated (dspProcessor.setGlobalBypass(false)),
+ *    ensuring real-time software PCM audio processing without inverted logic.
+ * 3. Unified API for streaming 16-bit PCM arrays, raw float buffers, and direct ByteBuffers.
  */
 public class SjbzAudioEngine {
 
     private static final String TAG = "SjbzAudioEngine";
     private static volatile SjbzAudioEngine instance;
-    private static Context appContextRef;
 
+    // Single global processor reference from GlobalAudioSessionManager
+    private final SjbzDspProcessor dspProcessor;
     private boolean initialized = false;
 
-    private SjbzAudioEngine(Context ctx) {
-        if (ctx != null) appContextRef = ctx.getApplicationContext();
+    private SjbzAudioEngine() {
+        // Obtains exclusively the single global instance. Strictly no 'new SjbzDspProcessor()'.
+        this.dspProcessor = GlobalAudioSessionManager.getDspProcessor();
         this.initialized = true;
         checkAndApplyGlobalBypass();
     }
@@ -27,7 +38,7 @@ public class SjbzAudioEngine {
         if (instance == null) {
             synchronized (SjbzAudioEngine.class) {
                 if (instance == null) {
-                    instance = new SjbzAudioEngine(appContextRef);
+                    instance = new SjbzAudioEngine();
                 }
             }
         }
@@ -35,37 +46,22 @@ public class SjbzAudioEngine {
     }
 
     public static SjbzAudioEngine getInstance(Context context) {
-        if (context != null) appContextRef = context.getApplicationContext();
         return getInstance();
-    }
-
-    public static void init(Context context) {
-        if (context != null) appContextRef = context.getApplicationContext();
-        getInstance(context);
     }
 
     /**
      * Obtains the guaranteed single DSP processor instance.
-     * FIX: No crea new, devuelve el del Manager = 1 solo DSP en toda la app.
      */
     public SjbzDspProcessor getDspProcessor() {
         checkAndApplyGlobalBypass();
-        // Si aún no hay contexto, fallback seguro
-        Context ctx = appContextRef;
-        if (ctx == null) {
-            try {
-                ctx = android.app.ActivityThread.currentApplication();
-            } catch (Exception e) {
-                Log.e(TAG, "No app context yet");
-            }
-        }
-        return GlobalAudioSessionManager.getInstance(ctx).getDspProcessor();
+        return dspProcessor;
     }
 
     /**
-     * Checks if GlobalAudioService has system-wide effects enabled.
-     * FIX: Ya no hace setGlobalBypass(true) que muteaba el EqActivity.
-     * El bypass lo controla EqActivity con setGlobalBypass(false).
+     * Lógica de bypass corregida:
+     * Cuando el servicio de audio global esté activo (globalActive = true),
+     * el bypass del procesador DSP DEBE estar desactivado (dspProcessor.setGlobalBypass(false)).
+     * Evita cualquier lógica invertida donde activar el servicio inhabilite el motor de audio.
      */
     public boolean checkAndApplyGlobalBypass() {
         boolean globalActive = false;
@@ -76,36 +72,45 @@ public class SjbzAudioEngine {
             Log.w(TAG, "Error checking GlobalAudioService state: " + t.getMessage());
         }
 
-        // FIX CRITICO: no mutear el DSP local, solo reportar estado
-        // Si ponemos true acá, EqActivity queda en silencio (tu bug 3)
-        try {
-            getDspProcessor().setGlobalBypass(false);
-        } catch (Exception e) {}
-
+        if (dspProcessor != null) {
+            if (globalActive) {
+                // When global service is running, DSP must process audio, so bypass is FALSE
+                dspProcessor.setGlobalBypass(false);
+            }
+        }
         return globalActive;
     }
 
+    /**
+     * Process audio in float format.
+     */
     public void process(float[] buffer, int channels, int frameCount) {
-        if (buffer == null) return;
-        getDspProcessor().process(buffer, channels, frameCount);
+        checkAndApplyGlobalBypass();
+        dspProcessor.process(buffer, channels, frameCount);
     }
 
+    /**
+     * Process 16-bit signed PCM short array in place.
+     */
+    public void processPcm16Short(short[] buffer, int offset, int length, int channels) {
+        checkAndApplyGlobalBypass();
+        dspProcessor.processPcm16Short(buffer, offset, length, channels);
+    }
+
+    /**
+     * Process 16-bit signed PCM byte array in place.
+     */
     public void processPcm16(byte[] pcmData, int offset, int length, int channels) {
-        if (pcmData == null) return;
-        getDspProcessor().processPcm16(pcmData, offset, length, channels);
+        checkAndApplyGlobalBypass();
+        dspProcessor.processPcm16(pcmData, offset, length, channels);
     }
 
+    /**
+     * Process direct ByteBuffer of 16-bit PCM in place.
+     */
     public void processByteBuffer(ByteBuffer byteBuffer, int channels) {
-        if (byteBuffer == null) return;
-        getDspProcessor().processByteBuffer(byteBuffer, channels);
-    }
-
-    public void setSampleRate(float sampleRate) {
-        getDspProcessor().setSampleRate(sampleRate);
-    }
-
-    public void reset() {
-        getDspProcessor().resetFilterStates();
+        checkAndApplyGlobalBypass();
+        dspProcessor.processByteBuffer(byteBuffer, channels);
     }
 
     public boolean isInitialized() {

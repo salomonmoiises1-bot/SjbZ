@@ -1,13 +1,7 @@
 package com.sjbz.aimp.audio
 
 import com.sjbz.aimp.model.EqPreset
-import java.util.Arrays
 
-/**
- * 32-band ISO precision audio equalizer for SjbZ.
- * Center frequencies from 20 Hz to 20,000 Hz with Preamp control (-12dB to +12dB).
- * Wrapper sincronizado con SjbzDspProcessor para evitar doble estado.
- */
 class EqualizerProcessor(
     private val dsp: SjbzDspProcessor? = null
 ) {
@@ -33,153 +27,144 @@ class EqualizerProcessor(
     var isEnabled: Boolean = true
         set(value) {
             field = value
-            dsp?.masterEnabled = value
+            try { dsp?.masterEnabled = value } catch (_: Exception) {}
         }
 
     var preampDb: Float = 0.0f
         set(value) {
             field = value.coerceIn(-12.0f, 12.0f)
-            dsp?.setPreamp(field)
+            try { dsp?.setPreamp(field) } catch (_: Exception) {}
         }
 
-    private val bandGains = FloatArray(BAND_COUNT)
-
-    init {
-        applyPreset("Studio Master")
-        syncToDsp()
-    }
+    private val bandGains = FloatArray(BAND_COUNT) { 0f }
 
     private fun syncToDsp() {
-        if (dsp == null) return
-        dsp.setPreamp(preampDb)
-        dsp.setAllBands(bandGains.toList())
-        dsp.masterEnabled = isEnabled
+        val d = dsp?: return
+        try {
+            d.setPreamp(preampDb)
+            d.setAllBands(bandGains.toList())
+            d.masterEnabled = isEnabled
+        } catch (_: Exception) {}
     }
 
-    fun getBandGain(index: Int): Float {
-        return if (index in 0 until BAND_COUNT) bandGains[index] else 0.0f
-    }
+    fun getBandGain(index: Int): Float =
+        if (index in 0 until BAND_COUNT) bandGains[index] else 0.0f
 
     fun setBandGain(index: Int, gainDb: Float) {
         if (index in 0 until BAND_COUNT) {
-            val v = gainDb.coerceIn(-12.0f, 12.0f)
-            bandGains[index] = v
-            dsp?.setBandGain(index, v)
+            bandGains[index] = gainDb.coerceIn(-12.0f, 12.0f)
+            try { dsp?.setBandGain(index, bandGains[index]) } catch (_: Exception) {}
         }
     }
 
-    fun getBandGains(): FloatArray {
-        return bandGains.copyOf()
-    }
+    fun getBandGains(): FloatArray = bandGains.copyOf()
 
     fun setAllBands(gains: List<Float>) {
         for (i in 0 until minOf(gains.size, BAND_COUNT)) {
             bandGains[i] = gains[i].coerceIn(-12.0f, 12.0f)
         }
-        dsp?.setAllBands(bandGains.toList())
+        try { dsp?.setAllBands(bandGains.toList()) } catch (_: Exception) {}
     }
 
+    fun setAllBands(gains: FloatArray) = setAllBands(gains.toList())
+
     fun applyPreset(presetName: String) {
-        Arrays.fill(bandGains, 0.0f)
+        // Sin side-effects: escribimos directo al backing field
+        var newPreamp = 0f
+        val curve = FloatArray(BAND_COUNT) { 0f }
+
         when (presetName) {
-            "Studio Master" -> {
-                preampDb = 0.0f
-            }
             "Bass", "Bass Boost" -> {
-                preampDb = -1.5f
-                val curve = floatArrayOf(
+                newPreamp = -1.5f
+                floatArrayOf(
                     6.0f, 6.0f, 5.8f, 5.5f, 5.0f, 4.5f, 4.0f, 3.2f,
                     2.5f, 1.5f, 0.8f, 0.0f, -0.5f, -0.5f, 0.0f, 0.0f,
                     0.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.5f, 1.0f, 1.0f,
                     1.5f, 1.5f, 2.0f, 1.8f, 1.5f, 1.0f, 0.5f, 0.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+                ).copyInto(curve)
             }
             "Rock" -> {
-                preampDb = -1.5f
-                val curve = floatArrayOf(
+                newPreamp = -1.5f
+                floatArrayOf(
                     4.5f, 4.2f, 4.0f, 3.8f, 3.5f, 3.0f, 2.2f, 1.2f,
                     0.2f, -0.8f, -1.2f, -1.5f, -1.2f, -0.8f, -0.2f, 0.5f,
                     1.0f, 1.5f, 1.8f, 2.2f, 2.5f, 3.0f, 3.5f, 4.0f,
                     4.2f, 4.5f, 4.2f, 3.8f, 3.2f, 2.5f, 1.8f, 1.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+                ).copyInto(curve)
             }
             "Vocal", "Vocal Boost" -> {
-                preampDb = -1.0f
-                val curve = floatArrayOf(
+                newPreamp = -1.0f
+                floatArrayOf(
                     -2.0f, -1.8f, -1.5f, -1.0f, -0.5f, 0.0f, 0.0f, 0.2f,
                     0.5f, 0.8f, 1.0f, 1.2f, 1.5f, 2.0f, 2.5f, 3.2f,
                     3.8f, 4.2f, 4.5f, 4.2f, 3.8f, 3.2f, 2.5f, 1.8f,
                     1.2f, 0.5f, 0.0f, -0.5f, -1.0f, -1.2f, -1.5f, -2.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
-            }
-            "Flat" -> {
-                preampDb = 0.0f
+                ).copyInto(curve)
             }
             "Electronic" -> {
-                preampDb = -2.0f
-                val curve = floatArrayOf(
+                newPreamp = -2.0f
+                floatArrayOf(
                     6.5f, 6.2f, 5.8f, 5.5f, 5.0f, 4.5f, 3.5f, 2.0f,
                     0.5f, -0.5f, -1.0f, -1.2f, -1.0f, -0.5f, 0.0f, 0.0f,
                     0.2f, 0.5f, 0.8f, 1.2f, 1.8f, 2.5f, 3.5f, 4.5f,
                     5.2f, 5.5f, 5.2f, 4.8f, 4.0f, 3.2f, 2.5f, 1.8f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+                ).copyInto(curve)
             }
             "Acoustic" -> {
-                preampDb = -1.0f
-                val curve = floatArrayOf(
+                newPreamp = -1.0f
+                floatArrayOf(
                     -1.0f, -0.8f, -0.5f, 0.0f, 0.5f, 1.0f, 1.2f, 1.5f,
                     1.8f, 2.0f, 1.8f, 1.5f, 1.2f, 1.0f, 1.0f, 1.2f,
                     1.5f, 1.8f, 2.2f, 2.5f, 2.8f, 2.5f, 2.2f, 2.0f,
                     2.2f, 2.5f, 3.0f, 2.8f, 2.5f, 2.0f, 1.5f, 1.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+                ).copyInto(curve)
             }
             "Pop" -> {
-                preampDb = -1.0f
-                val curve = floatArrayOf(
+                newPreamp = -1.0f
+                floatArrayOf(
                     2.0f, 2.5f, 3.0f, 3.0f, 2.5f, 2.0f, 1.0f, 0.5f,
                     0.0f, -0.5f, -0.5f, 0.0f, 0.5f, 1.0f, 1.5f, 2.0f,
                     2.5f, 3.0f, 3.0f, 2.5f, 2.0f, 2.0f, 2.5f, 3.0f,
                     3.5f, 4.0f, 3.5f, 3.0f, 2.5f, 2.0f, 1.5f, 1.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+                ).copyInto(curve)
             }
             "Jazz" -> {
-                preampDb = -1.0f
-                val curve = floatArrayOf(
+                newPreamp = -1.0f
+                floatArrayOf(
                     1.5f, 2.0f, 2.0f, 1.5f, 1.0f, 0.5f, 0.0f, 0.0f,
                     0.5f, 1.0f, 1.5f, 2.0f, 2.0f, 1.5f, 1.0f, 1.0f,
                     1.5f, 2.0f, 2.5f, 2.0f, 1.5f, 1.5f, 2.0f, 2.5f,
                     3.0f, 3.0f, 2.5f, 2.0f, 1.5f, 1.0f, 0.5f, 0.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+                ).copyInto(curve)
             }
             "Classical" -> {
-                preampDb = 0.0f
-                val curve = floatArrayOf(
+                newPreamp = 0.0f
+                floatArrayOf(
                     2.0f, 2.0f, 1.5f, 1.0f, 0.5f, 0.0f, 0.0f, 0.0f,
                     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, 1.0f,
                     1.5f, 1.5f, 1.5f, 1.0f, 1.0f, 1.5f, 2.0f, 2.5f,
                     2.5f, 2.5f, 2.0f, 1.5f, 1.0f, 0.5f, 0.0f, 0.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+                ).copyInto(curve)
             }
             "Metal" -> {
-                preampDb = -2.0f
-                val curve = floatArrayOf(
+                newPreamp = -2.0f
+                floatArrayOf(
                     5.0f, 5.0f, 4.5f, 4.0f, 3.0f, 2.0f, 0.5f, -1.0f,
                     -2.0f, -2.5f, -3.0f, -2.5f, -2.0f, -1.0f, 0.0f, 1.0f,
                     1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f, 4.5f, 5.0f,
                     5.5f, 5.5f, 5.0f, 4.5f, 4.0f, 3.0f, 2.0f, 1.0f
-                )
-                System.arraycopy(curve, 0, bandGains, 0, minOf(curve.size, BAND_COUNT))
+                ).copyInto(curve)
             }
+            else -> { newPreamp = 0f } // Studio Master, Flat y desconocidos = plano
         }
-        syncToDsp()
+
+        // Aplicación atómica: un solo write a cada backing field
+        preampDb = newPreamp.coerceIn(-12f, 12f)
+        for (i in 0 until BAND_COUNT) {
+            bandGains[i] = curve[i].coerceIn(-12f, 12f)
+        }
+        // El setter de preampDb ya hizo setPreamp, solo falta bandas
+        try { dsp?.setAllBands(bandGains.toList()) } catch (_: Exception) {}
     }
 
     fun toEqPreset(
@@ -188,7 +173,7 @@ class EqualizerProcessor(
         bassBoostEnabled: Boolean = true,
         bassBoostFreq: Float = 85.0f,
         bassBoostGain: Float = 4.0f,
-        color: Int = EqPreset.generateRandomColor()
+        color: Int = 0xFF00E5FF.toInt()
     ): EqPreset {
         return EqPreset(
             name = name,
@@ -196,14 +181,14 @@ class EqualizerProcessor(
             bandGains = bandGains.toList(),
             isCustom = isCustom,
             bassBoostEnabled = bassBoostEnabled,
-            bassBoostFreq = bassBoostFreq,
-            bassBoostGain = bassBoostGain,
+            bassBoostFreq = bassBoostFreq.coerceIn(20f, 500f),
+            bassBoostGain = bassBoostGain.coerceIn(0f, 12f),
             color = color
         )
     }
 
     fun loadFromPreset(preset: EqPreset) {
-        preampDb = preset.preampDb
+        preampDb = preset.preampDb.coerceIn(-12f, 12f)
         setAllBands(preset.bandGains)
     }
 }

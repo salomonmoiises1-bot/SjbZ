@@ -17,18 +17,11 @@ import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
 import com.sjbz.aimp.audio.SjbzAudioEngine
 
-/**
- * GlobalAudioService — Foreground service para procesado system-wide.
- *
- * Session 0 (mezcla global) + sesiones dinámicas de terceros.
- * Usa [SjbzAudioEngine] como única fuente de DSP para evitar motores fantasmas.
- */
 class GlobalAudioService : Service() {
 
     companion object {
         const val CHANNEL_ID = "sjbz_global_audio_channel"
         const val NOTIFICATION_ID = 2836
-
         const val ACTION_START = "com.sjbz.aimp.ACTION_START_GLOBAL_AUDIO"
         const val ACTION_STOP = "com.sjbz.aimp.ACTION_STOP_GLOBAL_AUDIO"
         const val ACTION_TOGGLE = "com.sjbz.aimp.ACTION_TOGGLE_GLOBAL_AUDIO"
@@ -38,12 +31,10 @@ class GlobalAudioService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
             else context.startService(intent)
         }
-
         fun stop(context: Context) {
             val intent = Intent(context, GlobalAudioService::class.java).apply { action = ACTION_STOP }
             context.startService(intent)
         }
-
         fun toggle(context: Context) {
             val intent = Intent(context, GlobalAudioService::class.java).apply { action = ACTION_TOGGLE }
             context.startService(intent)
@@ -59,7 +50,6 @@ class GlobalAudioService : Service() {
         SjbzAudioEngine.ensureInitialized()
         audioSessionManager = GlobalAudioSessionManager.getInstance(this)
         createNotificationChannel()
-
         val prev = audioSessionManager.onProfileChangedListener
         audioSessionManager.onProfileChangedListener = { profile ->
             prev?.invoke(profile)
@@ -77,7 +67,7 @@ class GlobalAudioService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_TOGGLE -> {
-                val newState =!audioSessionManager.isGlobalAudioEnabled
+                val newState = !audioSessionManager.isGlobalAudioEnabled
                 audioSessionManager.setGlobalAudioEnabled(newState)
                 SjbzAudioEngine.setMasterEnabled(newState)
                 if (newState) startForegroundServiceWithNotification()
@@ -90,10 +80,12 @@ class GlobalAudioService : Service() {
             ACTION_START, null -> {
                 audioSessionManager.setGlobalAudioEnabled(true)
                 SjbzAudioEngine.setMasterEnabled(true)
-                // Re-sincroniza MDRC por si EqActivity lo cambió mientras el servicio estaba muerto
                 val p = audioSessionManager.currentProfile
                 SjbzAudioEngine.syncMdrcFromGlobal(
-                    p.mdrcEnabled, p.mdrcGains, p.mdrcThresholdDb, p.mdrcRatio
+                    p.mdrcEnabled,
+                    p.mdrcGains.toFloatArray(),
+                    -14f,
+                    3f
                 )
                 startForegroundServiceWithNotification()
             }
@@ -101,10 +93,7 @@ class GlobalAudioService : Service() {
         return START_STICKY
     }
 
-    override fun onDestroy() {
-        // No apagamos el motor acá: EqActivity puede seguir usándolo en foreground
-        super.onDestroy()
-    }
+    override fun onDestroy() { super.onDestroy() }
 
     private fun startForegroundServiceWithNotification() {
         val cur = audioSessionManager.currentProfile
@@ -134,7 +123,7 @@ class GlobalAudioService : Service() {
                 setShowBadge(false)
             }
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-               .createNotificationChannel(ch)
+                .createNotificationChannel(ch)
         }
     }
 
@@ -144,33 +133,29 @@ class GlobalAudioService : Service() {
         }
         val pOpen = PendingIntent.getActivity(this, 1, openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
         val eqIntent = Intent(this, EqActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val pEq = PendingIntent.getActivity(this, 3, eqIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
         val stopIntent = Intent(this, GlobalAudioService::class.java).apply { action = ACTION_STOP }
         val pStop = PendingIntent.getService(this, 2, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val flags = buildString {
+        val flagsStr = buildString {
             if (audioSessionManager.isLimiterEnabled) append(" • Limiter")
             if (audioSessionManager.isAutoGainEnabled) append(" • AutoGain")
             if (audioSessionManager.currentProfile.mdrcEnabled) append(" • MDRC")
         }
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
-           .setSmallIcon(R.drawable.ic_equalizer)
-           .setContentTitle("SB-Z Global DSP Activo")
-           .setContentText("$appName ($presetName)$flags")
-           .setSubText("Session 0 — mezcla global")
-           .setContentIntent(pOpen)
-           .addAction(R.drawable.ic_equalizer, "Ecualizador", pEq)
-           .addAction(R.drawable.ic_stop, "Detener", pStop)
-           .setOngoing(true)
-           .setPriority(NotificationCompat.PRIORITY_LOW)
-           .build()
+            .setSmallIcon(R.drawable.ic_equalizer)
+            .setContentTitle("SB-Z Global DSP Activo")
+            .setContentText("$appName ($presetName)$flagsStr")
+            .setSubText("Session 0 — mezcla global")
+            .setContentIntent(pOpen)
+            .addAction(R.drawable.ic_equalizer, "Ecualizador", pEq)
+            .addAction(R.drawable.ic_stop, "Detener", pStop)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
     }
 }

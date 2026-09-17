@@ -33,97 +33,143 @@ class GlobalAudioService : Service() {
         }
         fun stop(context: Context) {
             val intent = Intent(context, GlobalAudioService::class.java).apply { action = ACTION_STOP }
-            context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                else context.startService(intent)
+            } catch (_: Exception) {
+                try { context.startService(intent) } catch (_: Exception) {}
+            }
         }
         fun toggle(context: Context) {
             val intent = Intent(context, GlobalAudioService::class.java).apply { action = ACTION_TOGGLE }
-            context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                else context.startService(intent)
+            } catch (_: Exception) {}
         }
     }
 
     private lateinit var audioSessionManager: GlobalAudioSessionManager
+    private var prevProfileListener: ((com.sjbz.aimp.model.AppProfile) -> Unit)? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        SjbzAudioEngine.ensureInitialized()
+        try { SjbzAudioEngine.ensureInitialized() } catch (_: Exception) {}
         audioSessionManager = GlobalAudioSessionManager.getInstance(this)
         createNotificationChannel()
-        val prev = audioSessionManager.onProfileChangedListener
+        prevProfileListener = audioSessionManager.onProfileChangedListener
         audioSessionManager.onProfileChangedListener = { profile ->
-            prev?.invoke(profile)
-            updateNotification(profile.appName, profile.presetName)
+            try { prevProfileListener?.invoke(profile) } catch (_: Exception) {}
+            try {
+                val appName = try { profile.appName } catch (_: Exception) { "Global" }
+                val presetName = try { profile.presetName } catch (_: Exception) { "Studio" }
+                updateNotification(appName, presetName)
+            } catch (_: Exception) {}
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        try { SjbzAudioEngine.ensureInitialized() } catch (_: Exception) {}
+        if (!::audioSessionManager.isInitialized) {
+            audioSessionManager = GlobalAudioSessionManager.getInstance(this)
+        }
         when (intent?.action) {
             ACTION_STOP -> {
-                audioSessionManager.setGlobalAudioEnabled(false)
-                SjbzAudioEngine.setMasterEnabled(false)
-                stopForeground(STOP_FOREGROUND_REMOVE)
+                try {
+                    audioSessionManager.setGlobalAudioEnabled(false)
+                    SjbzAudioEngine.setMasterEnabled(false)
+                } catch (_: Exception) {}
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+                    else @Suppress("DEPRECATION") stopForeground(true)
+                } catch (_: Exception) {}
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_TOGGLE -> {
-                val newState = !audioSessionManager.isGlobalAudioEnabled
-                audioSessionManager.setGlobalAudioEnabled(newState)
-                SjbzAudioEngine.setMasterEnabled(newState)
-                if (newState) startForegroundServiceWithNotification()
-                else {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
+                val newState = try { !audioSessionManager.isGlobalAudioEnabled } catch (_: Exception) { false }
+                try {
+                    audioSessionManager.setGlobalAudioEnabled(newState)
+                    SjbzAudioEngine.setMasterEnabled(newState)
+                } catch (_: Exception) {}
+                if (newState) {
+                    startForegroundServiceWithNotification()
+                } else {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+                        else @Suppress("DEPRECATION") stopForeground(true)
+                    } catch (_: Exception) {}
                     stopSelf()
                     return START_NOT_STICKY
                 }
             }
             ACTION_START, null -> {
-                audioSessionManager.setGlobalAudioEnabled(true)
-                SjbzAudioEngine.setMasterEnabled(true)
-                val p = audioSessionManager.currentProfile
-                SjbzAudioEngine.syncMdrcFromGlobal(
-                    p.mdrcEnabled,
-                    p.mdrcGains.toFloatArray(),
-                    -14f,
-                    3f
-                )
+                try {
+                    audioSessionManager.setGlobalAudioEnabled(true)
+                    SjbzAudioEngine.setMasterEnabled(true)
+                    val p = audioSessionManager.currentProfile
+                    val gains = try { p.mdrcGains.toFloatArray() } catch (_: Exception) { FloatArray(5) }
+                    val mdrcEn = try { p.mdrcEnabled } catch (_: Exception) { true }
+                    SjbzAudioEngine.syncMdrcFromGlobal(mdrcEn, gains, -14f, 3f)
+                } catch (_: Exception) {}
                 startForegroundServiceWithNotification()
             }
         }
         return START_STICKY
     }
 
-    override fun onDestroy() { super.onDestroy() }
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+    }
+
+    override fun onDestroy() {
+        try {
+            audioSessionManager.onProfileChangedListener = prevProfileListener
+        } catch (_: Exception) {}
+        super.onDestroy()
+    }
 
     private fun startForegroundServiceWithNotification() {
-        val cur = audioSessionManager.currentProfile
-        val n = buildNotification(cur.appName, cur.presetName)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(NOTIFICATION_ID, n)
+        val cur = try { audioSessionManager.currentProfile } catch (_: Exception) { null }
+        val appName = try { cur?.appName ?: "Global" } catch (_: Exception) { "Global" }
+        val presetName = try { cur?.presetName ?: "Studio" } catch (_: Exception) { "Studio" }
+        val n = buildNotification(appName, presetName)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(NOTIFICATION_ID, n)
+            }
+        } catch (_: Exception) {
+            try { startForeground(NOTIFICATION_ID, n) } catch (_: Exception) {}
         }
     }
 
     private fun updateNotification(appName: String, presetName: String) {
-        if (audioSessionManager.isGlobalAudioEnabled) {
-            val m = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            m.notify(NOTIFICATION_ID, buildNotification(appName, presetName))
-        }
+        try {
+            if (audioSessionManager.isGlobalAudioEnabled) {
+                val m = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                m.notify(NOTIFICATION_ID, buildNotification(appName, presetName))
+            }
+        } catch (_: Exception) {}
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(
-                CHANNEL_ID,
-                "SB-Z Ecualizador Global",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "32 bandas, Limiter, AutoGain, MDRC — Session 0"
-                setShowBadge(false)
-            }
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                .createNotificationChannel(ch)
+            try {
+                val ch = NotificationChannel(
+                    CHANNEL_ID,
+                    "SB-Z Ecualizador Global",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "32 bandas, Limiter, AutoGain, MDRC — Session 0"
+                    setShowBadge(false)
+                }
+                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                    .createNotificationChannel(ch)
+            } catch (_: Exception) {}
         }
     }
 
@@ -131,20 +177,28 @@ class GlobalAudioService : Service() {
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val pOpen = PendingIntent.getActivity(this, 1, openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pOpen = PendingIntent.getActivity(
+            this, 1, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val eqIntent = Intent(this, EqActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        val pEq = PendingIntent.getActivity(this, 3, eqIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pEq = PendingIntent.getActivity(
+            this, 3, eqIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val stopIntent = Intent(this, GlobalAudioService::class.java).apply { action = ACTION_STOP }
-        val pStop = PendingIntent.getService(this, 2, stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pStop = PendingIntent.getService(
+            this, 2, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val flagsStr = buildString {
-            if (audioSessionManager.isLimiterEnabled) append(" • Limiter")
-            if (audioSessionManager.isAutoGainEnabled) append(" • AutoGain")
-            if (audioSessionManager.currentProfile.mdrcEnabled) append(" • MDRC")
+            try {
+                if (audioSessionManager.isLimiterEnabled) append(" • Limiter")
+                if (audioSessionManager.isAutoGainEnabled) append(" • AutoGain")
+                if (audioSessionManager.currentProfile.mdrcEnabled) append(" • MDRC")
+            } catch (_: Exception) {}
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_equalizer)
@@ -156,6 +210,7 @@ class GlobalAudioService : Service() {
             .addAction(R.drawable.ic_stop, "Detener", pStop)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
 }

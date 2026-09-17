@@ -18,6 +18,11 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "sbz_audio_settings")
 
+/**
+ * AudioSettingsDataStore: Manages asynchronous, persistent audio parameters using Jetpack DataStore.
+ * Ensures all EQ bands, Q ratios, Limiter thresholds, AutoGain parameters, and Per-App profiles
+ * survive device reboots without loss.
+ */
 class AudioSettingsDataStore(private val context: Context) {
 
     private val gson = Gson()
@@ -76,13 +81,13 @@ class AudioSettingsDataStore(private val context: Context) {
     }
 
     suspend fun saveGlobalGain(gainDb: Float) {
-        context.dataStore.edit { it[KEY_GLOBAL_GAIN] = gainDb.coerceIn(-12f, 12f) }
+        context.dataStore.edit { it[KEY_GLOBAL_GAIN] = gainDb }
     }
 
     suspend fun saveLimiter(enabled: Boolean, thresholdDb: Float) {
         context.dataStore.edit {
             it[KEY_LIMITER_ENABLED] = enabled
-            it[KEY_LIMITER_THRESHOLD] = thresholdDb.coerceIn(-12f, 0f)
+            it[KEY_LIMITER_THRESHOLD] = thresholdDb
         }
     }
 
@@ -95,47 +100,41 @@ class AudioSettingsDataStore(private val context: Context) {
 
     suspend fun saveBassAndVirtualizer(bassDb: Float, bassFreq: Float, virtualizer: Int) {
         context.dataStore.edit {
-            it[KEY_BASS_BOOST_DB] = bassDb.coerceIn(0f, 12f)
-            it[KEY_BASS_FREQ_HZ] = bassFreq.coerceIn(20f, 200f)
-            it[KEY_VIRTUALIZER_STRENGTH] = virtualizer.coerceIn(0, 100)
+            it[KEY_BASS_BOOST_DB] = bassDb
+            it[KEY_BASS_FREQ_HZ] = bassFreq
+            it[KEY_VIRTUALIZER_STRENGTH] = virtualizer
         }
     }
 
     suspend fun saveBands(gains: FloatArray, qs: FloatArray) {
-        val safeGains = if (gains.size == 32) gains.map { it.coerceIn(-12f, 12f) } else List(32) { 0f }
-        val safeQs = if (qs.size == 32) qs.map { it.coerceIn(0.5f, 4f) } else List(32) { 1.414f }
+        val gainsList = gains.toList()
+        val qsList = qs.toList()
         context.dataStore.edit {
-            it[KEY_BAND_GAINS_JSON] = gson.toJson(safeGains)
-            it[KEY_BAND_QS_JSON] = gson.toJson(safeQs)
+            it[KEY_BAND_GAINS_JSON] = gson.toJson(gainsList)
+            it[KEY_BAND_QS_JSON] = gson.toJson(qsList)
         }
     }
 
     suspend fun loadBands(): Pair<FloatArray, FloatArray> {
-        return try {
-            val prefs = context.dataStore.data.first()
-            val gainsJson = prefs[KEY_BAND_GAINS_JSON]
-            val qsJson = prefs[KEY_BAND_QS_JSON]
+        val prefs = context.dataStore.data.first()
+        val gainsJson = prefs[KEY_BAND_GAINS_JSON]
+        val qsJson = prefs[KEY_BAND_QS_JSON]
 
-            val gains = if (!gainsJson.isNullOrEmpty()) {
-                val list: List<Float> = gson.fromJson(gainsJson, object : TypeToken<List<Float>>() {}.type)
-                if (list.size != 32) FloatArray(32) { 0f }
-                else list.map { it.coerceIn(-12f, 12f) }.toFloatArray()
-            } else {
-                FloatArray(32) { 0f }
-            }
-
-            val qs = if (!qsJson.isNullOrEmpty()) {
-                val list: List<Float> = gson.fromJson(qsJson, object : TypeToken<List<Float>>() {}.type)
-                if (list.size != 32) FloatArray(32) { 1.414f }
-                else list.map { it.coerceIn(0.5f, 4f) }.toFloatArray()
-            } else {
-                FloatArray(32) { 1.414f }
-            }
-
-            Pair(gains, qs)
-        } catch (e: Exception) {
-            Pair(FloatArray(32) { 0f }, FloatArray(32) { 1.414f })
+        val gains = if (!gainsJson.isNullOrEmpty()) {
+            val list: List<Float> = gson.fromJson(gainsJson, object : TypeToken<List<Float>>() {}.type)
+            list.toFloatArray()
+        } else {
+            FloatArray(32) { 0f }
         }
+
+        val qs = if (!qsJson.isNullOrEmpty()) {
+            val list: List<Float> = gson.fromJson(qsJson, object : TypeToken<List<Float>>() {}.type)
+            list.toFloatArray()
+        } else {
+            FloatArray(32) { 1.414f }
+        }
+
+        return Pair(gains, qs)
     }
 
     suspend fun saveProfiles(profiles: List<AppProfile>) {
@@ -144,15 +143,15 @@ class AudioSettingsDataStore(private val context: Context) {
     }
 
     suspend fun loadProfiles(): List<AppProfile> {
-        return try {
-            val prefs = context.dataStore.data.first()
-            val json = prefs[KEY_PROFILES_JSON]
-            if (!json.isNullOrEmpty()) {
+        val prefs = context.dataStore.data.first()
+        val json = prefs[KEY_PROFILES_JSON]
+        return if (!json.isNullOrEmpty()) {
+            try {
                 gson.fromJson(json, object : TypeToken<List<AppProfile>>() {}.type)
-            } else {
+            } catch (e: Exception) {
                 AppProfile.createDefaultProfiles()
             }
-        } catch (e: Exception) {
+        } else {
             AppProfile.createDefaultProfiles()
         }
     }

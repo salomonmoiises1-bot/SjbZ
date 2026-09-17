@@ -26,6 +26,31 @@ class ATS2835PEngine(
             dspProcessor.masterEnabled = value
         }
 
+    var enabled: Boolean
+        get() = dspProcessor.enabled
+        set(value) {
+            dspProcessor.enabled = value
+        }
+
+    // Audio pipeline bridge
+    fun configure(sampleRate: Float) {
+        dspProcessor.configure(sampleRate)
+    }
+
+    fun reset() {
+        dspProcessor.reset()
+    }
+
+    fun processFloats(samples: FloatArray, offset: Int, length: Int, channelCount: Int) {
+        dspProcessor.processFloats(samples, offset, length, channelCount)
+    }
+
+    var fftListener: ((FloatArray) -> Unit)?
+        get() = dspProcessor.fftListener
+        set(value) {
+            dspProcessor.fftListener = value
+        }
+
     fun setPreamp(gainDb: Float) {
         dspProcessor.setPreamp(gainDb)
     }
@@ -46,6 +71,10 @@ class ATS2835PEngine(
 
     fun getBandGain(bandIndex: Int): Float {
         return dspProcessor.getBandGain(bandIndex)
+    }
+
+    fun setAllBands(gains: List<Float>) {
+        dspProcessor.setAllBands(gains)
     }
 
     fun setEmulationEnabled(enabled: Boolean) {

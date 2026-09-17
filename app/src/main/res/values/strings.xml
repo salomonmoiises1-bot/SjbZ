@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SB-Z</string>
-    <string name="app_full_name">SB-Z Studio Audio Player</string>
+    <string name="app_full_name">SB-Z Ecualizador Global del Sistema</string>
     <string name="title_equalizer">Ecualizador SB-Z 32 Bandas</string>
-    <string name="hint_search_music">Buscar canciones, artistas en SB-Z...</string>
-    <string name="drawer_playlists">Playlists</string>
-    <string name="drawer_favorites">Favoritos</string>
-    <string name="drawer_history">Historial</string>
-    <string name="drawer_folders">Carpetas</string>
+    <string name="hint_search_music">Buscar presets o perfiles...</string>
+    <string name="drawer_playlists">Perfiles por Aplicación</string>
+    <string name="drawer_favorites">Presets Guardados</string>
+    <string name="drawer_history">Ajustes del Sistema</string>
+    <string name="drawer_folders">Hardware DSP &amp; Emulación</string>
     <string name="btn_save">Guardar</string>
     <string name="btn_load">Cargar</string>
     <string name="btn_delete">Borrar</string>
     <string name="btn_export">Exportar .sjbz</string>
     <string name="btn_import">Importar .sjbz</string>
-    <string name="ats2835p_dsp_label">SB-Z Studio 32-Band Pro DSP</string>
+    <string name="ats2835p_dsp_label">SB-Z Global DSP 32-Band</string>
     <string name="bass_boost_60">60 Hz (Sub)</string>
     <string name="bass_boost_85">85 Hz (Punch)</string>
     <string name="bass_boost_120">120 Hz (Mid)</string>

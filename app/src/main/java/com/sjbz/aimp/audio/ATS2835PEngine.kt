@@ -1,9 +1,11 @@
 package com.sjbz.aimp.audio
 
 import android.content.Context
+import com.sjbz.aimp.service.GlobalAudioService
 
 typealias ATSEngine = ATS2835PEngine
 typealias StudioDspEngine = ATS2835PEngine
+typealias SjbzAudioEngine = ATS2835PEngine
 
 /**
  * SjbZ Studio Audio Engine Bridge.
@@ -26,30 +28,18 @@ class ATS2835PEngine(
             dspProcessor.masterEnabled = value
         }
 
-    var enabled: Boolean
-        get() = dspProcessor.enabled
+    // Automatic bypass: If GlobalAudioService is active, SjbzAudioEngine must enter automatic bypass
+    var isGlobalBypass: Boolean
+        get() = dspProcessor.isGlobalBypass
         set(value) {
-            dspProcessor.enabled = value
+            dspProcessor.isGlobalBypass = value
         }
 
-    // Audio pipeline bridge
-    fun configure(sampleRate: Float) {
-        dspProcessor.configure(sampleRate)
+    fun updateGlobalBypassStatus(context: Context?) {
+        val isGlobalRunning = GlobalAudioService.isServiceRunning ||
+            (context != null && GlobalAudioSessionManager.getInstance(context).isGlobalAudioEnabled)
+        dspProcessor.isGlobalBypass = isGlobalRunning
     }
-
-    fun reset() {
-        dspProcessor.reset()
-    }
-
-    fun processFloats(samples: FloatArray, offset: Int, length: Int, channelCount: Int) {
-        dspProcessor.processFloats(samples, offset, length, channelCount)
-    }
-
-    var fftListener: ((FloatArray) -> Unit)?
-        get() = dspProcessor.fftListener
-        set(value) {
-            dspProcessor.fftListener = value
-        }
 
     fun setPreamp(gainDb: Float) {
         dspProcessor.setPreamp(gainDb)
@@ -57,6 +47,26 @@ class ATS2835PEngine(
 
     fun getPreamp(): Float = dspProcessor.getPreamp()
 
+    // Independent Pre-Gains (Pre-EQ: Bass 200Hz, Mid 1kHz, Treble 6kHz)
+    fun setBassGain(gainDb: Float) {
+        dspProcessor.setBassGain(gainDb)
+    }
+
+    fun getBassGain(): Float = dspProcessor.getBassGain()
+
+    fun setMidGain(gainDb: Float) {
+        dspProcessor.setMidGain(gainDb)
+    }
+
+    fun getMidGain(): Float = dspProcessor.getMidGain()
+
+    fun setTrebleGain(gainDb: Float) {
+        dspProcessor.setTrebleGain(gainDb)
+    }
+
+    fun getTrebleGain(): Float = dspProcessor.getTrebleGain()
+
+    // Bass Boost Low-Shelf
     fun setBassBoost(enabled: Boolean, freqHz: Float, gainDb: Float) {
         dspProcessor.setBassBoost(enabled, freqHz, gainDb)
     }
@@ -65,6 +75,7 @@ class ATS2835PEngine(
     fun getBassBoostFreq(): Float = dspProcessor.getBassBoostFreq()
     fun getBassBoostGain(): Float = dspProcessor.getBassBoostGain()
 
+    // 32-Band EQ
     fun setBandGain(bandIndex: Int, gainDb: Float) {
         dspProcessor.setBandGain(bandIndex, gainDb)
     }
@@ -73,10 +84,7 @@ class ATS2835PEngine(
         return dspProcessor.getBandGain(bandIndex)
     }
 
-    fun setAllBands(gains: List<Float>) {
-        dspProcessor.setAllBands(gains)
-    }
-
+    // ATS2835P Hardware Emulation
     fun setEmulationEnabled(enabled: Boolean) {
         dspProcessor.setEmulationEnabled(enabled)
     }

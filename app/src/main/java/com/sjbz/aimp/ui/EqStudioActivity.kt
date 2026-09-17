@@ -3,7 +3,6 @@ package com.sjbz.aimp.ui
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -21,6 +20,13 @@ class EqStudioActivity : AppCompatActivity() {
         "800", "1k", "1.25k", "1.6k", "2k", "2.5k", "3.15k", "4k",
         "5k", "6.3k", "8k", "10k", "12.5k", "16k", "20k", "22k"
     )
+
+    // Listas para almacenar las referencias de los SeekBars y Textos de las 32 bandas
+    private val faderSeekBars = ArrayList<SeekBar>()
+    private val faderGainTexts = ArrayList<TextView>()
+
+    // Array para almacenar los valores actuales en dB de cada banda (-12.0 a +12.0 dB)
+    val bandGains = FloatArray(32) { 0.0f }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,6 +121,8 @@ class EqStudioActivity : AppCompatActivity() {
     private fun setup32BandFaders() {
         val container = binding.llFadersContainer
         container.removeAllViews()
+        faderSeekBars.clear()
+        faderGainTexts.clear()
 
         for (i in isoFrequencies.indices) {
             val faderView = LayoutInflater.from(this).inflate(R.layout.item_eq_fader_vertical, container, false)
@@ -126,12 +134,20 @@ class EqStudioActivity : AppCompatActivity() {
             tvFreq.text = isoFrequencies[i]
             tvGain.text = "0.0"
             seekBar.max = 240
-            seekBar.progress = 120 // 0 dB
+            seekBar.progress = 120 // 0 dB central
+
+            faderSeekBars.add(seekBar)
+            faderGainTexts.add(tvGain)
 
             seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val dbValue = (progress - 120) / 10.0
+                    val dbValue = (progress - 120) / 10.0f
+                    bandGains[i] = dbValue
                     tvGain.text = String.format("%.1f", dbValue)
+                    
+                    if (fromUser) {
+                        // TODO: Enviar cambio al motor DSP de la banda [i]
+                    }
                 }
                 override fun onStartTrackingTouch(sb: SeekBar?) {
                     sb?.parent?.parent?.requestDisallowInterceptTouchEvent(true)
@@ -145,11 +161,7 @@ class EqStudioActivity : AppCompatActivity() {
         }
 
         binding.btnResetEq.setOnClickListener {
-            for (i in 0 until container.childCount) {
-                val child = container.getChildAt(i)
-                val sb = child.findViewById<SeekBar>(R.id.verticalSeekBar)
-                sb?.progress = 120
-            }
+            applyPreset(FloatArray(32) { 0.0f })
         }
     }
 
@@ -184,7 +196,7 @@ class EqStudioActivity : AppCompatActivity() {
         })
 
         binding.seekMdrcRatio.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb:SeekBar?, progress: Int, fromUser: Boolean) {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 val ratio = 1.0 + (progress / 10.0)
                 binding.tvMdrcRatioValue.text = String.format("Ratio: %.1f:1", ratio)
             }
@@ -194,12 +206,52 @@ class EqStudioActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // 6. PRESETS Y GESTIÓN RÁPIDA
+    // 6. PRESETS PROFESIONALES Y GESTIÓN RÁPIDA
     // =========================================================================
     private fun setupPresetControls() {
-        binding.btnPresetFlat.setOnClickListener { binding.btnResetEq.performClick() }
-        binding.btnPresetBass.setOnClickListener { /* Preset Bass */ }
-        binding.btnPresetRock.setOnClickListener { /* Preset Rock */ }
-        binding.btnPresetVocal.setOnClickListener { /* Preset Vocal */ }
+        binding.btnPresetFlat.setOnClickListener {
+            applyPreset(FloatArray(32) { 0.0f })
+        }
+
+        binding.btnPresetBass.setOnClickListener {
+            val bassPreset = floatArrayOf(
+                6.5f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f,
+                0.5f, 0.0f, -0.5f, -1.0f, -1.0f, -0.5f, 0.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 0.0f, 0.5f, 1.0f, 1.5f, 2.0f,
+                2.5f, 3.0f, 3.5f, 4.0f, 4.0f, 3.5f, 2.5f, 1.0f
+            )
+            applyPreset(bassPreset)
+        }
+
+        binding.btnPresetRock.setOnClickListener {
+            val rockPreset = floatArrayOf(
+                4.0f, 3.5f, 3.0f, 2.5f, 1.5f, 0.5f, -1.0f, -2.0f,
+                -1.5f, -0.5f, 0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 2.5f,
+                3.0f, 3.5f, 4.0f, 4.5f, 4.5f, 4.0f, 3.5f, 3.0f,
+                3.5f, 4.0f, 4.5f, 5.0f, 5.0f, 4.5f, 3.5f, 2.0f
+            )
+            applyPreset(rockPreset)
+        }
+
+        binding.btnPresetVocal.setOnClickListener {
+            val vocalPreset = floatArrayOf(
+                -2.0f, -2.0f, -1.5f, -1.0f, -0.5f, 0.0f, 0.0f, 0.5f,
+                1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f, 4.5f, 5.0f,
+                5.5f, 5.5f, 5.0f, 4.5f, 3.5f, 2.5f, 1.5f, 1.0f,
+                0.5f, 0.0f, -0.5f, -1.0f, -1.5f, -2.0f, -2.5f, -3.0f
+            )
+            applyPreset(vocalPreset)
+        }
+    }
+
+    private fun applyPreset(gains: FloatArray) {
+        for (i in 0 until 32) {
+            if (i < faderSeekBars.size && i < gains.size) {
+                bandGains[i] = gains[i]
+                val progress = ((gains[i] * 10.0f) + 120.0f).toInt().coerceIn(0, 240)
+                faderSeekBars[i].progress = progress
+                faderGainTexts[i].text = String.format("%.1f", gains[i])
+            }
+        }
     }
 }

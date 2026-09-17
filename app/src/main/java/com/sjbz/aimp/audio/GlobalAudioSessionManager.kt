@@ -548,19 +548,29 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 }
 
 private fun DynamicsProcessing.setInputGainSafe(channelIndex: Int, gainDb: Float) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        try {
-            setInputGainByChannelIndex(channelIndex, gainDb)
-        } catch (_: Exception) {}
-    }
+    try {
+        javaClass.getMethod("setInputGainByChannelIndex", Int::class.javaPrimitiveType, Float::class.javaPrimitiveType)
+           .invoke(this, channelIndex, gainDb)
+    } catch (_: Exception) {}
 }
 
 private fun DynamicsProcessing.setPreEqBand(channelIndex: Int, bandIndex: Int, band: DynamicsProcessing.EqBand) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) setPreEqBandByChannelIndex(channelIndex, bandIndex, band)
+    try {
+        javaClass.getMethod("setPreEqBandByChannelIndex", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, DynamicsProcessing.EqBand::class.java)
+           .invoke(this, channelIndex, bandIndex, band)
+    } catch (_: Exception) {}
 }
+
 private fun DynamicsProcessing.setMbcBand(channelIndex: Int, bandIndex: Int, band: DynamicsProcessing.MbcBand) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) setMbcBandByChannelIndex(channelIndex, bandIndex, band)
+    try {
+        javaClass.getMethod("setMbcBandByChannelIndex", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, DynamicsProcessing.MbcBand::class.java)
+           .invoke(this, channelIndex, bandIndex, band)
+    } catch (_: Exception) {}
 }
+
 private fun DynamicsProcessing.setLimiter(channelIndex: Int, limiter: DynamicsProcessing.Limiter) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) setLimiterByChannelIndex(channelIndex, limiter)
+    try {
+        javaClass.getMethod("setLimiterByChannelIndex", Int::class.javaPrimitiveType, DynamicsProcessing.Limiter::class.java)
+           .invoke(this, channelIndex, limiter)
+    } catch (_: Exception) {}
 }

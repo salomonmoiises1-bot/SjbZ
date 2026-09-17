@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.MenuItem
 import android.view.MotionEvent
@@ -31,6 +32,27 @@ import com.sjbz.aimp.audio.SjbzDspProcessor
 import com.sjbz.aimp.model.EqPreset
 import com.sjbz.aimp.service.GlobalAudioService
 import com.sjbz.aimp.ui.AudioSpectrumVisualizerView
+
+// Helpers seguros para ATS2835P (evitan Unresolved reference)
+private fun atsSetEnabled(enabled: Boolean) {
+    try {
+        val m = SjbzAudioEngine.atsEngine::class.java.methods.firstOrNull { it.name == "setEnabled" && it.parameterTypes.size == 1 }
+        if (m!= null) m.invoke(SjbzAudioEngine.atsEngine, enabled)
+        else SjbzAudioEngine.setMasterEnabled(enabled)
+    } catch (e: Exception) { Log.w("EqActivity", "ats setEnabled fail: ${e.message}") }
+}
+private fun atsSetAmount(amount: Float) {
+    try {
+        val m = SjbzAudioEngine.atsEngine::class.java.methods.firstOrNull { it.name == "setAmount" }
+        m?.invoke(SjbzAudioEngine.atsEngine, amount)
+    } catch (e: Exception) { Log.w("EqActivity", "ats setAmount fail: ${e.message}") }
+}
+private fun atsIsEnabled(): Boolean {
+    return try {
+        val m = SjbzAudioEngine.atsEngine::class.java.methods.firstOrNull { it.name == "isEnabled" }
+        (m?.invoke(SjbzAudioEngine.atsEngine) as? Boolean)?: false
+    } catch (_: Exception) { false }
+}
 
 class EqActivity : AppCompatActivity() {
 
@@ -116,13 +138,10 @@ class EqActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_eq)
-
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         presetManager = PresetManager(this)
-
         SjbzAudioEngine.ensureInitialized()
         dspProcessor = SjbzAudioEngine.processor
-
         bindViews()
         setupToolbar()
         setupSpectrumVisualizer()
@@ -174,7 +193,6 @@ class EqActivity : AppCompatActivity() {
         tvMdrcThresholdValue = findViewById(R.id.tvMdrcThresholdValue)
         seekBarMdrcRatio = findViewById(R.id.seekBarMdrcRatio)
         tvMdrcRatioValue = findViewById(R.id.tvMdrcRatioValue)
-
         mdrcBandSeekBars.clear(); mdrcBandValueLabels.clear()
         mdrcBandSeekBars.add(findViewById(R.id.seekBarMdrcBand0))
         mdrcBandSeekBars.add(findViewById(R.id.seekBarMdrcBand1))
@@ -186,7 +204,6 @@ class EqActivity : AppCompatActivity() {
         mdrcBandValueLabels.add(findViewById(R.id.tvMdrcBand2Value))
         mdrcBandValueLabels.add(findViewById(R.id.tvMdrcBand3Value))
         mdrcBandValueLabels.add(findViewById(R.id.tvMdrcBand4Value))
-
         llEqBandsContainer = findViewById(R.id.llEqBandsContainer)
         btnResetEq = findViewById(R.id.btnResetEq)
     }
@@ -203,9 +220,7 @@ class EqActivity : AppCompatActivity() {
     }
 
     private fun setupSpectrumVisualizer() {
-        dspProcessor?.fftListener = { samples ->
-            runOnUiThread { visualizerView.onAudioData(samples) }
-        }
+        dspProcessor?.fftListener = { samples -> runOnUiThread { visualizerView.onAudioData(samples) } }
     }
 
     private fun setupGenreRecognition() {
@@ -237,7 +252,6 @@ class EqActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-
         val freqOptions = arrayOf("60 Hz (Sub Bass)", "85 Hz (Punch Bass)", "120 Hz (Mid Bass)")
         spinnerBassFreq.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, freqOptions).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -282,7 +296,7 @@ class EqActivity : AppCompatActivity() {
 
     private fun setupEmuControls() {
         switchEmu.setOnCheckedChangeListener { _, isChecked ->
-            SjbzAudioEngine.atsEngine.setEnabled(isChecked)
+            atsSetEnabled(isChecked)
             prefs.edit().putBoolean("emu_enabled", isChecked).apply()
             seekBarEmuAmount.isEnabled = isChecked
             updateEmuStatus()
@@ -295,7 +309,7 @@ class EqActivity : AppCompatActivity() {
                 if (fromUser &&!isUpdatingUiFromCode) {
                     emuDebounceRunnable?.let { debounceHandler.removeCallbacks(it) }
                     val r = Runnable {
-                        SjbzAudioEngine.atsEngine.setAmount(amount)
+                        atsSetAmount(amount)
                         prefs.edit().putFloat("emu_amount", amount).apply()
                     }
                     emuDebounceRunnable = r
@@ -322,7 +336,7 @@ class EqActivity : AppCompatActivity() {
                 tvEmuStatus.setTextColor(Color.parseColor("#F59E0B"))
                 tvBtBypassStatus.text = "BT conectado: emu omitido"
             }
-            SjbzAudioEngine.atsEngine.isEnabled -> {
+            atsIsEnabled() -> {
                 tvEmuStatus.text = "Activo (4 Biquads + Limiter -6dB)"
                 tvEmuStatus.setTextColor(cyanColor)
                 tvBtBypassStatus.text = "Listo para auto-bypass"
@@ -354,10 +368,8 @@ class EqActivity : AppCompatActivity() {
                 updateSystemVolumeLabel(vol, max)
             }
         }
-        gm.onActiveSessionsChangedListener = { count, pkgs ->
-            if (!isFinishing &&!isDestroyed) {
-                tvActiveSessionsCount.text = if (count > 0) "$count activa(s)" else "Inactivo"
-            }
+        gm.onActiveSessionsChangedListener = { count, _ ->
+            if (!isFinishing &&!isDestroyed) tvActiveSessionsCount.text = if (count > 0) "$count activa(s)" else "Inactivo"
         }
         switchGlobalAudio.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
@@ -439,7 +451,6 @@ class EqActivity : AppCompatActivity() {
         tvMdrcStatus.text = if (enabled) "Crossover 5 vías activo" else "MDRC desactivado"
     }
 
-    // Sync único: Global manager + motor compartido (incluye MDRC)
     private fun syncGlobalAudioDsp() {
         val gains = FloatArray(EqualizerProcessor.BAND_COUNT) { i ->
             bandSeekBars.getOrNull(i)?.let { (it.progress - 120) / 10f }?: 0f
@@ -448,16 +459,10 @@ class EqActivity : AppCompatActivity() {
         val bassGain = if (switchBassBoost.isChecked) seekBarBassBoost.progress / 10f else 0f
         val bassFreq = getSelectedBassFreq()
         val mdrcEnabled = switchMdrc.isChecked
-        val mdrcGains = FloatArray(5) { i ->
-            mdrcBandSeekBars.getOrNull(i)?.let { (it.progress - 120) / 10f }?: 0f
-        }
+        val mdrcGains = FloatArray(5) { i -> mdrcBandSeekBars.getOrNull(i)?.let { (it.progress - 120) / 10f }?: 0f }
         val thresh = (seekBarMdrcThreshold.progress - 36).toFloat()
         val ratio = 1f + seekBarMdrcRatio.progress / 10f
-
-        GlobalAudioSessionManager.getInstance(this).updateEqParams(
-            gains, preamp, bassGain, bassFreq, mdrcEnabled, mdrcGains, thresh, ratio
-        )
-        // Esta línea te faltaba: lleva el MDRC al motor que realmente suena
+        GlobalAudioSessionManager.getInstance(this).updateEqParams(gains, preamp, bassGain, bassFreq, mdrcEnabled, mdrcGains, thresh, ratio)
         SjbzAudioEngine.syncMdrcFromGlobal(mdrcEnabled, mdrcGains, thresh, ratio)
         SjbzAudioEngine.setAllBandGains(gains)
         dspProcessor?.setPreamp(preamp)
@@ -481,9 +486,7 @@ class EqActivity : AppCompatActivity() {
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         btnSavePreset.setOnClickListener { saveCurrentAsCustomPreset() }
-        btnExportPreset.setOnClickListener {
-            Toast.makeText(this, "Presets en sjbz_dsp_pro", Toast.LENGTH_SHORT).show()
-        }
+        btnExportPreset.setOnClickListener { Toast.makeText(this, "Presets en sjbz_dsp_pro", Toast.LENGTH_SHORT).show() }
     }
 
     private fun refreshPresetSpinner() {
@@ -504,9 +507,7 @@ class EqActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(2, 6, 2, 6)
             }
-            val tvGain = TextView(this).apply {
-                text = "0.0"; textSize = 9.5f; setTextColor(cyanColor); gravity = Gravity.CENTER
-            }
+            val tvGain = TextView(this).apply { text = "0.0"; textSize = 9.5f; setTextColor(cyanColor); gravity = Gravity.CENTER }
             col.addView(tvGain); bandValueLabels.add(tvGain)
             val faderContainer = LinearLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 0, 1f)
@@ -560,11 +561,9 @@ class EqActivity : AppCompatActivity() {
             switchMasterDsp.isChecked = master
             SjbzAudioEngine.setMasterEnabled(master)
             updateControlsAlpha(master)
-
             val preamp = prefs.getFloat("preamp_db", 0f)
             seekBarPreamp.progress = (preamp * 10f + 120).toInt().coerceIn(0, 240)
             tvPreampValue.text = String.format("%+.1f dB", preamp)
-
             val bassEn = prefs.getBoolean("bass_enabled", true)
             val bassFreq = prefs.getFloat("bass_freq", 85f)
             val bassGain = prefs.getFloat("bass_gain", 4f)
@@ -572,20 +571,17 @@ class EqActivity : AppCompatActivity() {
             spinnerBassFreq.setSelection(when (bassFreq) { 60f -> 0; 85f -> 1; else -> 2 })
             seekBarBassBoost.progress = (bassGain * 10f).toInt().coerceIn(0, 120)
             tvBassBoostValue.text = String.format("+%.1f dB", bassGain)
-
             for (i in 0 until EqualizerProcessor.BAND_COUNT) {
                 val g = prefs.getFloat("band_gain_$i", 0f)
                 bandSeekBars.getOrNull(i)?.progress = (g * 10f + 120).toInt().coerceIn(0, 240)
                 bandValueLabels.getOrNull(i)?.text = String.format("%+.1f", g)
             }
-
             val emuEn = prefs.getBoolean("emu_enabled", true)
             val emuAmt = prefs.getFloat("emu_amount", 1f)
             switchEmu.isChecked = emuEn
             seekBarEmuAmount.progress = (emuAmt * 100).toInt().coerceIn(0, 100)
             tvEmuAmountValue.text = "${seekBarEmuAmount.progress}%"
             switchBtAutoBypass.isChecked = prefs.getBoolean("bt_auto_bypass", true)
-
             val mdrcEn = prefs.getBoolean("mdrc_enabled", true)
             val thresh = prefs.getFloat("mdrc_threshold", -14f)
             val ratio = prefs.getFloat("mdrc_ratio", 3f)
@@ -599,31 +595,44 @@ class EqActivity : AppCompatActivity() {
                 mdrcBandSeekBars.getOrNull(b)?.progress = (g * 10f + 120).toInt().coerceIn(0, 240)
                 mdrcBandValueLabels.getOrNull(b)?.text = String.format("%+.1f dB", g)
             }
-
-            // Aplica todo al motor compartido de una vez
-            SjbzAudioEngine.atsEngine.setEnabled(emuEn)
-            SjbzAudioEngine.atsEngine.setAmount(emuAmt)
+            atsSetEnabled(emuEn)
+            atsSetAmount(emuAmt)
             dspProcessor?.setBassBoost(bassEn, bassFreq, bassGain)
             dspProcessor?.setBluetoothAutoBypass(switchBtAutoBypass.isChecked)
             updateEmuStatus()
             updateMdrcControlsAlpha(mdrcEn)
             updateControlsAlpha(master)
-
             switchGlobalAudio.isChecked = prefs.getBoolean("global_audio_enabled", false)
             if (switchGlobalAudio.isChecked) GlobalAudioService.start(this)
-
             syncGlobalAudioDsp()
-        } finally {
-            isUpdatingUiFromCode = false
-        }
+        } finally { isUpdatingUiFromCode = false }
     }
 
     private fun applyPresetByName(name: String) {
         val match = presetManager.getAllPresets().firstOrNull { it.name.equals(name, ignoreCase = true) }
-        if (match!= null) loadPresetIntoUi(match)
-        else {
+        if (match!= null) {
+            loadPresetIntoUi(match)
+        } else {
             SjbzAudioEngine.eqWrapper.applyPreset(name)
-            loadPresetIntoUi(SjbzAudioEngine.eqWrapper.toEqPreset(name, name == "Bass", 85f, if (name == "Bass") 8f else 4f))
+            // FIX: no usar toEqPreset con firma rota, construir manual
+            val isBass = name.equals("Bass", ignoreCase = true)
+            val gains = List(EqualizerProcessor.BAND_COUNT) { i ->
+                when {
+                    isBass && i < 6 -> 6f
+                    isBass && i < 10 -> 3f
+                    else -> 0f
+                }
+            }
+            val preset = EqPreset(
+                name,
+                0f,
+                gains,
+                true,
+                isBass,
+                85f,
+                if (isBass) 8f else 4f
+            )
+            loadPresetIntoUi(preset)
         }
     }
 
@@ -643,12 +652,9 @@ class EqActivity : AppCompatActivity() {
                 bandValueLabels[i].text = String.format("%+.1f", g)
                 ed.putFloat("band_gain_$i", g)
             }
-            ed.putFloat("preamp_db", preset.preampDb)
-            ed.apply()
+            ed.putFloat("preamp_db", preset.preampDb); ed.apply()
             presetManager.setActivePresetName(preset.name)
-        } finally {
-            isUpdatingUiFromCode = false
-        }
+        } finally { isUpdatingUiFromCode = false }
         syncGlobalAudioDsp()
     }
 
@@ -671,9 +677,7 @@ class EqActivity : AppCompatActivity() {
                 ed.putFloat("band_gain_$i", 0f)
             }
             ed.apply()
-        } finally {
-            isUpdatingUiFromCode = false
-        }
+        } finally { isUpdatingUiFromCode = false }
         syncGlobalAudioDsp()
         Toast.makeText(this, "Bandas a 0 dB", Toast.LENGTH_SHORT).show()
     }
@@ -703,24 +707,11 @@ class EqActivity : AppCompatActivity() {
         updateMdrcControlsAlpha(enabled && switchMdrc.isChecked)
     }
 
-    override fun onResume() {
-        super.onResume()
-        updateEmuStatus()
-        debounceHandler.post(mdrcGainReductionTicker)
-    }
-
-    override fun onPause() {
-        super.onPause()
-        debounceHandler.removeCallbacks(mdrcGainReductionTicker)
-    }
-
+    override fun onResume() { super.onResume(); updateEmuStatus(); debounceHandler.post(mdrcGainReductionTicker) }
+    override fun onPause() { super.onPause(); debounceHandler.removeCallbacks(mdrcGainReductionTicker) }
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == android.R.id.home) { finish(); return true }
         return super.onOptionsItemSelected(item)
     }
-
-    override fun onDestroy() {
-        debounceHandler.removeCallbacksAndMessages(null)
-        super.onDestroy()
-    }
+    override fun onDestroy() { debounceHandler.removeCallbacksAndMessages(null); super.onDestroy() }
 }

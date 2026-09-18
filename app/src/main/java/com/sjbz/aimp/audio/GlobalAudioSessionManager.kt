@@ -33,6 +33,13 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             }
         }
         @JvmStatic fun getDspProcessor(): SjbzDspProcessor = getDspProcessorInstance()
+
+        // Frecuencias de tus 32 bandas (Hz) - FIX para que compile
+        private val MY_32_BAND_FREQS = intArrayOf(
+            16, 20, 25, 31, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500,
+            630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000,
+            10000, 12500, 16000, 20000
+        )
     }
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -85,7 +92,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     @Volatile var ats2835pEmuAmount: Float = 0.8f
     @Volatile var ats2835pBtBypass: Boolean = false
 
-    // SISTEMA EQ - ESTO ES LO QUE CONTROLA SPOTIFY/YOUTUBE
     private var systemEq: Equalizer? = null
 
     var onSystemVolumeChangedListener: ((Int, Int) -> Unit)? = null
@@ -169,14 +175,12 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         mainHandler.post { onActiveSessionsChangedListener?.invoke(count, packages) }
     }
 
-    // ====== CONTROLES QUE AHORA SI TOCAN EL SISTEMA ======
     fun setMasterGain(gainDb: Float) {
         this.globalGainDb = gainDb
         dspProcessor.setMasterGain(gainDb)
         applyAllSettingsToSystemEq()
     }
     fun setGlobalGain(gainDb: Float) = setMasterGain(gainDb)
-
     fun setPreampGain(gainDb: Float) { this.preampDb = gainDb.coerceIn(-12f, 12f); dspProcessor.setPreamp(this.preampDb) }
 
     fun setBandGain(bandIndex: Int, gainDb: Float) {
@@ -282,7 +286,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         releaseAllSessions(); dspProcessor.resetFilterStates()
     }
 
-    // ====== FIX REAL SISTEMA ======
     fun attachSystemEqualizer(eq: Equalizer) {
         try { systemEq?.release() } catch (e: Exception) {}
         systemEq = eq
@@ -296,8 +299,8 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                 val centerFreqHz = eq.getCenterFreq(i.toShort()) / 1000
                 var closestIdx = 15
                 var minDiff = Int.MAX_VALUE
-                for (j in SjbzDspProcessor.BAND_FREQUENCIES_HZ.indices) {
-                    val diff = kotlin.math.abs(SjbzDspProcessor.BAND_FREQUENCIES_HZ[j] - centerFreqHz)
+                for (j in MY_32_BAND_FREQS.indices) {
+                    val diff = kotlin.math.abs(MY_32_BAND_FREQS[j] - centerFreqHz)
                     if (diff < minDiff) { minDiff = diff; closestIdx = j }
                 }
                 val totalGain = (bandGains[closestIdx] + globalGainDb).coerceIn(-15f, 15f)

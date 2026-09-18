@@ -3,6 +3,7 @@ package com.sjbz.aimp.audio
 import android.content.Context
 import android.database.ContentObserver
 import android.media.AudioManager
+import android.media.audiofx.Equalizer
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -26,13 +27,11 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                 instance?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
             }
         }
-        // RENOMBRADO para no chocar con la propiedad dspProcessor
         @JvmStatic fun getDspProcessorInstance(): SjbzDspProcessor {
             return globalDspProcessor?: synchronized(this) {
                 globalDspProcessor?: SjbzDspProcessor(48000.0f).also { globalDspProcessor = it }
             }
         }
-        // Alias compatibilidad
         @JvmStatic fun getDspProcessor(): SjbzDspProcessor = getDspProcessorInstance()
     }
 
@@ -41,11 +40,9 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     private val scope = CoroutineScope(Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // FIX: JvmName distinto para no chocar con getDspProcessor()
     @get:JvmName("getDspProcessorProperty")
     val dspProcessor: SjbzDspProcessor = getDspProcessorInstance()
 
-    // FIX: todos los 'isX' con JvmName distinto para poder tener setX() sin clash
     @get:JvmName("isGlobalAudioEnabledProp")
     @set:JvmName("setGlobalAudioEnabledProp")
     @Volatile var isGlobalAudioEnabled: Boolean = false
@@ -88,6 +85,9 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     @Volatile var ats2835pEmuAmount: Float = 0.8f
     @Volatile var ats2835pBtBypass: Boolean = false
 
+    // SISTEMA EQ - ESTO ES LO QUE CONTROLA SPOTIFY/YOUTUBE
+    private var systemEq: Equalizer? = null
+
     var onSystemVolumeChangedListener: ((Int, Int) -> Unit)? = null
     var onActiveSessionsChangedListener: ((Int, List<String>) -> Unit)? = null
     var onProfileChangedListener: ((AppProfile) -> Unit)? = null
@@ -95,9 +95,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     private val volumeObserver = object : ContentObserver(mainHandler) {
         override fun onChange(selfChange: Boolean) {
-            val currentVol = getSystemVolume()
-            val maxVol = getMaxSystemVolume()
-            onSystemVolumeChangedListener?.invoke(currentVol, maxVol)
+            onSystemVolumeChangedListener?.invoke(getSystemVolume(), getMaxSystemVolume())
         }
     }
 
@@ -138,7 +136,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         } catch (_: Exception) {}
     }
 
-    // Ahora NO choca con la propiedad porque la propiedad tiene JvmName distinto
     fun setGlobalAudioEnabled(enabled: Boolean) {
         if (isGlobalAudioEnabled == enabled) return
         isGlobalAudioEnabled = enabled
@@ -146,13 +143,16 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         checkAndApplyGlobalBypass()
         dispatchSessionsChanged()
         scope.launch { dataStore.saveGlobalEnabled(enabled) }
+        applyAllSettingsToSystemEq()
     }
 
     fun checkAndApplyGlobalBypass(): Boolean {
         val globalActive = isGlobalAudioEnabled || GlobalAudioService.isGlobalAudioEnabled
         if (globalActive) dspProcessor.setGlobalBypass(false) else dspProcessor.setGlobalBypass(!dspProcessor.isMasterEnabled)
+        systemEq?.enabled = globalActive
         return globalActive
     }
+
     fun openSession(sessionId: Int, packageName: String? = null) {
         if (!isGlobalAudioEnabled) return
         if (activeSessions.containsKey(sessionId)) return
@@ -168,25 +168,38 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         val packages = activeSessions.values.toList()
         mainHandler.post { onActiveSessionsChangedListener?.invoke(count, packages) }
     }
-    fun setMasterGain(gainDb: Float) { this.globalGainDb = gainDb; dspProcessor.setMasterGain(gainDb) }
+
+    // ====== CONTROLES QUE AHORA SI TOCAN EL SISTEMA ======
+    fun setMasterGain(gainDb: Float) {
+        this.globalGainDb = gainDb
+        dspProcessor.setMasterGain(gainDb)
+        applyAllSettingsToSystemEq()
+    }
     fun setGlobalGain(gainDb: Float) = setMasterGain(gainDb)
+
     fun setPreampGain(gainDb: Float) { this.preampDb = gainDb.coerceIn(-12f, 12f); dspProcessor.setPreamp(this.preampDb) }
+
     fun setBandGain(bandIndex: Int, gainDb: Float) {
         if (bandIndex in 0 until 32) {
             val clamped = gainDb.coerceIn(-12f, 12f)
             bandGains[bandIndex] = clamped
             dspProcessor.setBandLevel(bandIndex, clamped)
+            applyAllSettingsToSystemEq()
+            scope.launch { dataStore.saveBands(bandGains, bandQs) }
         }
     }
+
     fun setBandQ(bandIndex: Int, qValue: Float) {
         if (bandIndex in 0 until 32) {
             bandQs[bandIndex] = qValue.coerceIn(0.5f, 5f)
             dspProcessor.setBandLevel(bandIndex, bandGains[bandIndex])
         }
     }
+
     fun setToneBass(gainDb: Float) { this.toneBassDb = gainDb.coerceIn(-12f, 12f); dspProcessor.setToneBass(this.toneBassDb) }
     fun setToneMid(gainDb: Float) { this.toneMidDb = gainDb.coerceIn(-12f, 12f); dspProcessor.setToneMid(this.toneMidDb) }
     fun setToneTreble(gainDb: Float) { this.toneTrebleDb = gainDb.coerceIn(-12f, 12f); dspProcessor.setToneTreble(this.toneTrebleDb) }
+
     fun setBassBoost(enabled: Boolean, gainDb: Float, freqHz: Float = 85.0f) {
         this.isBassBoostEnabled = enabled; this.bassBoostDb = gainDb.coerceIn(0f, 12f); this.bassFreqHz = freqHz
         dspProcessor.setBassBoost(enabled, freqHz, this.bassBoostDb)
@@ -229,7 +242,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         this.ats2835pEmuEnabled = enabled; this.ats2835pEmuAmount = amount.coerceIn(0f, 1f); this.ats2835pBtBypass = bluetoothBypass
         dspProcessor.setEmulationEnabled(enabled); dspProcessor.setEmulationAmount(this.ats2835pEmuAmount); dspProcessor.setBluetoothAutoBypass(bluetoothBypass)
     }
-    fun reapplyAllParams() { syncAllParamsToDsp(); checkAndApplyGlobalBypass() }
+    fun reapplyAllParams() { syncAllParamsToDsp(); checkAndApplyGlobalBypass(); applyAllSettingsToSystemEq() }
     private fun syncAllParamsToDsp() {
         dspProcessor.setMasterGain(globalGainDb); dspProcessor.setPreamp(preampDb)
         for (i in 0 until 32) dspProcessor.setBandLevel(i, bandGains[i])
@@ -265,6 +278,32 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     }
     fun releaseResources() {
         try { context.contentResolver.unregisterContentObserver(volumeObserver) } catch (e: Exception) {}
+        try { systemEq?.enabled = false; systemEq?.release() } catch (e: Exception) {}
         releaseAllSessions(); dspProcessor.resetFilterStates()
+    }
+
+    // ====== FIX REAL SISTEMA ======
+    fun attachSystemEqualizer(eq: Equalizer) {
+        try { systemEq?.release() } catch (e: Exception) {}
+        systemEq = eq
+    }
+
+    fun applyAllSettingsToSystemEq() {
+        val eq = systemEq?: return
+        try {
+            val numBands = eq.numberOfBands
+            for (i in 0 until numBands) {
+                val centerFreqHz = eq.getCenterFreq(i.toShort()) / 1000
+                var closestIdx = 15
+                var minDiff = Int.MAX_VALUE
+                for (j in SjbzDspProcessor.BAND_FREQUENCIES_HZ.indices) {
+                    val diff = kotlin.math.abs(SjbzDspProcessor.BAND_FREQUENCIES_HZ[j] - centerFreqHz)
+                    if (diff < minDiff) { minDiff = diff; closestIdx = j }
+                }
+                val totalGain = (bandGains[closestIdx] + globalGainDb).coerceIn(-15f, 15f)
+                eq.setBandLevel(i.toShort(), (totalGain * 100).toInt().toShort())
+            }
+            eq.enabled = isGlobalAudioEnabled
+        } catch (e: Exception) { Log.e(TAG, "apply system eq error: ${e.message}") }
     }
 }

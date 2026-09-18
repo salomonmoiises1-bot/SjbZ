@@ -29,7 +29,6 @@ open class EqStudioActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEqBinding
     private lateinit var sessionManager: GlobalAudioSessionManager
     private lateinit var dspProcessor: SjbzDspProcessor
-
     private val mainHandler = Handler(Looper.getMainLooper())
     private val eqSeekBars = arrayOfNulls<SeekBar>(SjbzDspProcessor.BAND_COUNT)
     private val eqValueTexts = arrayOfNulls<TextView>(SjbzDspProcessor.BAND_COUNT)
@@ -91,7 +90,13 @@ open class EqStudioActivity : AppCompatActivity() {
     }
 
     private fun setupFftVisualizer() {
-        dspProcessor.setFftListener { samples -> mainHandler.post { binding.visualizerView.updateFft(samples) } }
+        dspProcessor.setFftListener { samples ->
+            mainHandler.post {
+                try { binding.visualizerView.invalidate() } catch (_: Exception) {}
+                // Si tu VisualizerView tiene setFftData, descomenta esto:
+                // try { binding.visualizerView.javaClass.getMethod("setFftData", FloatArray::class.java).invoke(binding.visualizerView, samples) } catch (_: Exception) {}
+            }
+        }
         dspProcessor.setClippingListener { isClipping ->
             mainHandler.post {
                 if (isClipping) {
@@ -117,14 +122,8 @@ open class EqStudioActivity : AppCompatActivity() {
                 sessionManager.setPreampGain(gainDb)
                 updatePreampLabels(gainDb)
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {
-                sb?.parent?.requestDisallowInterceptTouchEvent(true)
-                binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true)
-            }
-            override fun onStopTrackingTouch(sb: SeekBar?) {
-                sb?.parent?.requestDisallowInterceptTouchEvent(false)
-                binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false)
-            }
+            override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true) }
+            override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false) }
         })
         attachScrollLock(binding.seekPreamp)
         binding.btnResetPreamp.setOnClickListener {
@@ -149,9 +148,7 @@ open class EqStudioActivity : AppCompatActivity() {
                 if (!fromUser || isUpdatingProgrammatically) return
                 val gain = (progress - 120) / 10.0f
                 binding.tvPreGainBassValue.text = String.format(Locale.US, "%+.1f dB", gain)
-                dspProcessor.setToneBass(gain)
-                sessionManager.setToneBass(gain)
-                updatePreampLabels(dspProcessor.getPreamp())
+                dspProcessor.setToneBass(gain); sessionManager.setToneBass(gain); updatePreampLabels(dspProcessor.getPreamp())
             }
             override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true) }
             override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false) }
@@ -166,9 +163,7 @@ open class EqStudioActivity : AppCompatActivity() {
                 if (!fromUser || isUpdatingProgrammatically) return
                 val gain = (progress - 120) / 10.0f
                 binding.tvPreGainMidValue.text = String.format(Locale.US, "%+.1f dB", gain)
-                dspProcessor.setToneMid(gain)
-                sessionManager.setToneMid(gain)
-                updatePreampLabels(dspProcessor.getPreamp())
+                dspProcessor.setToneMid(gain); sessionManager.setToneMid(gain); updatePreampLabels(dspProcessor.getPreamp())
             }
             override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true) }
             override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false) }
@@ -183,9 +178,7 @@ open class EqStudioActivity : AppCompatActivity() {
                 if (!fromUser || isUpdatingProgrammatically) return
                 val gain = (progress - 120) / 10.0f
                 binding.tvPreGainTrebleValue.text = String.format(Locale.US, "%+.1f dB", gain)
-                dspProcessor.setToneTreble(gain)
-                sessionManager.setToneTreble(gain)
-                updatePreampLabels(dspProcessor.getPreamp())
+                dspProcessor.setToneTreble(gain); sessionManager.setToneTreble(gain); updatePreampLabels(dspProcessor.getPreamp())
             }
             override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true) }
             override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false) }
@@ -252,16 +245,8 @@ open class EqStudioActivity : AppCompatActivity() {
                     sessionManager.setBandGain(bandIndex, gainDb)
                     updatePreampLabels(dspProcessor.getPreamp())
                 }
-                override fun onStartTrackingTouch(sb: SeekBar?) {
-                    sb?.parent?.requestDisallowInterceptTouchEvent(true)
-                    binding.scrollFaders.requestDisallowInterceptTouchEvent(true)
-                    binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true)
-                }
-                override fun onStopTrackingTouch(sb: SeekBar?) {
-                    sb?.parent?.requestDisallowInterceptTouchEvent(false)
-                    binding.scrollFaders.requestDisallowInterceptTouchEvent(false)
-                    binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false)
-                }
+                override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true); binding.scrollFaders.requestDisallowInterceptTouchEvent(true); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true) }
+                override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollFaders.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false) }
             })
             sliderFrame.addView(seekBar); col.addView(sliderFrame)
             val tvFreq = TextView(this).apply {
@@ -350,9 +335,7 @@ open class EqStudioActivity : AppCompatActivity() {
 
     private fun setupMdrcControls() {
         binding.switchMdrc.isChecked = dspProcessor.isMdrcEnabled
-        binding.switchMdrc.setOnCheckedChangeListener { _, isChecked ->
-            dspProcessor.setMdrcEnabled(isChecked); sessionManager.setMdrcEnabled(isChecked)
-        }
+        binding.switchMdrc.setOnCheckedChangeListener { _, isChecked -> dspProcessor.setMdrcEnabled(isChecked); sessionManager.setMdrcEnabled(isChecked) }
         binding.seekMdrcThreshold.max = 360
         binding.seekMdrcThreshold.progress = (dspProcessor.getMdrcThreshold() * 10f + 360f).toInt().coerceIn(0, 360)
         binding.tvMdrcThresholdValue.text = String.format(Locale.US, "%.1f dB", dspProcessor.getMdrcThreshold())
@@ -368,7 +351,6 @@ open class EqStudioActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false) }
         })
         attachScrollLock(binding.seekMdrcThreshold)
-
         binding.seekMdrcRatio.max = 100
         binding.seekMdrcRatio.progress = (dspProcessor.getMdrcRatio() * 10f).toInt().coerceIn(10, 100)
         binding.tvMdrcRatioValue.text = String.format(Locale.US, "%.1f:1", dspProcessor.getMdrcRatio())
@@ -384,7 +366,6 @@ open class EqStudioActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false) }
         })
         attachScrollLock(binding.seekMdrcRatio)
-
         setupMdrcBandSlider(binding.seekMdrcSub, binding.tvMdrcSub, 0)
         setupMdrcBandSlider(binding.seekMdrcLow, binding.tvMdrcLow, 1)
         setupMdrcBandSlider(binding.seekMdrcMid, binding.tvMdrcMid, 2)
@@ -440,14 +421,11 @@ open class EqStudioActivity : AppCompatActivity() {
 
     private fun showSavePresetDialog() {
         val input = EditText(this).apply { hint = "Nombre del Preset (ej. Mi Ecualización)" }
-        AlertDialog.Builder(this)
-           .setTitle("Guardar Preset de Estudio").setMessage("Almacena la curva actual de 32 bandas, Preamp y Controles de Tono.")
-           .setView(input)
+        AlertDialog.Builder(this).setTitle("Guardar Preset de Estudio").setMessage("Almacena la curva actual de 32 bandas, Preamp y Controles de Tono.").setView(input)
            .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) { sessionManager.saveCurrentAsProfile(name); Toast.makeText(this, "Preset '$name' guardado exitosamente", Toast.LENGTH_SHORT).show() }
-            }
-           .setNegativeButton("Cancelar", null).show()
+            }.setNegativeButton("Cancelar", null).show()
     }
 
     private fun setupCollapsibleSections() {
@@ -470,12 +448,8 @@ open class EqStudioActivity : AppCompatActivity() {
         if (view == null) return
         view.setOnTouchListener { v, event ->
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                    v.parent?.requestDisallowInterceptTouchEvent(true); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true)
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    v.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false)
-                }
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> { v.parent?.requestDisallowInterceptTouchEvent(true); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(true) }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { v.parent?.requestDisallowInterceptTouchEvent(false); binding.scrollEqRoot.requestDisallowInterceptTouchEvent(false) }
             }
             false
         }

@@ -7,15 +7,14 @@ import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.sjbz.aimp.R
-import com.sjbz.aimp.audio.EqualizerProcessor
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
+import com.sjbz.aimp.audio.SjbzDspProcessor
 import com.sjbz.aimp.databinding.ActivityEqBinding
 
 class EqStudioActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityEqBinding
     private lateinit var audioManager: GlobalAudioSessionManager
-    private val equalizerProcessor = EqualizerProcessor()
 
     private val faderSeekBars = ArrayList<SeekBar>()
     private val faderGainTexts = ArrayList<TextView>()
@@ -25,7 +24,6 @@ class EqStudioActivity : AppCompatActivity() {
         binding = ActivityEqBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Instancia del Singleton centralizador de audio
         audioManager = GlobalAudioSessionManager.getInstance(this)
 
         setSupportActionBar(binding.eqToolbar)
@@ -37,7 +35,6 @@ class EqStudioActivity : AppCompatActivity() {
         setup32BandFaders()
         setupPresetControls()
 
-        // Sincronizar la UI con los valores reales almacenados en el Manager
         syncUIFromManager()
     }
 
@@ -79,10 +76,16 @@ class EqStudioActivity : AppCompatActivity() {
                 when (sb?.id) {
                     R.id.seekPreGainBass -> {
                         binding.tvPreGainBassValue.text = text
-                        if (fromUser) audioManager.setBassBoost(dbValue, audioManager.bassFreqHz)
+                        if (fromUser) GlobalAudioSessionManager.getDspProcessor().setToneBass(dbValue)
                     }
-                    R.id.seekPreGainMid -> binding.tvPreGainMidValue.text = text
-                    R.id.seekPreGainTreble -> binding.tvPreGainTrebleValue.text = text
+                    R.id.seekPreGainMid -> {
+                        binding.tvPreGainMidValue.text = text
+                        if (fromUser) GlobalAudioSessionManager.getDspProcessor().setToneMid(dbValue)
+                    }
+                    R.id.seekPreGainTreble -> {
+                        binding.tvPreGainTrebleValue.text = text
+                        if (fromUser) GlobalAudioSessionManager.getDspProcessor().setToneTreble(dbValue)
+                    }
                 }
             }
             override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true) }
@@ -100,16 +103,15 @@ class EqStudioActivity : AppCompatActivity() {
         faderSeekBars.clear()
         faderGainTexts.clear()
 
-        for (i in EqualizerProcessor.BAND_LABELS.indices) {
+        for (i in SjbzDspProcessor.BAND_LABELS.indices) {
             val faderView = LayoutInflater.from(this).inflate(R.layout.item_eq_fader_vertical, container, false)
-            
             val tvFreq = faderView.findViewById<TextView>(R.id.tvFaderFreq)
             val tvGain = faderView.findViewById<TextView>(R.id.tvFaderGain)
             val seekBar = faderView.findViewById<SeekBar>(R.id.verticalSeekBar)
 
-            tvFreq.text = EqualizerProcessor.BAND_LABELS[i]
-            seekBar.max = 240 // Rango de -12dB a +12dB (escalado por 10)
-            
+            tvFreq.text = SjbzDspProcessor.BAND_LABELS[i]
+            seekBar.max = 240
+
             faderSeekBars.add(seekBar)
             faderGainTexts.add(tvGain)
 
@@ -117,61 +119,55 @@ class EqStudioActivity : AppCompatActivity() {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     val dbValue = (progress - 120) / 10.0f
                     tvGain.text = String.format("%.1f", dbValue)
-                    
                     if (fromUser) {
                         audioManager.setBandGain(i, dbValue)
                     }
                 }
-                override fun onStartTrackingTouch(sb: SeekBar?) {
-                    sb?.parent?.parent?.requestDisallowInterceptTouchEvent(true)
-                }
-                override fun onStopTrackingTouch(sb: SeekBar?) {
-                    sb?.parent?.parent?.requestDisallowInterceptTouchEvent(false)
-                }
+                override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.parent?.requestDisallowInterceptTouchEvent(true) }
+                override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.parent?.requestDisallowInterceptTouchEvent(false) }
             })
-
             container.addView(faderView)
         }
 
         binding.btnResetEq.setOnClickListener {
-            equalizerProcessor.applyPreset("Flat")
-            applyPresetToManager()
-            syncUIFromManager()
+            applyPresetValues(FloatArray(32) { 0.0f }, 0.0f)
         }
     }
 
     private fun setupPresetControls() {
         binding.btnPresetFlat.setOnClickListener {
-            equalizerProcessor.applyPreset("Flat")
-            applyPresetToManager()
-            syncUIFromManager()
+            applyPresetValues(FloatArray(32) { 0.0f }, 0.0f)
         }
-
         binding.btnPresetBass.setOnClickListener {
-            equalizerProcessor.applyPreset("Bass")
-            applyPresetToManager()
-            syncUIFromManager()
+            val bassBands = FloatArray(32) { 0.0f }.apply {
+                this[0] = 6.0f; this[1] = 5.5f; this[2] = 5.0f; this[3] = 4.0f
+                this[4] = 3.0f; this[5] = 2.0f; this[6] = 1.0f
+            }
+            applyPresetValues(bassBands, 2.0f)
         }
-
         binding.btnPresetRock.setOnClickListener {
-            equalizerProcessor.applyPreset("Rock")
-            applyPresetToManager()
-            syncUIFromManager()
+            val rockBands = FloatArray(32) { 0.0f }.apply {
+                this[0] = 4.5f; this[1] = 4.0f; this[2] = 3.5f; this[3] = 2.5f
+                this[14] = -1.5f; this[15] = -2.0f; this[16] = -1.5f
+                this[27] = 3.5f; this[28] = 4.0f; this[29] = 4.5f; this[30] = 5.0f
+            }
+            applyPresetValues(rockBands, 1.5f)
         }
-
         binding.btnPresetVocal.setOnClickListener {
-            equalizerProcessor.applyPreset("Vocal")
-            applyPresetToManager()
-            syncUIFromManager()
+            val vocalBands = FloatArray(32) { 0.0f }.apply {
+                this[0] = -2.0f; this[1] = -1.5f; this[2] = -1.0f
+                for (i in 12..22) this[i] = 3.5f
+            }
+            applyPresetValues(vocalBands, 1.0f)
         }
     }
 
-    private fun applyPresetToManager() {
-        audioManager.setPreampGain(equalizerProcessor.preampDb)
-        val gains = equalizerProcessor.getBandGains()
+    private fun applyPresetValues(gains: FloatArray, preamp: Float) {
+        audioManager.setPreampGain(preamp)
         for (i in gains.indices) {
             audioManager.setBandGain(i, gains[i])
         }
+        syncUIFromManager()
     }
 
     private fun syncUIFromManager() {

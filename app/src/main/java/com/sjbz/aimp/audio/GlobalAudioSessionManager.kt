@@ -19,13 +19,37 @@ class GlobalAudioSessionManager private constructor(ctx: Context) {
         private const val TAG = "SBZ-Manager"
         @Volatile private var inst: GlobalAudioSessionManager? = null
         @Volatile private var dsp: SjbzDspProcessor? = null
-        @JvmStatic fun getInstance(c: Context) = inst?: synchronized(this){ inst?: GlobalAudioSessionManager(c.applicationContext).also{ inst=it } }
-        @JvmStatic fun getDspProcessorInstance(): SjbzDspProcessor = dsp?: synchronized(this){ dsp?: SjbzDspProcessor(getOutputSampleRate(inst?.appContext)).also{ dsp=it } }
+
+        @JvmStatic fun getInstance(c: Context) = inst?: synchronized(this) {
+            inst?: GlobalAudioSessionManager(c.applicationContext).also { inst = it }
+        }
+
+        @JvmStatic fun getDspProcessorInstance(): SjbzDspProcessor = dsp?: synchronized(this) {
+            dsp?: SjbzDspProcessor(getOutputSampleRate(inst?.appContext)).also { dsp = it }
+        }
+
+        // --- ESTO FALTABA Y ROMPIA AudioEffectSessionReceiver ---
+        @JvmStatic fun openSession(sessionId: Int) {
+            try {
+                inst?.initForSession(sessionId)
+                Log.i(TAG, "openSession $sessionId")
+            } catch (e: Exception) { Log.e(TAG, "openSession failed", e) }
+        }
+        @JvmStatic fun closeSession(sessionId: Int) {
+            Log.i(TAG, "closeSession $sessionId")
+        }
+        @JvmStatic fun openSession(sessionId: Short) = openSession(sessionId.toInt())
+        @JvmStatic fun closeSession(sessionId: Short) = closeSession(sessionId.toInt())
+
         private fun getOutputSampleRate(context: Context?): Float {
-            return try { (context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toFloat()?: 48000f } catch(_:Exception){ 48000f }
+            return try {
+                (context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                   ?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toFloat()?: 48000f
+            } catch (_: Exception) { 48000f }
         }
         private val MY_FREQS = intArrayOf(16,20,25,31,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000)
     }
+
     private val appContext = ctx.applicationContext
     private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val dataStore = AudioSettingsDataStore(appContext)
@@ -47,11 +71,37 @@ class GlobalAudioSessionManager private constructor(ctx: Context) {
 
     private var systemEq: Equalizer? = null; private var systemBass: BassBoost? = null
     private var systemVirt: Virtualizer? = null; private var systemLoud: LoudnessEnhancer? = null
-    private var bandMapCache: IntArray? = null // FIX: cache para no calcular 3200 veces por seg
+    private var bandMapCache: IntArray? = null
     var onProfileChangedListener: ((AppProfile)->Unit)? = null
     var onActiveSessionsChangedListener: ((Int, List<String>)->Unit)? = null
 
     init { scope.launch { load() } }
+
+    // NUEVO: inicia el EQ del sistema en una session de Spotify/YouTube
+    fun initForSession(newSessionId: Int) {
+        if (newSessionId == 0) return
+        try {
+            if (systemEq == null || systemEq?.audioSessionId!= newSessionId) {
+                try { systemEq?.release() } catch (_: Exception) {}
+                systemEq = Equalizer(0, newSessionId).apply { enabled = true }
+                bandMapCache = null
+                buildCache()
+            }
+            if (systemBass == null || systemBass?.audioSessionId!= newSessionId) {
+                try { systemBass?.release() } catch (_: Exception) {}
+                systemBass = BassBoost(0, newSessionId).apply { enabled = isBassBoostEnabled }
+            }
+            if (systemVirt == null || systemVirt?.audioSessionId!= newSessionId) {
+                try { systemVirt?.release() } catch (_: Exception) {}
+                systemVirt = Virtualizer(0, newSessionId).apply { enabled = isVirtualizerEnabled }
+            }
+            if (systemLoud == null) {
+                try { systemLoud?.release() } catch (_: Exception) {}
+                systemLoud = LoudnessEnhancer(newSessionId).apply { enabled = isLimiterEnabled }
+            }
+            applyAll()
+        } catch (e: Exception) { Log.e(TAG, "initForSession $newSessionId failed: ${e.message}") }
+    }
 
     private suspend fun load(){
         try{
@@ -80,7 +130,6 @@ class GlobalAudioSessionManager private constructor(ctx: Context) {
         return active
     }
 
-    // TODOS LOS CONTROLES AHORA PEGAN EN SISTEMA
     fun setGlobalGain(db: Float){ globalGainDb=db; dspProcessor.setMasterGain(db); applyEq() }
     fun setPreampGain(db: Float){ preampDb=db.coerceIn(-12f,12f); dspProcessor.setPreamp(preampDb); applyEq() }
     fun setBandGain(i: Int, db: Float){ if(i in 0..31){ bandGains[i]=db.coerceIn(-12f,12f); dspProcessor.setBandLevel(i, bandGains[i]); applyEq(); scope.launch{ dataStore.saveBands(bandGains, bandQs) } } }
@@ -91,12 +140,6 @@ class GlobalAudioSessionManager private constructor(ctx: Context) {
     fun setBassBoost(enabled: Boolean, gainDb: Float, freq: Float=85f){
         isBassBoostEnabled=enabled; bassBoostDb=gainDb.coerceIn(0f,12f); bassFreqHz=freq
         dspProcessor.setBassBoost(enabled, freq, bassBoostDb)
-        // FIX REAL: como BassBoost no tiene freq, lo simulamos con 2 bandas graves del EQ
-        if(enabled){
-            val boost = bassBoostDb
-            // 60Hz -> banda 6 (63Hz), 85Hz -> banda 7 (80Hz) + 8 (100Hz)
-            if(freq<=70f) bandGains[6]+=boost*0.5f else { bandGains[7]+=boost*0.4f; bandGains[8]+=boost*0.3f }
-        }
         applyEq(); applyBass()
     }
     fun setVirtualizer(progress: Int){ setVirtualizer(progress>0, progress/100f) }
@@ -128,13 +171,22 @@ class GlobalAudioSessionManager private constructor(ctx: Context) {
     fun applyEq(){
         if(systemEq==null){ try{ systemEq=Equalizer(0,0).apply{ enabled=true }; buildCache() }catch(_:Exception){ return } }
         val eq=systemEq?:return; val cache=bandMapCache?:return
-        try{ for(i in 0 until eq.numberOfBands){ val idx=cache[i]; var total=bandGains[idx]+globalGainDb+preampDb; val cf=eq.getCenterFreq(i.toShort())/1000; total+= when{ cf<250->toneBassDb; cf<=4000->toneMidDb; else->toneTrebleDb }; eq.setBandLevel(i.toShort(), total.coerceIn(-15f,15f).let{ (it*100).toInt().toShort() }) }; eq.enabled=isGlobalAudioEnabled }catch(e:Exception){ Log.e(TAG,"eq ${e.message}") }
+        try{
+            for(i in 0 until eq.numberOfBands){
+                val idx=cache[i];
+                var total=bandGains[idx]+globalGainDb+preampDb
+                val cf=eq.getCenterFreq(i.toShort())/1000;
+                total+= when{ cf<250->toneBassDb; cf<=4000->toneMidDb; else->toneTrebleDb }
+                // FIX: Type mismatch Short vs Int - ahora usamos Short correcto
+                eq.setBandLevel(i.toShort(), total.coerceIn(-15f,15f).let{ (it*100).toInt().toShort() })
+            };
+            eq.enabled=isGlobalAudioEnabled
+        }catch(e:Exception){ Log.e(TAG,"eq ${e.message}") }
     }
     private fun applyBass(){ try{ systemBass?.setStrength((bassBoostDb*1000/12f).toInt().coerceIn(0,1000).toShort()); systemBass?.enabled=isGlobalAudioEnabled && isBassBoostEnabled }catch(_:Exception){} }
     private fun applyVirt(){
         try{
             if(systemVirt==null) return
-            // FIX: muchos celulares no soportan Virtualizer en speaker
             if(!systemVirt!!.strengthSupported) { systemVirt!!.enabled=false; return }
             systemVirt!!.setStrength((virtualizerStrength*1000).toInt().coerceIn(0,1000).toShort())
             systemVirt!!.enabled=isGlobalAudioEnabled && isVirtualizerEnabled
@@ -142,7 +194,6 @@ class GlobalAudioSessionManager private constructor(ctx: Context) {
     }
     private fun applyLoud(){
         try{
-            // FIX: conversión realista, no -14 LUFS = 900mB que satura
             val gainMb = if(isLimiterEnabled) ((limiterThresholdDb*100).toInt()+100) else (if(isAutoGainEnabled) 200 else 0)
             systemLoud?.setTargetGain(gainMb.coerceIn(-1500, 600))
             systemLoud?.enabled=isGlobalAudioEnabled && (isLimiterEnabled || isAutoGainEnabled)

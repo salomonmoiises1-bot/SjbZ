@@ -1,6 +1,5 @@
 package com.sjbz.aimp.service
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,7 +7,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.Virtualizer
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -23,102 +25,59 @@ class GlobalAudioService : Service() {
         const val NOTIFICATION_ID = 2836
         const val ACTION_START = "com.sjbz.aimp.ACTION_START_GLOBAL_AUDIO"
         const val ACTION_STOP = "com.sjbz.aimp.ACTION_STOP_GLOBAL_AUDIO"
-        const val ACTION_TOGGLE = "com.sjbz.aimp.ACTION_TOGGLE_GLOBAL_AUDIO"
-        @Volatile var isServiceRunning: Boolean = false
-            private set
-        @JvmStatic var isGlobalAudioEnabled: Boolean
-            get() = isServiceRunning
-            set(value) { isServiceRunning = value }
-        fun start(context: Context) {
-            val intent = Intent(context, GlobalAudioService::class.java).apply { action = ACTION_START }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
-        }
-        fun stop(context: Context) { context.startService(Intent(context, GlobalAudioService::class.java).apply { action = ACTION_STOP }) }
-        fun toggle(context: Context) { context.startService(Intent(context, GlobalAudioService::class.java).apply { action = ACTION_TOGGLE }) }
+        @Volatile var isServiceRunning = false
+        @JvmStatic var isGlobalAudioEnabled get()=isServiceRunning; set(v){ isServiceRunning=v }
+        fun start(c: Context){ val i=Intent(c, GlobalAudioService::class.java).apply{ action=ACTION_START }; if(Build.VERSION.SDK_INT>=26) c.startForegroundService(i) else c.startService(i) }
+        fun stop(c: Context){ c.startService(Intent(c, GlobalAudioService::class.java).apply{ action=ACTION_STOP }) }
     }
-    private lateinit var audioSessionManager: GlobalAudioSessionManager
-    private var systemEq: Equalizer? = null
+    private lateinit var mgr: GlobalAudioSessionManager
+    private var eq: Equalizer? = null
+    private var bass: BassBoost? = null
+    private var virt: Virtualizer? = null
+    private var loud: LoudnessEnhancer? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() {
         super.onCreate()
-        audioSessionManager = GlobalAudioSessionManager.getInstance(this)
-        createNotificationChannel()
-        audioSessionManager.onProfileChangedListener = { profile ->
-            updateNotification(profile.appName, profile.presetName)
-            audioSessionManager.applyAllSettingsToSystemEq()
-        }
+        mgr = GlobalAudioSessionManager.getInstance(this)
+        createChannel()
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
-                releaseEq(); isServiceRunning = false; audioSessionManager.setGlobalAudioEnabled(false)
-                stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return START_NOT_STICKY
-            }
-            ACTION_TOGGLE -> {
-                val newState =!audioSessionManager.isGlobalAudioEnabled
-                if (newState) {
-                    isServiceRunning = true; audioSessionManager.setGlobalAudioEnabled(true)
-                    startForegroundServiceWithNotification(); attachSystemEq()
-                } else {
-                    releaseEq(); isServiceRunning = false; audioSessionManager.setGlobalAudioEnabled(false)
-                    stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return START_NOT_STICKY
-                }
-            }
-            ACTION_START, null -> {
-                isServiceRunning = true; audioSessionManager.setGlobalAudioEnabled(true)
-                startForegroundServiceWithNotification(); attachSystemEq()
-            }
+        when(intent?.action){
+            ACTION_STOP -> { releaseAll(); isServiceRunning=false; mgr.setGlobalAudioEnabled(false); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return START_NOT_STICKY }
+            else -> { isServiceRunning=true; mgr.setGlobalAudioEnabled(true); startFg(); attachAll() }
         }
         return START_STICKY
     }
-    private fun attachSystemEq() {
-        try {
-            releaseEq()
-            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)!= android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                Log.e("GlobalAudioService", "FALTA RECORD_AUDIO"); return
-            }
-            systemEq = Equalizer(0, 0).apply { enabled = true }
-            audioSessionManager.attachSystemEqualizer(systemEq!!)
-            audioSessionManager.applyAllSettingsToSystemEq()
-            Log.d("GlobalAudioService", "EQ sistema enganchado a sesión 0")
-        } catch (e: Exception) { Log.e("GlobalAudioService", "No se pudo enganchar EQ: ${e.message}") }
+    private fun attachAll(){
+        try{
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)!= android.content.pm.PackageManager.PERMISSION_GRANTED){ Log.e("Service","FALTA RECORD_AUDIO"); return }
+            releaseAll()
+            eq = Equalizer(0,0).apply{ enabled=true }
+            bass = BassBoost(0,0).apply{ enabled=mgr.isBassBoostEnabled }
+            virt = Virtualizer(0,0).apply{ enabled=mgr.isVirtualizerEnabled }
+            loud = LoudnessEnhancer(0).apply{ enabled=mgr.isLimiterEnabled || mgr.isAutoGainEnabled }
+            mgr.attachSystemEqualizer(eq!!); mgr.attachSystemBassBoost(bass!!); mgr.attachSystemVirtualizer(virt!!); mgr.attachSystemLoudness(loud!!)
+            mgr.reapplyAllParams()
+            Log.d("Service","TODO enganchado a 0,0: EQ+Bass+Virt+Loud")
+        }catch(e: Exception){ Log.e("Service","attach fail: ${e.message}") }
     }
-    private fun releaseEq() {
-        try { systemEq?.enabled = false; systemEq?.release() } catch (e: Exception) {}
-        systemEq = null
+    private fun releaseAll(){
+        try{ eq?.enabled=false; eq?.release() }catch(_:Exception){}; eq=null
+        try{ bass?.enabled=false; bass?.release() }catch(_:Exception){}; bass=null
+        try{ virt?.enabled=false; virt?.release() }catch(_:Exception){}; virt=null
+        try{ loud?.enabled=false; loud?.release() }catch(_:Exception){}; loud=null
     }
-    override fun onDestroy() { releaseEq(); isServiceRunning = false; super.onDestroy() }
-    private fun startForegroundServiceWithNotification() {
-        val curProfile = audioSessionManager.currentProfile
-        val notification = buildNotification(curProfile.appName, curProfile.presetName)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else { startForeground(NOTIFICATION_ID, notification) }
+    override fun onDestroy(){ releaseAll(); isServiceRunning=false; super.onDestroy() }
+    private fun startFg(){
+        val n=buildNotification()
+        if (Build.VERSION.SDK_INT>=29) startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK) else startForeground(NOTIFICATION_ID, n)
     }
-    private fun updateNotification(appName: String, presetName: String) {
-        if (audioSessionManager.isGlobalAudioEnabled) {
-            val notification = buildNotification(appName, presetName)
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(NOTIFICATION_ID, notification)
+    private fun createChannel(){
+        if (Build.VERSION.SDK_INT>=26){
+            val ch=NotificationChannel(CHANNEL_ID,"SB-Z Global", NotificationManager.IMPORTANCE_LOW).apply{ setShowBadge(false) }
+            getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
         }
     }
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "SB-Z Ecualizador Global del Sistema", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Procesamiento de audio global (32 Bandas, Limiter, AutoGain) para Spotify, YouTube y el sistema"; setShowBadge(false)
-            }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
-    }
-    private fun buildNotification(appName: String, presetName: String): Notification {
-        val openIntent = Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP }
-        val pOpen = PendingIntent.getActivity(this, 1, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val stopIntent = Intent(this, GlobalAudioService::class.java).apply { action = ACTION_STOP }
-        val pStop = PendingIntent.getService(this, 2, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val limiterStatus = if (audioSessionManager.isLimiterEnabled) " • Limiter ON" else ""
-        val autoGainStatus = if (audioSessionManager.isAutoGainEnabled) " • AutoGain ON" else ""
-        return NotificationCompat.Builder(this, CHANNEL_ID).setSmallIcon(R.drawable.ic_equalizer).setContentTitle("SB-Z Ecualizador Global Activo")
-           .setContentText("Perfil: $appName ($presetName)$limiterStatus$autoGainStatus").setSubText("Procesando mezcla global del sistema (Session 0)")
-           .setContentIntent(pOpen).addAction(R.drawable.ic_stop, "Desactivar", pStop).setOngoing(true).setPriority(NotificationCompat.PRIORITY_LOW).build()
-    }
+    private fun buildNotification()=NotificationCompat.Builder(this, CHANNEL_ID).setSmallIcon(R.drawable.ic_equalizer).setContentTitle("SB-Z Global Activo").setContentText("EQ 32 bandas + Bass + Virtualizer + Limiter en Session 0").setOngoing(true).setPriority(NotificationCompat.PRIORITY_LOW).build()
 }

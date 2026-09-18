@@ -2,14 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions required for global audio processing and background service -->
+    <!-- CORE PERMISSIONS FOR GLOBAL EQ -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
@@ -23,7 +25,6 @@
         android:theme="@style/Theme.SjbZ"
         tools:targetApi="34">
 
-        <!-- Main SB-Z Global Equalizer Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -39,7 +40,6 @@
             </intent-filter>
         </activity>
 
-        <!-- 32-Band Equalizer Studio Activities -->
         <activity
             android:name=".EqStudioActivity"
             android:exported="false"
@@ -52,14 +52,12 @@
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.SjbZ" />
 
-        <!-- Global System Audio FX Service -->
         <service
             android:name=".service.GlobalAudioService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- System Audio Session Broadcast Receiver -->
         <receiver
             android:name=".receiver.AudioEffectSessionReceiver"
             android:enabled="true"
@@ -70,7 +68,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Boot Receiver for Auto-start on Device Boot -->
         <receiver
             android:name=".receiver.BootReceiver"
             android:enabled="true"
@@ -83,5 +80,4 @@
             </intent-filter>
         </receiver>
     </application>
-
 </manifest>

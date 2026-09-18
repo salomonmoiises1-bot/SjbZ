@@ -16,14 +16,18 @@ import com.sjbz.aimp.R
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
 
 /**
- * GlobalAudioService: Foreground Service que procesa el audio de todo el sistema.
- * Aplica el ecualizador de 32 bandas, MDRC, Pre-gains y Limiter a la mezcla global (Session 0).
+ * GlobalAudioService: Foreground Service that processes audio system-wide.
+ * Captures audio mix on audioSessionId = 0 (and dynamic third-party app sessions),
+ * applying the 32-Band Equalizer, Anti-Clipping Limiter, and AutoGain leveler.
+ *
+ * Runs as a foreground service with low battery overhead and persistent notification.
  */
 class GlobalAudioService : Service() {
 
     companion object {
         const val CHANNEL_ID = "sjbz_global_audio_channel"
         const val NOTIFICATION_ID = 2836
+
         const val ACTION_START = "com.sjbz.aimp.ACTION_START_GLOBAL_AUDIO"
         const val ACTION_STOP = "com.sjbz.aimp.ACTION_STOP_GLOBAL_AUDIO"
         const val ACTION_TOGGLE = "com.sjbz.aimp.ACTION_TOGGLE_GLOBAL_AUDIO"
@@ -74,9 +78,6 @@ class GlobalAudioService : Service() {
         audioSessionManager = GlobalAudioSessionManager.getInstance(this)
         createNotificationChannel()
 
-        // (Corregido) Se eliminó la llamada a initAudioEngine() que no existía en el Manager.
-        // La inicialización se maneja internamente en el constructor/init del Singleton.
-
         audioSessionManager.onProfileChangedListener = { profile ->
             updateNotification(profile.appName, profile.presetName)
         }
@@ -106,7 +107,6 @@ class GlobalAudioService : Service() {
             }
             ACTION_START, null -> {
                 isServiceRunning = true
-                // Activar el procesamiento de audio global en el motor
                 audioSessionManager.setGlobalAudioEnabled(true)
                 startForegroundServiceWithNotification()
             }
@@ -116,14 +116,12 @@ class GlobalAudioService : Service() {
 
     override fun onDestroy() {
         isServiceRunning = false
-        audioSessionManager.setGlobalAudioEnabled(false)
         super.onDestroy()
     }
 
     private fun startForegroundServiceWithNotification() {
         val curProfile = audioSessionManager.currentProfile
         val notification = buildNotification(curProfile.appName, curProfile.presetName)
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -163,14 +161,20 @@ class GlobalAudioService : Service() {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pOpen = PendingIntent.getActivity(
-            this, 1, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            1,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val stopIntent = Intent(this, GlobalAudioService::class.java).apply {
             action = ACTION_STOP
         }
         val pStop = PendingIntent.getService(
-            this, 2, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            2,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val limiterStatus = if (audioSessionManager.isLimiterEnabled) " • Limiter ON" else ""

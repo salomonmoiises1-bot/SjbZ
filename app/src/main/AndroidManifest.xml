@@ -2,8 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permisos de Audio y Grabación para AudioSession 0 -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Permissions required for global audio processing and background service -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -39,6 +38,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 32-Band Equalizer Studio Activities -->
+        <activity
+            android:name=".EqStudioActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.SjbZ" />
+
+        <activity
+            android:name=".EqActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.SjbZ" />
 
         <!-- Global System Audio FX Service -->
         <service

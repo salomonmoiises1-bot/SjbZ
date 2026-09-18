@@ -38,7 +38,6 @@ class MainActivity : AppCompatActivity() {
     private val scope = CoroutineScope(Dispatchers.Main)
     private val PERM_CODE = 1001
 
-    //... tus views iguales...
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var btnMenuDrawer: ImageButton
     private lateinit var btnOpenEqualizer: ImageButton
@@ -100,10 +99,7 @@ class MainActivity : AppCompatActivity() {
         build32BandSliders()
         setupDrawerSettings()
         syncAllUiFromManager()
-
-        // FIX 1: PEDIR PERMISOS AL INICIO
         checkAndRequestAllPermissions()
-
         audioSessionManager.onProfileChangedListener = { runOnUiThread { syncAllUiFromManager() } }
         audioSessionManager.onActiveSessionsChangedListener = { count, pkgs -> runOnUiThread { updateSessionStatusBanner(count, pkgs) } }
         if (audioSessionManager.isGlobalAudioEnabled && hasAudioPermission()) GlobalAudioService.start(this)
@@ -112,55 +108,61 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() { super.onResume(); visualizerView.startMockVisualizer(); uiHandler.post(vuMeterRunnable); syncAllUiFromManager() }
     override fun onPause() { super.onPause(); visualizerView.stopMockVisualizer(); uiHandler.removeCallbacks(vuMeterRunnable) }
 
-    // ====== FIX PERMISOS QUE TE FALTABAN ======
     private fun hasAudioPermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun checkAndRequestAllPermissions() {
         val perms = mutableListOf<String>()
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)!= PackageManager.PERMISSION_GRANTED) {
-            perms.add(Manifest.permission.RECORD_AUDIO)
-        }
+        if (!hasAudioPermission()) perms.add(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)!= PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
-        if (perms.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, perms.toTypedArray(), PERM_CODE)
-        }
+        if (perms.isNotEmpty()) ActivityCompat.requestPermissions(this, perms.toTypedArray(), PERM_CODE)
     }
 
     private fun requestUsageStatsPermission() {
-        try {
-            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-                data = Uri.parse("package:$packageName")
-            })
-        } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        }
+        try { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply { data = Uri.parse("package:$packageName") }) }
+        catch (e: Exception) { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERM_CODE) {
-            val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-            if (granted) {
-                Toast.makeText(this, "Permiso concedido - Ya controla el audio del sistema", Toast.LENGTH_SHORT).show()
-                if (switchMasterDsp.isChecked) {
-                    GlobalAudioService.start(this)
-                    audioSessionManager.setGlobalAudioEnabled(true)
-                }
+            val idx = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
+            val recordGranted = if (idx >= 0) grantResults[idx] == PackageManager.PERMISSION_GRANTED else hasAudioPermission()
+
+            if (recordGranted) {
+                Toast.makeText(this, "Permiso concedido - EQ Global activo", Toast.LENGTH_SHORT).show()
+                GlobalAudioService.start(this)
+                audioSessionManager.setGlobalAudioEnabled(true)
+                isUpdatingUiProgrammatically = true
+                switchMasterDsp.isChecked = true
+                isUpdatingUiProgrammatically = false
             } else {
-                Toast.makeText(this, "Sin RECORD_AUDIO no puede controlar Spotify/YouTube. Actívalo en Ajustes", Toast.LENGTH_LONG).show()
+                if (!ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.RECORD_AUDIO)) {
+                    AlertDialog.Builder(this)
+                      .setTitle("Permiso necesario")
+                      .setMessage("Para controlar Spotify/YouTube necesitas activar Micrófono en Ajustes de la app")
+                      .setPositiveButton("Ir a Ajustes") { _, _ ->
+                            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.parse("package:$packageName")
+                            })
+                        }
+                      .setNegativeButton("Cancelar", null).show()
+                } else {
+                    Toast.makeText(this, "Sin RECORD_AUDIO no controla el sistema", Toast.LENGTH_LONG).show()
+                }
+                isUpdatingUiProgrammatically = true
                 switchMasterDsp.isChecked = false
+                isUpdatingUiProgrammatically = false
                 audioSessionManager.setGlobalAudioEnabled(false)
                 GlobalAudioService.stop(this)
             }
         }
     }
-    // ====== FIN FIX PERMISOS ======
 
     private fun bindViews() {
         drawerLayout = findViewById(R.id.drawerLayout); btnMenuDrawer = findViewById(R.id.btnMenuDrawer)
@@ -196,8 +198,6 @@ class MainActivity : AppCompatActivity() {
         switchMasterDsp.isChecked = audioSessionManager.isGlobalAudioEnabled
         switchMasterDsp.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUiProgrammatically) return@setOnCheckedChangeListener
-
-            // FIX: Si activa y no tiene permiso, pide permiso y no activa
             if (isChecked &&!hasAudioPermission()) {
                 Toast.makeText(this, "Necesita permiso de micrófono para EQ global", Toast.LENGTH_SHORT).show()
                 checkAndRequestAllPermissions()
@@ -206,7 +206,6 @@ class MainActivity : AppCompatActivity() {
                 isUpdatingUiProgrammatically = false
                 return@setOnCheckedChangeListener
             }
-
             audioSessionManager.setGlobalAudioEnabled(isChecked)
             if (isChecked) {
                 GlobalAudioService.start(this); viewDspIndicator.setBackgroundColor(Color.parseColor("#00E5FF"))
@@ -246,7 +245,7 @@ class MainActivity : AppCompatActivity() {
     private fun showSaveProfileDialog() {
         val input = EditText(this).apply { hint = "Nombre del perfil" }
         AlertDialog.Builder(this).setTitle("Guardar Nuevo Perfil").setMessage("Guarda la configuración actual.").setView(input)
-          .setPositiveButton("Guardar") { _, _ ->
+         .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) { audioSessionManager.saveCurrentAsProfile(name); refreshProfilesSpinner(); Toast.makeText(this, "Perfil guardado: $name", Toast.LENGTH_SHORT).show() }
             }.setNegativeButton("Cancelar", null).show()
@@ -391,11 +390,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) { if (fromUser) audioSessionManager.setSystemVolume(progress) }
             override fun onStartTrackingTouch(sb: SeekBar?) {}; override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-        // Long press en el drawer para pedir Usage Stats
-        findViewById<View>(R.id.drawerExportM3U8)?.setOnLongClickListener {
-            requestUsageStatsPermission()
-            true
-        }
+        findViewById<View>(R.id.drawerExportM3U8)?.setOnLongClickListener { requestUsageStatsPermission(); true }
     }
 
     private fun syncAllUiFromManager() {

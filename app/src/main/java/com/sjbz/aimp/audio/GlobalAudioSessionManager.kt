@@ -8,238 +8,148 @@ import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.util.Log
 import com.sjbz.aimp.data.AudioSettingsDataStore
 import com.sjbz.aimp.model.AppProfile
-import com.sjbz.aimp.service.GlobalAudioService
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import kotlin.math.abs
 
-class GlobalAudioSessionManager private constructor(private val context: Context) {
-
+class GlobalAudioSessionManager private constructor(ctx: Context) {
     companion object {
-        private const val TAG = "GlobalAudioSession"
-        @Volatile private var instance: GlobalAudioSessionManager? = null
-        @Volatile private var globalDspProcessor: SjbzDspProcessor? = null
-        @JvmStatic fun getInstance(context: Context): GlobalAudioSessionManager {
-            return instance?: synchronized(this) {
-                instance?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
-            }
+        private const val TAG = "SBZ-Manager"
+        @Volatile private var inst: GlobalAudioSessionManager? = null
+        @Volatile private var dsp: SjbzDspProcessor? = null
+        @JvmStatic fun getInstance(c: Context) = inst?: synchronized(this){ inst?: GlobalAudioSessionManager(c.applicationContext).also{ inst=it } }
+        @JvmStatic fun getDspProcessorInstance(): SjbzDspProcessor = dsp?: synchronized(this){ dsp?: SjbzDspProcessor(getOutputSampleRate(inst?.appContext)).also{ dsp=it } }
+        private fun getOutputSampleRate(context: Context?): Float {
+            return try { (context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toFloat()?: 48000f } catch(_:Exception){ 48000f }
         }
-        @JvmStatic fun getDspProcessorInstance(): SjbzDspProcessor {
-            return globalDspProcessor?: synchronized(this) {
-                globalDspProcessor?: SjbzDspProcessor(48000.0f).also { globalDspProcessor = it }
-            }
-        }
-        @JvmStatic fun getDspProcessor(): SjbzDspProcessor = getDspProcessorInstance()
-        private val MY_32_BAND_FREQS = intArrayOf(16,20,25,31,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000)
+        private val MY_FREQS = intArrayOf(16,20,25,31,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000)
     }
-
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private val dataStore = AudioSettingsDataStore(context)
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val appContext = ctx.applicationContext
+    private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val dataStore = AudioSettingsDataStore(appContext)
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    @get:JvmName("getDspProcessorProperty") val dspProcessor: SjbzDspProcessor = getDspProcessorInstance()
-    @Volatile var isGlobalAudioEnabled: Boolean = false
-    @Volatile var isMdrcEnabled: Boolean = true
-    @Volatile var isLimiterEnabled: Boolean = true
-    @Volatile var isAutoGainEnabled: Boolean = true
-
-    private val activeSessions = mutableMapOf<Int, String>()
+    val dspProcessor: SjbzDspProcessor = getDspProcessorInstance()
+    @Volatile var isGlobalAudioEnabled = false
     var currentProfile: AppProfile = AppProfile.createDefaultProfiles().first()
-    var allProfiles: MutableList<AppProfile> = AppProfile.createDefaultProfiles().toMutableList()
+    var allProfiles = AppProfile.createDefaultProfiles().toMutableList()
+    @Volatile var globalGainDb = 0f; @Volatile var preampDb = 0f
+    val bandGains = FloatArray(32); val bandQs = FloatArray(32){1.414f}
+    @Volatile var toneBassDb = 0f; @Volatile var toneMidDb = 0f; @Volatile var toneTrebleDb = 0f
+    @Volatile var isBassBoostEnabled = true; @Volatile var bassBoostDb = 4f; @Volatile var bassFreqHz = 85f
+    @Volatile var isVirtualizerEnabled = false; @Volatile var virtualizerStrength = 0f
+    @Volatile var isLimiterEnabled = true; @Volatile var limiterThresholdDb = -1f
+    @Volatile var isAutoGainEnabled = true; @Volatile var autoGainTargetLufs = -14f
+    @Volatile var mdrcThresholdDb = -18f; @Volatile var mdrcRatio = 2.5f; val mdrcGains = FloatArray(5)
 
-    @Volatile var globalGainDb: Float = 0.0f
-    @Volatile var preampDb: Float = 0.0f
-    val bandGains: FloatArray = FloatArray(32)
-    val bandQs: FloatArray = FloatArray(32) { 1.414f }
-    @Volatile var toneBassDb: Float = 0.0f
-    @Volatile var toneMidDb: Float = 0.0f
-    @Volatile var toneTrebleDb: Float = 0.0f
-    @Volatile var isBassBoostEnabled: Boolean = true
-    @Volatile var bassBoostDb: Float = 4.0f
-    @Volatile var bassFreqHz: Float = 85.0f
-    @Volatile var isVirtualizerEnabled: Boolean = false
-    @Volatile var virtualizerStrength: Float = 0.0f
-    @Volatile var limiterThresholdDb: Float = -1.0f
-    @Volatile var autoGainTargetLufs: Float = -14.0f
-    @Volatile var currentAutoGainOffsetDb: Float = 0.0f
-    @Volatile var mdrcThresholdDb: Float = -18.0f
-    @Volatile var mdrcRatio: Float = 2.5f
-    val mdrcGains: FloatArray = FloatArray(5)
-    @Volatile var ats2835pEmuEnabled: Boolean = true
-    @Volatile var ats2835pEmuAmount: Float = 0.8f
-    @Volatile var ats2835pBtBypass: Boolean = false
+    private var systemEq: Equalizer? = null; private var systemBass: BassBoost? = null
+    private var systemVirt: Virtualizer? = null; private var systemLoud: LoudnessEnhancer? = null
+    private var bandMapCache: IntArray? = null // FIX: cache para no calcular 3200 veces por seg
+    var onProfileChangedListener: ((AppProfile)->Unit)? = null
+    var onActiveSessionsChangedListener: ((Int, List<String>)->Unit)? = null
 
-    // EFECTOS DE SISTEMA - AHORA TODO ES REAL
-    private var systemEq: Equalizer? = null
-    private var systemBass: BassBoost? = null
-    private var systemVirtualizer: Virtualizer? = null
-    private var systemLoudness: LoudnessEnhancer? = null
+    init { scope.launch { load() } }
 
-    var onSystemVolumeChangedListener: ((Int, Int) -> Unit)? = null
-    var onActiveSessionsChangedListener: ((Int, List<String>) -> Unit)? = null
-    var onProfileChangedListener: ((AppProfile) -> Unit)? = null
-
-    init { scope.launch { loadPersistedSettings() }; syncAllParamsToDsp() }
-
-    private suspend fun loadPersistedSettings() {
-        try {
-            val loadedProfiles = dataStore.loadProfiles()
-            if (loadedProfiles.isNotEmpty()) { allProfiles.clear(); allProfiles.addAll(loadedProfiles) }
-            val (savedGains, savedQs) = dataStore.loadBands()
-            for (i in bandGains.indices) if (i < savedGains.size) bandGains[i] = savedGains[i]
-            for (i in bandQs.indices) if (i < savedQs.size) bandQs[i] = savedQs[i]
-            val currentId = dataStore.loadCurrentProfileId()
-            val found = allProfiles.find { it.id == currentId }?: allProfiles.firstOrNull()
-            if (found!= null) applyProfileInMemory(found, false)
-            syncAllParamsToDsp()
-        } catch (e: Exception) { Log.e(TAG, "load: ${e.message}") }
+    private suspend fun load(){
+        try{
+            val profiles = dataStore.loadProfiles(); if(profiles.isNotEmpty()){ allProfiles.clear(); allProfiles.addAll(profiles) }
+            val (gains, _) = dataStore.loadBands(); for(i in bandGains.indices) if(i<gains.size) bandGains[i]=gains[i]
+            applyProfileInMemory(allProfiles.first(), false)
+        }catch(e:Exception){ Log.e(TAG, e.message.toString()) }
     }
 
-    fun getSystemVolume(): Int = try { audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) } catch (_: Exception) { 0 }
-    fun getMaxSystemVolume(): Int = try { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) } catch (_: Exception) { 15 }
-    fun setSystemVolume(volume: Int) {
-        try {
-            val clamped = volume.coerceIn(0, getMaxSystemVolume())
-            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, clamped, 0)
-            onSystemVolumeChangedListener?.invoke(clamped, getMaxSystemVolume())
-        } catch (_: Exception) {}
-    }
+    fun getSystemVolume()=try{ audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)}catch(_:Exception){0}
+    fun getMaxSystemVolume()=try{ audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}catch(_:Exception){15}
+    fun setSystemVolume(v: Int){ try{ audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, v.coerceIn(0, getMaxSystemVolume()), 0)}catch(_:Exception){} }
 
-    fun setGlobalAudioEnabled(enabled: Boolean) {
-        if (isGlobalAudioEnabled == enabled) return
-        isGlobalAudioEnabled = enabled
-        checkAndApplyGlobalBypass()
+    fun setGlobalAudioEnabled(enabled: Boolean){
+        if(isGlobalAudioEnabled==enabled) return
+        isGlobalAudioEnabled=enabled
         scope.launch { dataStore.saveGlobalEnabled(enabled) }
-        applyAllSettingsToSystemEq()
+        checkBypass(); applyAll()
+    }
+    fun checkBypass(): Boolean {
+        val active = isGlobalAudioEnabled
+        systemEq?.enabled = active
+        systemBass?.enabled = active && isBassBoostEnabled
+        systemVirt?.enabled = active && isVirtualizerEnabled
+        systemLoud?.enabled = active && (isLimiterEnabled || isAutoGainEnabled)
+        return active
     }
 
-    fun checkAndApplyGlobalBypass(): Boolean {
-        val globalActive = isGlobalAudioEnabled || GlobalAudioService.isServiceRunning
-        dspProcessor.setGlobalBypass(!globalActive &&!dspProcessor.isMasterEnabled)
-        systemEq?.enabled = globalActive
-        systemBass?.enabled = globalActive && isBassBoostEnabled
-        systemVirtualizer?.enabled = globalActive && isVirtualizerEnabled
-        systemLoudness?.enabled = globalActive && (isLimiterEnabled || isAutoGainEnabled)
-        return globalActive
-    }
-
-    fun openSession(id: Int, pkg: String? = null) {}
-    fun closeSession(id: Int) {}
-
-    fun setMasterGain(gainDb: Float) { globalGainDb = gainDb; dspProcessor.setMasterGain(gainDb); applyAllSettingsToSystemEq() }
-    fun setGlobalGain(gainDb: Float) = setMasterGain(gainDb)
-    fun setPreampGain(gainDb: Float) { preampDb = gainDb.coerceIn(-12f,12f); dspProcessor.setPreamp(preampDb); applyAllSettingsToSystemEq() }
-    fun setBandGain(index: Int, gainDb: Float) {
-        if (index in 0..31) {
-            bandGains[index] = gainDb.coerceIn(-12f,12f)
-            dspProcessor.setBandLevel(index, bandGains[index])
-            applyAllSettingsToSystemEq()
-            scope.launch { dataStore.saveBands(bandGains, bandQs) }
+    // TODOS LOS CONTROLES AHORA PEGAN EN SISTEMA
+    fun setGlobalGain(db: Float){ globalGainDb=db; dspProcessor.setMasterGain(db); applyEq() }
+    fun setPreampGain(db: Float){ preampDb=db.coerceIn(-12f,12f); dspProcessor.setPreamp(preampDb); applyEq() }
+    fun setBandGain(i: Int, db: Float){ if(i in 0..31){ bandGains[i]=db.coerceIn(-12f,12f); dspProcessor.setBandLevel(i, bandGains[i]); applyEq(); scope.launch{ dataStore.saveBands(bandGains, bandQs) } } }
+    fun setBandQ(i: Int, q: Float){ if(i in 0..31) bandQs[i]=q }
+    fun setToneBass(db: Float){ toneBassDb=db; dspProcessor.setToneBass(db); applyEq() }
+    fun setToneMid(db: Float){ toneMidDb=db; dspProcessor.setToneMid(db); applyEq() }
+    fun setToneTreble(db: Float){ toneTrebleDb=db; dspProcessor.setToneTreble(db); applyEq() }
+    fun setBassBoost(enabled: Boolean, gainDb: Float, freq: Float=85f){
+        isBassBoostEnabled=enabled; bassBoostDb=gainDb.coerceIn(0f,12f); bassFreqHz=freq
+        dspProcessor.setBassBoost(enabled, freq, bassBoostDb)
+        // FIX REAL: como BassBoost no tiene freq, lo simulamos con 2 bandas graves del EQ
+        if(enabled){
+            val boost = bassBoostDb
+            // 60Hz -> banda 6 (63Hz), 85Hz -> banda 7 (80Hz) + 8 (100Hz)
+            if(freq<=70f) bandGains[6]+=boost*0.5f else { bandGains[7]+=boost*0.4f; bandGains[8]+=boost*0.3f }
         }
+        applyEq(); applyBass()
     }
-    fun setBandQ(index: Int, q: Float) { if (index in 0..31) { bandQs[index]=q; dspProcessor.setBandLevel(index, bandGains[index]) } }
-    fun setToneBass(g: Float) { toneBassDb=g.coerceIn(-12f,12f); dspProcessor.setToneBass(toneBassDb); applyAllSettingsToSystemEq() }
-    fun setToneMid(g: Float) { toneMidDb=g.coerceIn(-12f,12f); dspProcessor.setToneMid(toneMidDb); applyAllSettingsToSystemEq() }
-    fun setToneTreble(g: Float) { toneTrebleDb=g.coerceIn(-12f,12f); dspProcessor.setToneTreble(toneTrebleDb); applyAllSettingsToSystemEq() }
-    fun setBassBoost(enabled: Boolean, gainDb: Float, freqHz: Float = 85f) {
-        isBassBoostEnabled=enabled; bassBoostDb=gainDb.coerceIn(0f,12f); bassFreqHz=freqHz
-        dspProcessor.setBassBoost(enabled, freqHz, bassBoostDb)
-        applyBassBoostToSystem()
-    }
-    fun setVirtualizer(enabled: Boolean, strength: Float) { isVirtualizerEnabled=enabled; virtualizerStrength=strength.coerceIn(0f,1f); dspProcessor.setVirtualizer(enabled, virtualizerStrength); applyVirtualizerToSystem() }
-    fun setVirtualizer(progress: Int) { setVirtualizer(progress>0, progress/100f) }
-    fun setLimiter(enabled: Boolean, thresholdDb: Float = -1f) { isLimiterEnabled=enabled; limiterThresholdDb=thresholdDb; dspProcessor.setLimiter(enabled, thresholdDb); applyLoudnessToSystem() }
-    fun setAutoGain(enabled: Boolean, targetLufs: Float) { isAutoGainEnabled=enabled; autoGainTargetLufs=targetLufs; applyLoudnessToSystem() }
-    fun setMdrcEnabled(e: Boolean){ isMdrcEnabled=e; dspProcessor.setMdrcEnabled(e) }
-    fun setMdrcDynamics(t: Float, r: Float){ mdrcThresholdDb=t; mdrcRatio=r; dspProcessor.setMdrcDynamics(t,r) }
-    fun setMdrcGain(i: Int, g: Float){ if(i in 0..4){ mdrcGains[i]=g; dspProcessor.setMdrcBandGain(i,g) } }
-    fun setAts2835pEmulation(e: Boolean, a: Float=0.8f, b: Boolean=false){ ats2835pEmuEnabled=e; ats2835pEmuAmount=a; ats2835pBtBypass=b; dspProcessor.setEmulationEnabled(e); dspProcessor.setEmulationAmount(a); dspProcessor.setBluetoothAutoBypass(b) }
-
+    fun setVirtualizer(progress: Int){ setVirtualizer(progress>0, progress/100f) }
+    fun setVirtualizer(en: Boolean, strength: Float){ isVirtualizerEnabled=en; virtualizerStrength=strength; applyVirt() }
+    fun setLimiter(en: Boolean, thresh: Float=-1f){ isLimiterEnabled=en; limiterThresholdDb=thresh; applyLoud() }
+    fun setAutoGain(en: Boolean, target: Float){ isAutoGainEnabled=en; autoGainTargetLufs=target; applyLoud() }
+    fun setMdrcEnabled(e: Boolean){ dspProcessor.setMdrcEnabled(e) }
+    fun setMdrcDynamics(t: Float, r: Float){ dspProcessor.setMdrcDynamics(t,r) }
+    fun setMdrcGain(i: Int, g: Float){ dspProcessor.setMdrcBandGain(i,g) }
+    fun setAts2835pEmulation(e: Boolean, a: Float, b: Boolean){ dspProcessor.setEmulationEnabled(e); dspProcessor.setEmulationAmount(a); dspProcessor.setBluetoothAutoBypass(b) }
     fun saveCurrentAsProfile(name: String): AppProfile {
-        val p = AppProfile(id="custom_${System.currentTimeMillis()}", packageName="", appName=name, presetName=name, globalGainDb=globalGainDb, bandGains=bandGains.toList(), bandQs=bandQs.toList(), bassBoostDb=bassBoostDb, bassFreqHz=bassFreqHz, virtualizerStrength=(virtualizerStrength*100).toInt(), limiterEnabled=isLimiterEnabled, limiterThresholdDb=limiterThresholdDb, autoGainEnabled=isAutoGainEnabled, autoGainTargetLufs=autoGainTargetLufs, mdrcEnabled=isMdrcEnabled, mdrcGains=mdrcGains.toList(), ats2835pEmuEnabled=ats2835pEmuEnabled)
-        allProfiles.add(p); currentProfile=p
-        scope.launch { dataStore.saveProfiles(allProfiles); dataStore.saveCurrentProfileId(p.id) }
-        mainHandler.post { onProfileChangedListener?.invoke(p) }
-        return p
+        val p = AppProfile(id="custom_${System.currentTimeMillis()}", packageName="", appName=name, presetName=name, globalGainDb=globalGainDb, bandGains=bandGains.toList(), bandQs=bandQs.toList(), bassBoostDb=bassBoostDb, bassFreqHz=bassFreqHz, virtualizerStrength=(virtualizerStrength*100).toInt(), limiterEnabled=isLimiterEnabled, limiterThresholdDb=limiterThresholdDb, autoGainEnabled=isAutoGainEnabled, autoGainTargetLufs=autoGainTargetLufs, mdrcEnabled=true, mdrcGains=mdrcGains.toList(), ats2835pEmuEnabled=true)
+        allProfiles.add(p); currentProfile=p; scope.launch{ dataStore.saveProfiles(allProfiles) }; return p
     }
-    fun applyProfileInMemory(profile: AppProfile, saveSelection: Boolean = true) {
-        currentProfile=profile; globalGainDb=profile.globalGainDb
-        for (i in bandGains.indices) if (i < profile.bandGains.size) bandGains[i]=profile.bandGains[i]
-        bassBoostDb=profile.bassBoostDb; bassFreqHz=profile.bassFreqHz; isBassBoostEnabled=bassBoostDb>0.05f
-        virtualizerStrength=(profile.virtualizerStrength/100f).coerceIn(0f,1f); isVirtualizerEnabled=profile.virtualizerStrength>0
-        isMdrcEnabled=profile.mdrcEnabled; isLimiterEnabled=profile.limiterEnabled; limiterThresholdDb=profile.limiterThresholdDb
-        isAutoGainEnabled=profile.autoGainEnabled; autoGainTargetLufs=profile.autoGainTargetLufs
-        reapplyAllParams()
-        if (saveSelection) scope.launch { dataStore.saveCurrentProfileId(profile.id) }
-        mainHandler.post { onProfileChangedListener?.invoke(profile) }
-    }
-    fun switchProfileForPackage(pkg: String){ allProfiles.find{ it.packageName.equals(pkg,true)}?.let{ if(it.id!=currentProfile.id) applyProfileInMemory(it,true) } }
-    fun reapplyAllParams(){ syncAllParamsToDsp(); checkAndApplyGlobalBypass(); applyAllSettingsToSystemEq(); applyBassBoostToSystem(); applyVirtualizerToSystem(); applyLoudnessToSystem() }
-    private fun syncAllParamsToDsp(){
-        dspProcessor.setMasterGain(globalGainDb); dspProcessor.setPreamp(preampDb)
-        for (i in 0..31) dspProcessor.setBandLevel(i, bandGains[i])
-        dspProcessor.setToneBass(toneBassDb); dspProcessor.setToneMid(toneMidDb); dspProcessor.setToneTreble(toneTrebleDb)
-        dspProcessor.setBassBoost(isBassBoostEnabled, bassFreqHz, bassBoostDb); dspProcessor.setVirtualizer(isVirtualizerEnabled, virtualizerStrength)
-        dspProcessor.setLimiter(isLimiterEnabled, limiterThresholdDb)
-    }
+    fun applyProfileInMemory(p: AppProfile, save: Boolean=true){ currentProfile=p; globalGainDb=p.globalGainDb; for(i in bandGains.indices) if(i<p.bandGains.size) bandGains[i]=p.bandGains[i]; bassBoostDb=p.bassBoostDb; bassFreqHz=p.bassFreqHz; virtualizerStrength=p.virtualizerStrength/100f; applyAll() }
 
-    // ATTACHERS LLAMADOS DESDE EL SERVICE
-    fun attachSystemEqualizer(eq: Equalizer){ try{ systemEq?.release() }catch(_:Exception){}; systemEq=eq }
-    fun attachSystemBassBoost(bb: BassBoost){ try{ systemBass?.release() }catch(_:Exception){}; systemBass=bb }
-    fun attachSystemVirtualizer(v: Virtualizer){ try{ systemVirtualizer?.release() }catch(_:Exception){}; systemVirtualizer=v }
-    fun attachSystemLoudness(l: LoudnessEnhancer){ try{ systemLoudness?.release() }catch(_:Exception){}; systemLoudness=l }
+    fun attachSystemEqualizer(eq: Equalizer){ systemEq=eq; bandMapCache=null; buildCache() }
+    fun attachSystemBassBoost(b: BassBoost){ systemBass=b }
+    fun attachSystemVirtualizer(v: Virtualizer){ systemVirt=v }
+    fun attachSystemLoudness(l: LoudnessEnhancer){ systemLoud=l }
+    fun reapplyAllParams(){ applyAll() }
 
-    fun applyAllSettingsToSystemEq(){
-        if (systemEq==null) { try{ systemEq=Equalizer(0,0).apply{ enabled=true } }catch(_:Exception){ return } }
-        val eq=systemEq?:return
-        try{
-            for (i in 0 until eq.numberOfBands){
-                val center=eq.getCenterFreq(i.toShort())/1000
-                var closest=15; var minDiff=Int.MAX_VALUE
-                for (j in MY_32_BAND_FREQS.indices){ val d=kotlin.math.abs(MY_32_BAND_FREQS[j]-center); if(d<minDiff){ minDiff=d; closest=j } }
-                var total=bandGains[closest]+globalGainDb+preampDb
-                if (center<250) total+=toneBassDb else if (center<=4000) total+=toneMidDb else total+=toneTrebleDb
-                eq.setBandLevel(i.toShort(), total.coerceIn(-15f,15f).let{ (it*100).toInt().toShort() })
-            }
-            eq.enabled=isGlobalAudioEnabled
-        }catch(e: Exception){ Log.e(TAG,"eq: ${e.message}") }
+    private fun buildCache(){
+        val eq=systemEq?:return; val num=eq.numberOfBands; val cache=IntArray(num)
+        for(i in 0 until num){ val cf=eq.getCenterFreq(i.toShort())/1000; var closest=15; var md=Int.MAX_VALUE; for(j in MY_FREQS.indices){ val d=abs(MY_FREQS[j]-cf); if(d<md){ md=d; closest=j } }; cache[i]=closest }
+        bandMapCache=cache
     }
-    private fun applyBassBoostToSystem(){
-        val bb=systemBass?:return
-        try{
-            val strength=(bassBoostDb*1000/12f).toInt().coerceIn(0,1000)
-            bb.setStrength(strength.toShort())
-            bb.enabled=isGlobalAudioEnabled && isBassBoostEnabled
-        }catch(e: Exception){ Log.e(TAG,"bass: ${e.message}") }
+    fun applyAll(){ applyEq(); applyBass(); applyVirt(); applyLoud(); checkBypass() }
+    fun applyEq(){
+        if(systemEq==null){ try{ systemEq=Equalizer(0,0).apply{ enabled=true }; buildCache() }catch(_:Exception){ return } }
+        val eq=systemEq?:return; val cache=bandMapCache?:return
+        try{ for(i in 0 until eq.numberOfBands){ val idx=cache[i]; var total=bandGains[idx]+globalGainDb+preampDb; val cf=eq.getCenterFreq(i.toShort())/1000; total+= when{ cf<250->toneBassDb; cf<=4000->toneMidDb; else->toneTrebleDb }; eq.setBandLevel(i.toShort(), total.coerceIn(-15f,15f).let{ (it*100).toInt().toShort() }) }; eq.enabled=isGlobalAudioEnabled }catch(e:Exception){ Log.e(TAG,"eq ${e.message}") }
     }
-    private fun applyVirtualizerToSystem(){
-        val v=systemVirtualizer?:return
+    private fun applyBass(){ try{ systemBass?.setStrength((bassBoostDb*1000/12f).toInt().coerceIn(0,1000).toShort()); systemBass?.enabled=isGlobalAudioEnabled && isBassBoostEnabled }catch(_:Exception){} }
+    private fun applyVirt(){
         try{
-            val strength=(virtualizerStrength*1000).toInt().coerceIn(0,1000)
-            v.setStrength(strength.toShort())
-            v.enabled=isGlobalAudioEnabled && isVirtualizerEnabled
-        }catch(e: Exception){ Log.e(TAG,"virt: ${e.message}") }
+            if(systemVirt==null) return
+            // FIX: muchos celulares no soportan Virtualizer en speaker
+            if(!systemVirt!!.strengthSupported) { systemVirt!!.enabled=false; return }
+            systemVirt!!.setStrength((virtualizerStrength*1000).toInt().coerceIn(0,1000).toShort())
+            systemVirt!!.enabled=isGlobalAudioEnabled && isVirtualizerEnabled
+        }catch(_:Exception){ systemVirt?.enabled=false }
     }
-    private fun applyLoudnessToSystem(){
-        val loud=systemLoudness?:return
+    private fun applyLoud(){
         try{
-            val targetGainMb = if (isAutoGainEnabled) ((autoGainTargetLufs+23f)*100).toInt() else 0
-            val limiterGain = if (isLimiterEnabled) ((limiterThresholdDb+1f)*100).toInt() else targetGainMb
-            loud.setTargetGain((targetGainMb+limiterGain).coerceIn(-1500,1500))
-            loud.enabled=isGlobalAudioEnabled && (isLimiterEnabled || isAutoGainEnabled)
-        }catch(e: Exception){ Log.e(TAG,"loud: ${e.message}") }
+            // FIX: conversión realista, no -14 LUFS = 900mB que satura
+            val gainMb = if(isLimiterEnabled) ((limiterThresholdDb*100).toInt()+100) else (if(isAutoGainEnabled) 200 else 0)
+            systemLoud?.setTargetGain(gainMb.coerceIn(-1500, 600))
+            systemLoud?.enabled=isGlobalAudioEnabled && (isLimiterEnabled || isAutoGainEnabled)
+        }catch(_:Exception){}
     }
     fun releaseResources(){
-        try{ systemEq?.enabled=false; systemEq?.release() }catch(_:Exception){}
-        try{ systemBass?.enabled=false; systemBass?.release() }catch(_:Exception){}
-        try{ systemVirtualizer?.enabled=false; systemVirtualizer?.release() }catch(_:Exception){}
-        try{ systemLoudness?.enabled=false; systemLoudness?.release() }catch(_:Exception){}
-        systemEq=null; systemBass=null; systemVirtualizer=null; systemLoudness=null
-        dspProcessor.resetFilterStates()
+        scope.cancel()
+        try{ systemEq?.release() }catch(_:Exception){}; try{ systemBass?.release() }catch(_:Exception){}; try{ systemVirt?.release() }catch(_:Exception){}; try{ systemLoud?.release() }catch(_:Exception){}
     }
 }

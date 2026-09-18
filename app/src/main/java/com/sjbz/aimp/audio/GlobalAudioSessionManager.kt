@@ -37,17 +37,16 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     private val dataStore = AudioSettingsDataStore(context)
     private val scope = CoroutineScope(Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
-
     val dspProcessor: SjbzDspProcessor = getDspProcessor()
 
-    @Volatile var isGlobalAudioEnabled: Boolean = false private set
+    @Volatile var isGlobalAudioEnabled: Boolean = false
     private val activeSessions = mutableMapOf<Int, String>()
-    var currentProfile: AppProfile = AppProfile.createDefaultProfiles().first() private set
-    var allProfiles: MutableList<AppProfile> = AppProfile.createDefaultProfiles().toMutableList() private set
+    var currentProfile: AppProfile = AppProfile.createDefaultProfiles().first()
+    var allProfiles: MutableList<AppProfile> = AppProfile.createDefaultProfiles().toMutableList()
 
     @Volatile var globalGainDb: Float = 0.0f
     @Volatile var preampDb: Float = 0.0f
-    val bandGains: FloatArray = FloatArray(32) { 0.0f }
+    val bandGains: FloatArray = FloatArray(32)
     val bandQs: FloatArray = FloatArray(32) { 1.414f }
     @Volatile var toneBassDb: Float = 0.0f
     @Volatile var toneMidDb: Float = 0.0f
@@ -65,7 +64,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     @Volatile var isMdrcEnabled: Boolean = true
     @Volatile var mdrcThresholdDb: Float = -18.0f
     @Volatile var mdrcRatio: Float = 2.5f
-    val mdrcGains: FloatArray = FloatArray(5) { 0.0f }
+    val mdrcGains: FloatArray = FloatArray(5)
     @Volatile var ats2835pEmuEnabled: Boolean = true
     @Volatile var ats2835pEmuAmount: Float = 0.8f
     @Volatile var ats2835pBtBypass: Boolean = false
@@ -77,7 +76,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     private val volumeObserver = object : ContentObserver(mainHandler) {
         override fun onChange(selfChange: Boolean) {
-            super.onChange(selfChange)
             val currentVol = getSystemVolume()
             val maxVol = getMaxSystemVolume()
             onSystemVolumeChangedListener?.invoke(currentVol, maxVol)
@@ -85,9 +83,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     }
 
     init {
-        try {
-            context.contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, volumeObserver)
-        } catch (e: Exception) { Log.w(TAG, "Could not register volume observer") }
+        try { context.contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, volumeObserver) } catch (e: Exception) {}
         scope.launch { loadPersistedSettings() }
         syncAllParamsToDsp()
     }
@@ -95,13 +91,10 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     private suspend fun loadPersistedSettings() {
         try {
             val loadedProfiles = dataStore.loadProfiles()
-            if (loadedProfiles.isNotEmpty()) {
-                allProfiles.clear()
-                allProfiles.addAll(loadedProfiles)
-            }
+            if (loadedProfiles.isNotEmpty()) { allProfiles.clear(); allProfiles.addAll(loadedProfiles) }
             val (savedGains, savedQs) = dataStore.loadBands()
-            System.arraycopy(savedGains, 0, bandGains, 0, minOf(savedGains.size, bandGains.size))
-            System.arraycopy(savedQs, 0, bandQs, 0, minOf(savedQs.size, bandQs.size))
+            for (i in bandGains.indices) { if (i < savedGains.size) bandGains[i] = savedGains[i] }
+            for (i in bandQs.indices) { if (i < savedQs.size) bandQs[i] = savedQs[i] }
             val currentId = dataStore.loadCurrentProfileId()
             val found = allProfiles.find { it.id == currentId }?: allProfiles.firstOrNull()
             if (found!= null) applyProfileInMemory(found, saveSelection = false)
@@ -116,16 +109,15 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             val clamped = volume.coerceIn(0, getMaxSystemVolume())
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, clamped, 0)
             onSystemVolumeChangedListener?.invoke(clamped, getMaxSystemVolume())
-        } catch (e: Exception) { Log.e(TAG, "Error setting volume") }
+        } catch (e: Exception) {}
     }
     fun adjustSystemVolume(increase: Boolean) {
         try {
             val direction = if (increase) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
             audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
             onSystemVolumeChangedListener?.invoke(getSystemVolume(), getMaxSystemVolume())
-        } catch (e: Exception) { Log.e(TAG, "Error adjusting volume") }
+        } catch (e: Exception) {}
     }
-
     fun setGlobalAudioEnabled(enabled: Boolean) {
         if (isGlobalAudioEnabled == enabled) return
         isGlobalAudioEnabled = enabled
@@ -134,17 +126,11 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         dispatchSessionsChanged()
         scope.launch { dataStore.saveGlobalEnabled(enabled) }
     }
-
     fun checkAndApplyGlobalBypass(): Boolean {
         val globalActive = isGlobalAudioEnabled || GlobalAudioService.isGlobalAudioEnabled
-        if (globalActive) {
-            dspProcessor.setGlobalBypass(false)
-        } else {
-            dspProcessor.setGlobalBypass(!dspProcessor.isMasterEnabled)
-        }
+        if (globalActive) dspProcessor.setGlobalBypass(false) else dspProcessor.setGlobalBypass(!dspProcessor.isMasterEnabled)
         return globalActive
     }
-
     fun openSession(sessionId: Int, packageName: String? = null) {
         if (!isGlobalAudioEnabled) return
         if (activeSessions.containsKey(sessionId)) return
@@ -160,7 +146,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         val packages = activeSessions.values.toList()
         mainHandler.post { onActiveSessionsChangedListener?.invoke(count, packages) }
     }
-
     fun setMasterGain(gainDb: Float) { this.globalGainDb = gainDb; dspProcessor.setMasterGain(gainDb) }
     fun setGlobalGain(gainDb: Float) = setMasterGain(gainDb)
     fun setPreampGain(gainDb: Float) { this.preampDb = gainDb.coerceIn(-12f, 12f); dspProcessor.setPreamp(this.preampDb) }
@@ -192,111 +177,72 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         val enabled = progress > 0; val strength = (progress / 100.0f).coerceIn(0f, 1f)
         setVirtualizer(enabled, strength)
     }
-    fun setAutoGain(enabled: Boolean, targetLufs: Float) {
-        this.isAutoGainEnabled = enabled; this.autoGainTargetLufs = targetLufs
-        onAutoGainAdjustmentListener?.invoke(targetLufs)
-    }
-
-    // FIX CRÍTICO: Usa los nombres reales de AppProfile
+    fun setAutoGain(enabled: Boolean, targetLufs: Float) { this.isAutoGainEnabled = enabled; this.autoGainTargetLufs = targetLufs }
     fun saveCurrentAsProfile(name: String): AppProfile {
         val newProfile = AppProfile(
             id = "custom_${System.currentTimeMillis()}",
-            packageName = "",
-            appName = name,
-            presetName = name,
+            packageName = "", appName = name, presetName = name,
             globalGainDb = globalGainDb,
-            bandGains = bandGains.toList(),
-            bandQs = bandQs.toList(),
-            bassBoostDb = bassBoostDb,
-            bassFreqHz = bassFreqHz,
+            bandGains = bandGains.toList(), bandQs = bandQs.toList(),
+            bassBoostDb = bassBoostDb, bassFreqHz = bassFreqHz,
             virtualizerStrength = (virtualizerStrength * 100).toInt(),
-            limiterEnabled = isLimiterEnabled,
-            limiterThresholdDb = limiterThresholdDb,
-            autoGainEnabled = isAutoGainEnabled,
-            autoGainTargetLufs = autoGainTargetLufs,
-            mdrcEnabled = isMdrcEnabled,
-            mdrcGains = mdrcGains.toList(),
+            limiterEnabled = isLimiterEnabled, limiterThresholdDb = limiterThresholdDb,
+            autoGainEnabled = isAutoGainEnabled, autoGainTargetLufs = autoGainTargetLufs,
+            mdrcEnabled = isMdrcEnabled, mdrcGains = mdrcGains.toList(),
             ats2835pEmuEnabled = ats2835pEmuEnabled
         )
-        allProfiles.add(newProfile)
-        currentProfile = newProfile
-        scope.launch {
-            dataStore.saveProfiles(allProfiles)
-            dataStore.saveCurrentProfileId(newProfile.id)
-        }
+        allProfiles.add(newProfile); currentProfile = newProfile
+        scope.launch { dataStore.saveProfiles(allProfiles); dataStore.saveCurrentProfileId(newProfile.id) }
         mainHandler.post { onProfileChangedListener?.invoke(newProfile) }
         return newProfile
     }
-
     fun setMdrcEnabled(enabled: Boolean) { this.isMdrcEnabled = enabled; dspProcessor.setMdrcEnabled(enabled) }
     fun setMdrcDynamics(thresholdDb: Float, ratio: Float) {
         this.mdrcThresholdDb = thresholdDb; this.mdrcRatio = ratio.coerceAtLeast(1.0f)
         dspProcessor.setMdrcDynamics(thresholdDb, ratio)
     }
-    fun setMdrcGain(bandIndex: Int, gainDb: Float) {
-        if (bandIndex in 0 until 5) { this.mdrcGains[bandIndex] = gainDb; dspProcessor.setMdrcBandGain(bandIndex, gainDb) }
-    }
-    fun setLimiter(enabled: Boolean, thresholdDb: Float = -1.0f) {
-        this.isLimiterEnabled = enabled; this.limiterThresholdDb = thresholdDb
-        dspProcessor.setLimiter(enabled, thresholdDb)
-    }
+    fun setMdrcGain(bandIndex: Int, gainDb: Float) { if (bandIndex in 0 until 5) { this.mdrcGains[bandIndex] = gainDb; dspProcessor.setMdrcBandGain(bandIndex, gainDb) } }
+    fun setLimiter(enabled: Boolean, thresholdDb: Float = -1.0f) { this.isLimiterEnabled = enabled; this.limiterThresholdDb = thresholdDb; dspProcessor.setLimiter(enabled, thresholdDb) }
     fun setAts2835pEmulation(enabled: Boolean, amount: Float = 0.8f, bluetoothBypass: Boolean = false) {
         this.ats2835pEmuEnabled = enabled; this.ats2835pEmuAmount = amount.coerceIn(0f, 1f); this.ats2835pBtBypass = bluetoothBypass
-        dspProcessor.setEmulationEnabled(enabled)
-        dspProcessor.setEmulationAmount(this.ats2835pEmuAmount)
-        dspProcessor.setBluetoothAutoBypass(bluetoothBypass)
+        dspProcessor.setEmulationEnabled(enabled); dspProcessor.setEmulationAmount(this.ats2835pEmuAmount); dspProcessor.setBluetoothAutoBypass(bluetoothBypass)
     }
-
     fun reapplyAllParams() { syncAllParamsToDsp(); checkAndApplyGlobalBypass() }
-
     private fun syncAllParamsToDsp() {
-        dspProcessor.setMasterGain(globalGainDb)
-        dspProcessor.setPreamp(preampDb)
+        dspProcessor.setMasterGain(globalGainDb); dspProcessor.setPreamp(preampDb)
         for (i in 0 until 32) dspProcessor.setBandLevel(i, bandGains[i])
         dspProcessor.setToneBass(toneBassDb); dspProcessor.setToneMid(toneMidDb); dspProcessor.setToneTreble(toneTrebleDb)
         dspProcessor.setBassBoost(isBassBoostEnabled, bassFreqHz, bassBoostDb)
         dspProcessor.setVirtualizer(isVirtualizerEnabled, virtualizerStrength)
-        dspProcessor.setMdrcEnabled(isMdrcEnabled)
-        dspProcessor.setMdrcDynamics(mdrcThresholdDb, mdrcRatio)
+        dspProcessor.setMdrcEnabled(isMdrcEnabled); dspProcessor.setMdrcDynamics(mdrcThresholdDb, mdrcRatio)
         for (b in 0 until 5) dspProcessor.setMdrcBandGain(b, mdrcGains[b])
         dspProcessor.setLimiter(isLimiterEnabled, limiterThresholdDb)
-        dspProcessor.setEmulationEnabled(ats2835pEmuEnabled)
-        dspProcessor.setEmulationAmount(ats2835pEmuAmount)
-        dspProcessor.setBluetoothAutoBypass(ats2835pBtBypass)
+        dspProcessor.setEmulationEnabled(ats2835pEmuEnabled); dspProcessor.setEmulationAmount(ats2835pEmuAmount); dspProcessor.setBluetoothAutoBypass(ats2835pBtBypass)
     }
-
     fun applyProfileInMemory(profile: AppProfile, saveSelection: Boolean = true) {
-        currentProfile = profile
-        globalGainDb = profile.globalGainDb
-        profile.bandGains.forEachIndexed { i, g -> if (i in bandGains.indices) bandGains[i] = g }
-        profile.bandQs.forEachIndexed { i, q -> if (i in bandQs.indices) bandQs[i] = q }
-        bassBoostDb = profile.bassBoostDb
-        bassFreqHz = profile.bassFreqHz
+        currentProfile = profile; globalGainDb = profile.globalGainDb
+        for (i in bandGains.indices) { if (i < profile.bandGains.size) bandGains[i] = profile.bandGains[i] }
+        for (i in bandQs.indices) { if (i < profile.bandQs.size) bandQs[i] = profile.bandQs[i] }
+        bassBoostDb = profile.bassBoostDb; bassFreqHz = profile.bassFreqHz
         isBassBoostEnabled = profile.bassBoostDb > 0.05f
         virtualizerStrength = (profile.virtualizerStrength / 100f).coerceIn(0f, 1f)
         isVirtualizerEnabled = profile.virtualizerStrength > 0
-        isMdrcEnabled = profile.mdrcEnabled
-        isLimiterEnabled = profile.limiterEnabled
-        limiterThresholdDb = profile.limiterThresholdDb
-        isAutoGainEnabled = profile.autoGainEnabled
-        autoGainTargetLufs = profile.autoGainTargetLufs
-        profile.mdrcGains.forEachIndexed { i, g -> if (i in mdrcGains.indices) mdrcGains[i] = g }
+        isMdrcEnabled = profile.mdrcEnabled; isLimiterEnabled = profile.limiterEnabled; limiterThresholdDb = profile.limiterThresholdDb
+        isAutoGainEnabled = profile.autoGainEnabled; autoGainTargetLufs = profile.autoGainTargetLufs
+        for (i in mdrcGains.indices) { if (i < profile.mdrcGains.size) mdrcGains[i] = profile.mdrcGains[i] }
         ats2835pEmuEnabled = profile.ats2835pEmuEnabled
         reapplyAllParams()
         if (saveSelection) scope.launch { dataStore.saveCurrentProfileId(profile.id) }
         mainHandler.post { onProfileChangedListener?.invoke(profile) }
     }
-
     fun switchProfileForPackage(packageName: String) {
         val matchedProfile = allProfiles.find { it.packageName.equals(packageName, ignoreCase = true) }
         if (matchedProfile!= null && matchedProfile.id!= currentProfile.id) {
-            Log.i(TAG, "Auto-switching to: ${matchedProfile.appName} for $packageName")
             applyProfileInMemory(matchedProfile, saveSelection = true)
         }
     }
-
     fun releaseResources() {
-        try { context.contentResolver.unregisterContentObserver(volumeObserver) } catch (e: Exception) { Log.w(TAG, "Error unregistering") }
+        try { context.contentResolver.unregisterContentObserver(volumeObserver) } catch (e: Exception) {}
         releaseAllSessions(); dspProcessor.resetFilterStates()
     }
 }

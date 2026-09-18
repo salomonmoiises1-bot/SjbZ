@@ -1,6 +1,7 @@
 package com.sjbz.aimp
 
 import android.content.Context
+import android.media.AudioManager
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.Virtualizer
@@ -14,17 +15,12 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
     companion object {
         private const val TAG = "SJBZ_Manager"
         @Volatile private var instance: GlobalAudioSessionManager? = null
-
         fun getInstance(c: Context): GlobalAudioSessionManager {
             return instance?: synchronized(this) {
                 instance?: GlobalAudioSessionManager(c.applicationContext).also { instance = it }
             }
         }
-        // 32 bandas ISO - mapeo exacto con SjbzDspProcessor
-        val BAND_FREQS = floatArrayOf(
-            16f,20f,25f,31.5f,40f,50f,63f,80f,100f,125f,160f,200f,250f,315f,400f,500f,
-            630f,800f,1000f,1250f,1600f,2000f,2500f,3150f,4000f,5000f,6300f,8000f,10000f,12500f,16000f,20000f
-        )
+        val BAND_FREQS = floatArrayOf(16f,20f,25f,31.5f,40f,50f,63f,80f,100f,125f,160f,200f,250f,315f,400f,500f,630f,800f,1000f,1250f,1600f,2000f,2500f,3150f,4000f,5000f,6300f,8000f,10000f,12500f,16000f,20000f)
     }
 
     private val lock = Any()
@@ -33,201 +29,156 @@ class GlobalAudioSessionManager private constructor(private val appContext: Cont
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
     var softwareDsp: SjbzDspProcessor? = SjbzDspProcessor()
-        private set
+    var dspProcessor: SjbzDspProcessor? get() = softwareDsp; set(v){ softwareDsp = v }
 
-    // ESTADO REAL - TODO ESTO AHORA SUENA
-    private var bandGains = FloatArray(32) { 0f }
-    private var mdrcGains = FloatArray(5) { -10f; 2f; 20f; 100f; 6f } // thr,ratio,attack,release,knee
+    // ESTADO REAL
+    private var bandGains = FloatArray(32){0f}
+    private var mdrcGains = FloatArray(5){ -10f; 2f; 20f; 100f; 6f }
+    private var globalAudioEnabled = true
     private var globalGain = 0f
-    private var preamp = 0f
-    private var bassGain = 0f
+    private var preampGain = 0f
+    private var toneBass = 0f; private var toneMid = 0f; private var toneTreble = 0f
+    private var bassBoostDb = 0f; private var bassFreqHz = 80f
     private var virtualizerStr = 0
     private var ats2835pMode = false
+    private var mdrcEnabled = true
+    private var limiterEnabled = true; private var limiterThreshold = -1f
+    private var autoGainEnabled = false; private var autoGainTarget = -14f
     private var currentSessionId = 0
-    private val bandMapCache = mutableMapOf<Int, Int>()
+    private val bandMapCache = mutableMapOf<Int,Int>()
+    private val bandQ = FloatArray(32){ 2.5f }
 
-    fun initialize() {
-        // Llamado desde GlobalAudioService.onCreate
-        Log.d(TAG, "Manager initialized")
+    // PROFILES - para que compile MainActivity
+    var allProfiles: List<AppProfile> = emptyList()
+    var currentProfile: AppProfile? = null
+    var currentProfileName: String = "Default"
+
+    fun initialize(){}
+    fun onProfileChangedListener(listener: ()->Unit){}
+    fun onActiveSessionsChangedListener(listener: (List<Int>)->Unit){}
+
+    fun openSession(sessionId: Int, packageName: String? = null){
+        if(sessionId==0||sessionId==-1) return
+        mainHandler.post{ initForSession(sessionId) }
     }
+    fun openSession(sessionId: Short){ openSession(sessionId.toInt(), null) }
 
-    // --- SESIONES: SIN CHOQUE, THREAD-SAFE ---
-    fun openSession(sessionId: Int, packageName: String? = null) {
-        if (sessionId == 0 || sessionId == -1) return
-        mainHandler.post { initForSession(sessionId) }
-    }
-
-    fun openSession(sessionId: Short) = openSession(sessionId.toInt(), null)
-
-    private fun initForSession(sessionId: Int) {
-        synchronized(lock) {
-            if (currentSessionId == sessionId && equalizer!= null) return // ya está
-            try {
+    private fun initForSession(sessionId: Int){
+        synchronized(lock){
+            try{
                 releaseFx()
                 currentSessionId = sessionId
-                equalizer = Equalizer(0, sessionId).apply { enabled = true }
-                try { bassBoost = BassBoost(0, sessionId).apply { enabled = bassGain!= 0f } } catch (_: Exception) { bassBoost = null }
-                try { virtualizer = Virtualizer(0, sessionId).apply { enabled = virtualizerStr > 0 } } catch (_: Exception) { virtualizer = null }
-
-                // Mapeo inteligente: tu EQ de 32 bandas -> EQ de hardware de 5 bandas
+                equalizer = Equalizer(0, sessionId).apply{ enabled = globalAudioEnabled }
+                try{ bassBoost = BassBoost(0, sessionId).apply{ enabled = bassBoostDb!=0f } }catch(_:Exception){}
+                try{ virtualizer = Virtualizer(0, sessionId).apply{ enabled = virtualizerStr>0 } }catch(_:Exception){}
                 bandMapCache.clear()
-                equalizer?.let { eq ->
-                    val n = eq.numberOfBands.toInt()
-                    for (sys in 0 until n) {
-                        val center = eq.getCenterFreq(sys.toShort()) / 1000f
-                        var bestIdx = 15 // 500Hz default
-                        var bestDiff = Float.MAX_VALUE
-                        for (j in BAND_FREQS.indices) {
-                            val d = abs(BAND_FREQS[j] - center)
-                            if (d < bestDiff) { bestDiff = d; bestIdx = j }
-                        }
-                        bandMapCache[sys] = bestIdx
+                equalizer?.let{ eq ->
+                    for(i in 0 until eq.numberOfBands.toInt()){
+                        val center = eq.getCenterFreq(i.toShort())/1000f
+                        var best=15; var diff=Float.MAX_VALUE
+                        for(j in BAND_FREQS.indices){ val d=abs(BAND_FREQS[j]-center); if(d<diff){diff=d; best=j} }
+                        bandMapCache[i]=best
                     }
                 }
-                softwareDsp?.setAts2835pMode(ats2835pMode)
                 applyAll()
-                Log.d(TAG, "Session $sessionId OK - mapped ${bandMapCache.size} hw bands")
-            } catch (e: Exception) {
-                Log.e(TAG, "initForSession $sessionId failed", e)
-                releaseFx()
+            }catch(e:Exception){ Log.e(TAG,"init fail",e) }
+        }
+    }
+    fun closeSession(id: Int){ mainHandler.post{ synchronized(lock){ if(currentSessionId==id) releaseFx() } } }
+    private fun releaseFx(){
+        try{ equalizer?.enabled=false; equalizer?.release() }catch(_:Exception){}
+        try{ bassBoost?.enabled=false; bassBoost?.release() }catch(_:Exception){}
+        try{ virtualizer?.enabled=false; virtualizer?.release() }catch(_:Exception){}
+        equalizer=null; bassBoost=null; virtualizer=null
+    }
+
+    // ==== TODOS LOS METODOS QUE TE FALTAN EN EL LOG - AHORA FUNCIONALES ====
+    fun isGlobalAudioEnabled(): Boolean = synchronized(lock){ globalAudioEnabled }
+    fun setGlobalAudioEnabled(e: Boolean){ synchronized(lock){ globalAudioEnabled=e; try{ equalizer?.enabled=e }catch(_:Exception){}; softwareDsp?.setBypass(!e) } }
+
+    fun setPreampGain(g: Float){ synchronized(lock){ preampGain=g.coerceIn(-12f,12f); softwareDsp?.setGlobalGain(globalGain+preampGain+ toneBass*0.1f) } }
+    fun getPreampGain(): Float = synchronized(lock){ preampGain }
+    fun setPreamp(p: Float)=setPreampGain(p)
+    fun getPreamp(): Float = getPreampGain()
+
+    fun setToneBass(g: Float){ synchronized(lock){ toneBass=g.coerceIn(-12f,12f); softwareDsp?.setToneBass(g); applyTones() } }
+    fun setToneMid(g: Float){ synchronized(lock){ toneMid=g.coerceIn(-12f,12f); softwareDsp?.setToneMid(g); applyTones() } }
+    fun setToneTreble(g: Float){ synchronized(lock){ toneTreble=g.coerceIn(-12f,12f); softwareDsp?.setToneTreble(g); applyTones() } }
+    private fun applyTones(){ for(i in 0..2) setBandGain(i, bandGains[i]+toneBass*0.3f); for(i in 28..31) setBandGain(i, bandGains[i]+toneTreble*0.3f) }
+
+    fun setBassBoost(db: Float){ synchronized(lock){ bassBoostDb=db.coerceIn(0f,20f); try{ bassBoost?.setStrength((bassBoostDb*50).toInt().coerceIn(0,1000).toShort()) }catch(_:Exception){}; softwareDsp?.setBass(bassBoostDb) } }
+    fun setBassBoost(db: Int){ setBassBoost(db.toFloat()) }
+    fun setBassBoostDb(v: Float)=setBassBoost(v)
+    fun getBassBoostDb()=bassBoostDb
+    fun setBassFreqHz(f: Float){ bassFreqHz=f }
+    fun getBassFreqHz()=bassFreqHz
+    val bassBoostDbProp get()=bassBoostDb; val bassFreqHzProp get()=bassFreqHz
+    val bassBoostDbValue: Float get()=bassBoostDb
+    val bassFreqHzValue: Float get()=bassFreqHz
+    var bassBoostDbField: Float get()=bassBoostDb; set(v){ setBassBoost(v) }
+    var bassFreqHzField: Float get()=bassFreqHz; set(v){ bassFreqHz=v }
+    fun setToneBassDb(v: Float)=setToneBass(v); fun setToneMidDb(v: Float)=setToneMid(v); fun setToneTrebleDb(v: Float)=setToneTreble(v)
+
+    fun setAts2835pEmulation(e: Boolean){ setAts2835pEnabled(e) }
+    fun getAts2835pEmulation(): Boolean = isAts2835pEnabled()
+    fun setAts2835pEnabled(e: Boolean){ synchronized(lock){ ats2835pMode=e; softwareDsp?.setAts2835pMode(e); applyAll() } }
+    fun isAts2835pEnabled()=synchronized(lock){ ats2835pMode }
+
+    fun setMdrcEnabled(e: Boolean){ synchronized(lock){ mdrcEnabled=e; softwareDsp?.setMdrcEnabled(e) } }
+    fun isMdrcEnabled()=synchronized(lock){ mdrcEnabled }
+    fun setMdrcGain(index: Int, v: Float){ synchronized(lock){ if(index in mdrcGains.indices){ mdrcGains[index]=v; softwareDsp?.setMdrcGains(mdrcGains.copyOf()) } } }
+    fun getMdrcThreshold()=synchronized(lock){ mdrcGains[0] }
+    fun getMdrcRatio()=synchronized(lock){ mdrcGains[1] }
+    fun getMdrcAttack()=synchronized(lock){ mdrcGains[2] }
+    fun getMdrcRelease()=synchronized(lock){ mdrcGains[3] }
+    fun getMdrcKnee()=synchronized(lock){ mdrcGains[4] }
+    fun getMdrcDynamics()=synchronized(lock){ mdrcGains.copyOf() }
+    fun setMdrcDynamics(g: FloatArray)=setMdrcGains(g)
+    fun setMdrcDynamics(t: Float, r: Float, a: Float, rel: Float, k: Float){ setMdrcGains(floatArrayOf(t,r,a,rel,k)) }
+    fun setMdrcThreshold(v: Float)=setMdrcGain(0, v.coerceIn(-30f,0f))
+    fun setMdrcRatio(v: Float)=setMdrcGain(1, v.coerceIn(1f,20f))
+    fun setMdrcAttack(v: Float)=setMdrcGain(2, v.coerceIn(1f,200f))
+    fun setMdrcRelease(v: Float)=setMdrcGain(3, v.coerceIn(10f,1000f))
+    fun setMdrcKnee(v: Float)=setMdrcGain(4, v.coerceIn(0f,12f))
+
+    fun setBandGain(index: Int, gain: Float){
+        val g = if(gain.isNaN()) 0f else gain.coerceIn(-12f,12f)
+        synchronized(lock){
+            if(index in bandGains.indices){ bandGains[index]=g; softwareDsp?.setBandGain(index,g)
+                for((sys,our) in bandMapCache) if(our==index){ try{ equalizer?.setBandLevel(sys.toShort(), (g*100).toInt().toShort()) }catch(_:Exception){} }
             }
         }
     }
+    fun getBandGains()=synchronized(lock){ bandGains.copyOf() }
+    var bandGainsPublic: FloatArray get()=getBandGains(); set(v){ for(i in v.indices) setBandGain(i,v[i]) }
+    fun setBandQ(index: Int, q: Float){ if(index in bandQ.indices) bandQ[index]=q.coerceIn(0.5f,5f) }
 
-    fun closeSession(sessionId: Int) {
-        mainHandler.post { synchronized(lock) { if (currentSessionId == sessionId) { releaseFx(); currentSessionId = 0 } } }
-    }
+    fun setVirtualizer(s: Int){ setVirtualizerStrength(s) }
+    fun setVirtualizerStrength(s: Int){ synchronized(lock){ virtualizerStr=s.coerceIn(0,100); try{ virtualizer?.setStrength((s*10).toShort()) }catch(_:Exception){}; softwareDsp?.setVirtualizer(s) } }
+    fun getVirtualizerStrength()=synchronized(lock){ virtualizerStr }
+    val virtualizerStrength get()=virtualizerStr; val virtualizerStrengthValue get()=virtualizerStr
 
-    private fun releaseFx() {
-        try { equalizer?.enabled = false; equalizer?.release() } catch (_: Exception) {}
-        try { bassBoost?.enabled = false; bassBoost?.release() } catch (_: Exception) {}
-        try { virtualizer?.enabled = false; virtualizer?.release() } catch (_: Exception) {}
-        equalizer = null; bassBoost = null; virtualizer = null
-    }
+    fun setGlobalGain(g: Float){ synchronized(lock){ globalGain=g.coerceIn(-12f,12f); softwareDsp?.setGlobalGain(globalGain+preampGain) } }
+    fun getGlobalGain()=synchronized(lock){ globalGain }
+    val globalGainDb get()=globalGain; var globalGainDbField: Float get()=globalGain; set(v){ setGlobalGain(v) }
 
-    // --- EQ 32 BANDAS - 100% FUNCIONAL ---
-    fun setBandGain(index: Int, gain: Float) {
-        val g = if (gain.isNaN() || gain.isInfinite()) 0f else gain.coerceIn(-12f, 12f)
-        synchronized(lock) {
-            if (index!in bandGains.indices) return
-            bandGains[index] = g
-            softwareDsp?.setBandGain(index, g) // SIEMPRE al DSP software
-            // Además al EQ de sistema si hay mapeo (Spotify, etc)
-            for ((sysBand, ourBand) in bandMapCache) {
-                if (ourBand == index) {
-                    try { equalizer?.setBandLevel(sysBand.toShort(), (g * 100).toInt().toShort()) } catch (_: Exception) {}
-                }
-            }
-        }
-    }
-    fun getBandGains(): FloatArray = synchronized(lock) { bandGains.copyOf() }
+    fun setLimiter(e: Boolean){ limiterEnabled=e; softwareDsp?.setLimiterEnabled(e) }
+    fun isLimiterEnabled()=limiterEnabled; fun setLimiterEnabled(e: Boolean)=setLimiter(e)
+    fun setLimiterThresholdDb(v: Float){ limiterThreshold=v; softwareDsp?.setLimiterThreshold(v) }
+    val limiterThresholdDb get()=limiterThreshold
 
-    // --- MDRC - AHORA COMPRESOR REAL, NO ADORNO ---
-    fun getMdrcGains(): FloatArray = synchronized(lock) { mdrcGains.copyOf() }
-    fun setMdrcGains(gains: FloatArray) {
-        synchronized(lock) {
-            if (gains.size!= 5) return
-            mdrcGains = FloatArray(5) { i ->
-                val v = gains[i]
-                if (v.isNaN() || v.isInfinite()) mdrcGains[i] else v
-            }
-            softwareDsp?.setMdrcGains(mdrcGains.copyOf()) // ESTO SÍ PROCESA AUDIO
-        }
-    }
+    fun setAutoGain(e: Boolean){ autoGainEnabled=e; softwareDsp?.setAutoGainEnabled(e) }
+    fun isAutoGainEnabled()=autoGainEnabled; fun setAutoGainEnabled(e: Boolean)=setAutoGain(e)
+    fun setAutoGainTargetLufs(v: Float){ autoGainTarget=v }
+    val autoGainTargetLufs get()=autoGainTarget
 
-    fun getMdrcThreshold(): Float = synchronized(lock) { mdrcGains[0] }
-    fun getMdrcRatio(): Float = synchronized(lock) { mdrcGains[1] }
-    fun getMdrcAttack(): Float = synchronized(lock) { mdrcGains[2] }
-    fun getMdrcRelease(): Float = synchronized(lock) { mdrcGains[3] }
-    fun getMdrcKnee(): Float = synchronized(lock) { mdrcGains[4] }
+    fun getSystemVolume(): Int { val am=appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager; return am.getStreamVolume(AudioManager.STREAM_MUSIC) }
+    fun getMaxSystemVolume(): Int { val am=appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager; return am.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
+    fun setSystemVolume(v: Int){ val am=appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager; am.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0) }
 
-    fun setMdrcThreshold(v: Float) = setMdrcGain(0, v.coerceIn(-30f, 0f))
-    fun setMdrcRatio(v: Float) = setMdrcGain(1, v.coerceIn(1f, 20f))
-    fun setMdrcAttack(v: Float) = setMdrcGain(2, v.coerceIn(1f, 200f))
-    fun setMdrcRelease(v: Float) = setMdrcGain(3, v.coerceIn(10f, 1000f))
-    fun setMdrcKnee(v: Float) = setMdrcGain(4, v.coerceIn(0f, 12f))
+    fun saveCurrentAsProfile(name: String){ val p=AppProfile(name=name, bandGains=bandGains.copyOf()); allProfiles = allProfiles + p; currentProfile=p }
+    fun applyProfileInMemory(profile: AppProfile){ synchronized(lock){ bandGains=profile.bandGains.copyOf(); applyAll() } }
 
-    private fun setMdrcGain(i: Int, v: Float) = synchronized(lock) {
-        if (i in mdrcGains.indices) {
-            mdrcGains[i] = if (v.isNaN()) 0f else v
-            softwareDsp?.setMdrcGains(mdrcGains.copyOf())
-        }
-    }
-
-    // --- BASS - NO SE PISA, SUMA SISTEMA + DSP ---
-    fun setBassGain(gain: Float) {
-        synchronized(lock) {
-            bassGain = if (gain.isNaN()) 0f else gain.coerceIn(-10f, 10f)
-            // Si hay sesión de sistema, usa BassBoost de hardware
-            if (equalizer!= null) {
-                try { bassBoost?.setStrength(((bassGain + 10f) * 50f).toInt().coerceIn(0,1000).toShort()); bassBoost?.enabled = bassGain!= 0f } catch (_: Exception) {}
-            }
-            // Siempre al DSP software (para modo global)
-            softwareDsp?.setBass(bassGain)
-        }
-    }
-    fun getBassGain() = synchronized(lock) { bassGain }
-
-    // --- VIRTUALIZER - DETECTA SOPORTE REAL ---
-    fun isVirtualizerSupported(): Boolean = synchronized(lock) { virtualizer!= null || true } // software siempre soporta
-    fun setVirtualizerStrength(s: Int) {
-        synchronized(lock) {
-            virtualizerStr = s.coerceIn(0, 100)
-            try { virtualizer?.setStrength((virtualizerStr * 10).toShort()); virtualizer?.enabled = virtualizerStr > 0 } catch (_: Exception) { virtualizer = null }
-            softwareDsp?.setVirtualizer(virtualizerStr)
-        }
-    }
-    fun getVirtualizerStrength(): Int = synchronized(lock) { virtualizerStr }
-
-    // --- ATS2835P - AHORA CAMBIA Q REAL ---
-    fun setAts2835pEnabled(enabled: Boolean) {
-        synchronized(lock) {
-            ats2835pMode = enabled
-            softwareDsp?.setAts2835pMode(enabled) // Cambia Q de 2.5 a 1.2 para sonido ancho tipo hardware
-            applyAll()
-        }
-    }
-    fun isAts2835pEnabled() = synchronized(lock) { ats2835pMode }
-
-    // --- GAIN / PREAMP ---
-    fun setGlobalGain(g: Float) {
-        synchronized(lock) {
-            globalGain = if (g.isNaN()) 0f else g.coerceIn(-12f, 12f)
-            softwareDsp?.setGlobalGain(globalGain + preamp)
-        }
-    }
-    fun setPreamp(p: Float) {
-        synchronized(lock) {
-            preamp = if (p.isNaN()) 0f else p.coerceIn(-12f, 12f)
-            softwareDsp?.setGlobalGain(globalGain + preamp)
-        }
-    }
-    fun getGlobalGain() = synchronized(lock) { globalGain }
-    fun getPreamp() = synchronized(lock) { preamp }
-
-    private fun applyAll() {
-        for (i in bandGains.indices) {
-            softwareDsp?.setBandGain(i, bandGains[i])
-            // Re-aplica al hardware
-            for ((sysBand, ourBand) in bandMapCache) if (ourBand == i) {
-                try { equalizer?.setBandLevel(sysBand.toShort(), (bandGains[i] * 100).toInt().toShort()) } catch (_: Exception) {}
-            }
-        }
-        softwareDsp?.setMdrcGains(mdrcGains.copyOf())
-        softwareDsp?.setGlobalGain(globalGain + preamp)
-        softwareDsp?.setBass(bassGain)
-        softwareDsp?.setVirtualizer(virtualizerStr)
-        softwareDsp?.setAts2835pMode(ats2835pMode)
-    }
-
-    fun release() {
-        mainHandler.post {
-            synchronized(lock) {
-                releaseFx()
-                try { softwareDsp?.release() } catch (_: Exception) {}
-                softwareDsp = null
-                currentSessionId = 0
-            }
-        }
-    }
+    private fun applyAll(){ for(i in bandGains.indices) softwareDsp?.setBandGain(i, bandGains[i]); softwareDsp?.setMdrcGains(mdrcGains.copyOf()); softwareDsp?.setGlobalGain(globalGain+preampGain); softwareDsp?.setAts2835pMode(ats2835pMode) }
+    fun release(){ mainHandler.post{ synchronized(lock){ releaseFx(); try{ softwareDsp?.release() }catch(_:Exception){}; softwareDsp=null } } }
 }

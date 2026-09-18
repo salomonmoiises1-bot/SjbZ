@@ -2,11 +2,9 @@ package com.sjbz.aimp
 
 import android.Manifest
 import android.app.AlertDialog
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -88,21 +86,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var seekBarVirtualizer: SeekBar
     private lateinit var tvVirtualizerValue: TextView
 
-    // Tone Controls (Bass, Mid, Treble)
-    private lateinit var seekBarToneBass: SeekBar
-    private lateinit var tvToneBassValue: TextView
-    private lateinit var seekBarToneMid: SeekBar
-    private lateinit var tvToneMidValue: TextView
-    private lateinit var seekBarToneTreble: SeekBar
-    private lateinit var tvToneTrebleValue: TextView
-
-    // 5-Band MDRC
-    private lateinit var switchMdrc: SwitchCompat
-    private lateinit var seekBarMdrcThreshold: SeekBar
-    private lateinit var tvMdrcThresholdValue: TextView
-    private lateinit var seekBarMdrcRatio: SeekBar
-    private lateinit var tvMdrcRatioValue: TextView
-
     // Quick Presets
     private lateinit var btnPresetFlat: Button
     private lateinit var btnPresetBass: Button
@@ -145,7 +128,6 @@ class MainActivity : AppCompatActivity() {
         setupAppProfiles()
         setupMasterDynamicsControls()
         setupBassAndVirtualizer()
-        setupToneAndMdrcControls()
         setupPresetButtons()
         build32BandSliders()
         setupDrawerSettings()
@@ -204,46 +186,42 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindViews() {
         drawerLayout = findViewById(R.id.drawerLayout)
-        btnMenuDrawer = findViewById(R.id.btnMenuDrawer)
-        btnOpenEqualizer = findViewById(R.id.btnOpenEqualizer)
-        etSearchTracks = findViewById(R.id.etSearchTracks)
+        // Nota: Asegúrate de tener tu toolbar incluida con el id correcto si usas includedToolbar
+        btnMenuDrawer = findViewById(R.id.btnMenuDrawer) ?: ImageButton(this) 
+        btnOpenEqualizer = findViewById(R.id.btnOpenEqualizer) ?: ImageButton(this)
+        etSearchTracks = findViewById(R.id.etSearchTracks) ?: EditText(this)
+        
         tvDspActiveStatus = findViewById(R.id.tvDspActiveStatus)
         viewDspIndicator = findViewById(R.id.viewDspIndicator)
         switchMasterDsp = findViewById(R.id.switchMasterDsp)
+        
         spinnerAppProfiles = findViewById(R.id.spinnerAppProfiles)
         btnSaveAppProfile = findViewById(R.id.btnSaveAppProfile)
         tvActiveAppDetection = findViewById(R.id.tvActiveAppDetection)
+        
         visualizerView = findViewById(R.id.visualizerView)
         vuMeterLeftBar = findViewById(R.id.vuMeterLeftBar)
         vuMeterRightBar = findViewById(R.id.vuMeterRightBar)
         tvVuPeakText = findViewById(R.id.tvVuPeakText)
+        
         seekBarGlobalGain = findViewById(R.id.seekBarGlobalGain)
         tvGlobalGainValue = findViewById(R.id.tvGlobalGainValue)
+        
         switchLimiter = findViewById(R.id.switchLimiter)
         seekBarLimiterThreshold = findViewById(R.id.seekBarLimiterThreshold)
         tvLimiterThresholdValue = findViewById(R.id.tvLimiterThresholdValue)
+        
         switchAutoGain = findViewById(R.id.switchAutoGain)
         seekBarAutoGainTarget = findViewById(R.id.seekBarAutoGainTarget)
         tvAutoGainTargetValue = findViewById(R.id.tvAutoGainTargetValue)
+        
         switchBassBoost = findViewById(R.id.switchBassBoost)
         spinnerBassFreq = findViewById(R.id.spinnerBassFreq)
         seekBarBassBoost = findViewById(R.id.seekBarBassBoost)
         tvBassBoostValue = findViewById(R.id.tvBassBoostValue)
+        
         seekBarVirtualizer = findViewById(R.id.seekBarVirtualizer)
         tvVirtualizerValue = findViewById(R.id.tvVirtualizerValue)
-
-        seekBarToneBass = findViewById(R.id.seekBarToneBass)
-        tvToneBassValue = findViewById(R.id.tvToneBassValue)
-        seekBarToneMid = findViewById(R.id.seekBarToneMid)
-        tvToneMidValue = findViewById(R.id.tvToneMidValue)
-        seekBarToneTreble = findViewById(R.id.seekBarToneTreble)
-        tvToneTrebleValue = findViewById(R.id.tvToneTrebleValue)
-
-        switchMdrc = findViewById(R.id.switchMdrc)
-        seekBarMdrcThreshold = findViewById(R.id.seekBarMdrcThreshold)
-        tvMdrcThresholdValue = findViewById(R.id.tvMdrcThresholdValue)
-        seekBarMdrcRatio = findViewById(R.id.seekBarMdrcRatio)
-        tvMdrcRatioValue = findViewById(R.id.tvMdrcRatioValue)
 
         btnPresetFlat = findViewById(R.id.btnPresetFlat)
         btnPresetBass = findViewById(R.id.btnPresetBass)
@@ -269,7 +247,6 @@ class MainActivity : AppCompatActivity() {
         btnOpenEqualizer.setOnClickListener {
             startActivity(Intent(this, EqStudioActivity::class.java))
         }
-        etSearchTracks.hint = "Buscar perfiles (Spotify, YouTube...)"
     }
 
     private fun setupMasterSwitch() {
@@ -443,78 +420,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun setupToneAndMdrcControls() {
-        seekBarToneBass.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val db = (progress - 120) / 10.0f
-                tvToneBassValue.text = String.format("%+.1f dB", db)
-                if (fromUser && !isUpdatingUiProgrammatically) {
-                    GlobalAudioSessionManager.getDspProcessor().setToneBass(db)
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true) }
-            override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false) }
-        })
-
-        seekBarToneMid.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val db = (progress - 120) / 10.0f
-                tvToneMidValue.text = String.format("%+.1f dB", db)
-                if (fromUser && !isUpdatingUiProgrammatically) {
-                    GlobalAudioSessionManager.getDspProcessor().setToneMid(db)
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true) }
-            override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false) }
-        })
-
-        seekBarToneTreble.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val db = (progress - 120) / 10.0f
-                tvToneTrebleValue.text = String.format("%+.1f dB", db)
-                if (fromUser && !isUpdatingUiProgrammatically) {
-                    GlobalAudioSessionManager.getDspProcessor().setToneTreble(db)
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true) }
-            override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false) }
-        })
-
-        switchMdrc.setOnCheckedChangeListener { _, isChecked ->
-            if (!isUpdatingUiProgrammatically) {
-                GlobalAudioSessionManager.getDspProcessor().setMdrcEnabled(isChecked)
-            }
-            seekBarMdrcThreshold.isEnabled = isChecked
-            seekBarMdrcRatio.isEnabled = isChecked
-        }
-
-        seekBarMdrcThreshold.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val threshDb = -progress.toFloat()
-                tvMdrcThresholdValue.text = String.format("%.1f dB", threshDb)
-                if (fromUser && !isUpdatingUiProgrammatically) {
-                    val currentRatio = 1.0f + (seekBarMdrcRatio.progress / 10.0f)
-                    GlobalAudioSessionManager.getDspProcessor().setMdrcDynamics(threshDb, currentRatio)
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true) }
-            override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false) }
-        })
-
-        seekBarMdrcRatio.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                val ratio = 1.0f + (progress / 10.0f)
-                tvMdrcRatioValue.text = String.format("%.1f:1", ratio)
-                if (fromUser && !isUpdatingUiProgrammatically) {
-                    val currentThresh = -seekBarMdrcThreshold.progress.toFloat()
-                    GlobalAudioSessionManager.getDspProcessor().setMdrcDynamics(currentThresh, ratio)
-                }
-            }
-            override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true) }
-            override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false) }
-        })
-    }
-
     private fun getSelectedBassFreq(): Float {
         return when (spinnerBassFreq.selectedItemPosition) {
             0 -> 60.0f
@@ -558,7 +463,7 @@ class MainActivity : AppCompatActivity() {
             val label = when (currentQMode) {
                 2.828f -> "Modo Q: Estrecho (2.8)"
                 0.707f -> "Modo Q: Amplio (0.7)"
-                else -> "Modo Q: Estándar (1.4)"
+                else -> "Modo Q: 1.41"
             }
             btnToggleQMode.text = label
             for (i in 0 until 32) {
@@ -667,7 +572,7 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false) }
         })
 
-        findViewById<View>(R.id.drawerExportM3U8).setOnClickListener {
+        findViewById<View>(R.id.drawerExportM3U8)?.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("Reiniciar DSP a Valores de Fábrica")
                 .setMessage("¿Deseas restaurar todas las 32 bandas, Gain, Limiter y AutoGain?")
@@ -716,30 +621,6 @@ class MainActivity : AppCompatActivity() {
         spinnerBassFreq.setSelection(freqIdx)
         seekBarVirtualizer.progress = audioSessionManager.virtualizerStrength
         tvVirtualizerValue.text = "${audioSessionManager.virtualizerStrength / 10}%"
-
-        val dsp = GlobalAudioSessionManager.getDspProcessor()
-        val toneBassProg = ((audioSessionManager.toneBassDb * 10) + 120).toInt().coerceIn(0, 240)
-        seekBarToneBass.progress = toneBassProg
-        tvToneBassValue.text = String.format("%+.1f dB", audioSessionManager.toneBassDb)
-
-        val toneMidProg = ((audioSessionManager.toneMidDb * 10) + 120).toInt().coerceIn(0, 240)
-        seekBarToneMid.progress = toneMidProg
-        tvToneMidValue.text = String.format("%+.1f dB", audioSessionManager.toneMidDb)
-
-        val toneTrebleProg = ((audioSessionManager.toneTrebleDb * 10) + 120).toInt().coerceIn(0, 240)
-        seekBarToneTreble.progress = toneTrebleProg
-        tvToneTrebleValue.text = String.format("%+.1f dB", audioSessionManager.toneTrebleDb)
-
-        switchMdrc.isChecked = audioSessionManager.isMdrcEnabled
-        val threshProg = (-audioSessionManager.mdrcThresholdDb).toInt().coerceIn(0, 40)
-        seekBarMdrcThreshold.progress = threshProg
-        tvMdrcThresholdValue.text = String.format("%.1f dB", audioSessionManager.mdrcThresholdDb)
-
-        val ratioProg = ((audioSessionManager.mdrcRatio - 1.0f) * 10).toInt().coerceIn(0, 90)
-        seekBarMdrcRatio.progress = ratioProg
-        tvMdrcRatioValue.text = String.format("%.1f:1", audioSessionManager.mdrcRatio)
-        seekBarMdrcThreshold.isEnabled = audioSessionManager.isMdrcEnabled
-        seekBarMdrcRatio.isEnabled = audioSessionManager.isMdrcEnabled
 
         syncBandSlidersOnly()
         refreshProfilesSpinner()

@@ -26,20 +26,42 @@ class GlobalAudioSessionManager private constructor(private val context: Context
                 instance?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
             }
         }
-        @JvmStatic fun getDspProcessor(): SjbzDspProcessor {
+        // RENOMBRADO para no chocar con la propiedad dspProcessor
+        @JvmStatic fun getDspProcessorInstance(): SjbzDspProcessor {
             return globalDspProcessor?: synchronized(this) {
                 globalDspProcessor?: SjbzDspProcessor(48000.0f).also { globalDspProcessor = it }
             }
         }
+        // Alias compatibilidad
+        @JvmStatic fun getDspProcessor(): SjbzDspProcessor = getDspProcessorInstance()
     }
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val dataStore = AudioSettingsDataStore(context)
     private val scope = CoroutineScope(Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
-    val dspProcessor: SjbzDspProcessor = getDspProcessor()
 
+    // FIX: JvmName distinto para no chocar con getDspProcessor()
+    @get:JvmName("getDspProcessorProperty")
+    val dspProcessor: SjbzDspProcessor = getDspProcessorInstance()
+
+    // FIX: todos los 'isX' con JvmName distinto para poder tener setX() sin clash
+    @get:JvmName("isGlobalAudioEnabledProp")
+    @set:JvmName("setGlobalAudioEnabledProp")
     @Volatile var isGlobalAudioEnabled: Boolean = false
+
+    @get:JvmName("isMdrcEnabledProp")
+    @set:JvmName("setMdrcEnabledProp")
+    @Volatile var isMdrcEnabled: Boolean = true
+
+    @get:JvmName("isLimiterEnabledProp")
+    @set:JvmName("setLimiterEnabledProp")
+    @Volatile var isLimiterEnabled: Boolean = true
+
+    @get:JvmName("isAutoGainEnabledProp")
+    @set:JvmName("setAutoGainEnabledProp")
+    @Volatile var isAutoGainEnabled: Boolean = true
+
     private val activeSessions = mutableMapOf<Int, String>()
     var currentProfile: AppProfile = AppProfile.createDefaultProfiles().first()
     var allProfiles: MutableList<AppProfile> = AppProfile.createDefaultProfiles().toMutableList()
@@ -56,12 +78,9 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     @Volatile var bassFreqHz: Float = 85.0f
     @Volatile var isVirtualizerEnabled: Boolean = false
     @Volatile var virtualizerStrength: Float = 0.0f
-    @Volatile var isLimiterEnabled: Boolean = true
     @Volatile var limiterThresholdDb: Float = -1.0f
-    @Volatile var isAutoGainEnabled: Boolean = true
     @Volatile var autoGainTargetLufs: Float = -14.0f
     @Volatile var currentAutoGainOffsetDb: Float = 0.0f
-    @Volatile var isMdrcEnabled: Boolean = true
     @Volatile var mdrcThresholdDb: Float = -18.0f
     @Volatile var mdrcRatio: Float = 2.5f
     val mdrcGains: FloatArray = FloatArray(5)
@@ -109,15 +128,17 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             val clamped = volume.coerceIn(0, getMaxSystemVolume())
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, clamped, 0)
             onSystemVolumeChangedListener?.invoke(clamped, getMaxSystemVolume())
-        } catch (e: Exception) {}
+        } catch (_: Exception) {}
     }
     fun adjustSystemVolume(increase: Boolean) {
         try {
             val direction = if (increase) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
             audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
             onSystemVolumeChangedListener?.invoke(getSystemVolume(), getMaxSystemVolume())
-        } catch (e: Exception) {}
+        } catch (_: Exception) {}
     }
+
+    // Ahora NO choca con la propiedad porque la propiedad tiene JvmName distinto
     fun setGlobalAudioEnabled(enabled: Boolean) {
         if (isGlobalAudioEnabled == enabled) return
         isGlobalAudioEnabled = enabled
@@ -126,6 +147,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         dispatchSessionsChanged()
         scope.launch { dataStore.saveGlobalEnabled(enabled) }
     }
+
     fun checkAndApplyGlobalBypass(): Boolean {
         val globalActive = isGlobalAudioEnabled || GlobalAudioService.isGlobalAudioEnabled
         if (globalActive) dspProcessor.setGlobalBypass(false) else dspProcessor.setGlobalBypass(!dspProcessor.isMasterEnabled)

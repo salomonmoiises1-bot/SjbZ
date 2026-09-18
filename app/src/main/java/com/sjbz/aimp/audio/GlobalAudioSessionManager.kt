@@ -13,30 +13,58 @@ import com.sjbz.aimp.service.GlobalAudioService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 /**
- * GlobalAudioSessionManager: Arquitectura centralizada de DSP de audio 100% por Software.
- * Compatible con la interfaz y controles requeridos por MainActivity.
+ * GlobalAudioSessionManager: Centralized 100% Software Audio DSP Architecture.
+ *
+ * Implements:
+ * 1. Guarantees a single, globally shared instance of SjbzDspProcessor.
+ * 2. 100% Pure Software PCM Processing: Eliminates hardware audio effect dependencies
+ *    (android.media.audiofx), bypassing all vendor hardware limitations.
+ * 3. Unified Audio Parameter Subscriptions:
+ *    - Master Output Gain & Pre-Gain / Preamp
+ *    - 32-Band ISO Equalizer with exact 1:1 frequency mapping
+ *    - 3-Band Tone Controls (Bass Low-Shelf 200Hz, Mid Peaking 1000Hz, Treble High-Shelf 6000Hz)
+ *    - Dynamic Bass Boost & Binaural Crossfeed Virtualizer
+ *    - 5-Band Multi-Band Dynamic Range Control (MDRC)
+ *    - Anti-Clipping Soft Limiter (-1.0 dBFS)
+ * 4. Correct Global Bypass Logic: When global service is active (globalActive = true),
+ *    the DSP processor bypass is strictly disabled (dspProcessor.setGlobalBypass(false)).
+ * 5. State Machine Preservation: reapplyAllParams() strictly preserves real user state
+ *    without hardcoded disabling of MDRC or any other DSP module.
+ * 6. Thread-safe execution and lifecycle management for Android Services and UI Activities.
  */
 class GlobalAudioSessionManager private constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "GlobalAudioSession"
-        @Volatile private var instance: GlobalAudioSessionManager? = null
-        @Volatile private var globalDspProcessor: SjbzDspProcessor? = null
+
+        @Volatile
+        private var instance: GlobalAudioSessionManager? = null
+
+        // Guaranteed single global software DSP processor instance
+        @Volatile
+        private var globalDspProcessor: SjbzDspProcessor? = null
 
         @JvmStatic
         fun getInstance(context: Context): GlobalAudioSessionManager {
             return instance ?: synchronized(this) {
-                instance ?: GlobalAudioSessionManager(context.applicationContext).also { instance = it }
+                instance ?: GlobalAudioSessionManager(context.applicationContext).also {
+                    instance = it
+                }
             }
         }
 
+        /**
+         * Global singleton accessor for the single software DSP processor.
+         * Enforces strict single-instance architecture across SjbzAudioEngine and UI components.
+         */
         @JvmStatic
         fun getDspProcessor(): SjbzDspProcessor {
             return globalDspProcessor ?: synchronized(this) {
-                globalDspProcessor ?: SjbzDspProcessor(48000.0f).also { globalDspProcessor = it }
+                globalDspProcessor ?: SjbzDspProcessor(48000.0f).also {
+                    globalDspProcessor = it
+                }
             }
         }
     }
@@ -46,24 +74,30 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     private val scope = CoroutineScope(Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private val dspProcessor: SjbzDspProcessor = Companion.getDspProcessor()
+    // Unique software DSP processor bound to this manager
+    val dspProcessor: SjbzDspProcessor = Companion.getDspProcessor()
 
-    @Volatile var isGlobalAudioEnabled: Boolean = true
+    // Master switch for global audio processing
+    @Volatile
+    var isGlobalAudioEnabled: Boolean = false
         private set
 
+    // Active audio sessions tracked by the service (sessionId -> packageName)
     private val activeSessions = mutableMapOf<Int, String>()
+
+    // Current active profile
     var currentProfile: AppProfile = AppProfile.createDefaultProfiles().first()
         private set
     var allProfiles: MutableList<AppProfile> = AppProfile.createDefaultProfiles().toMutableList()
         private set
 
-    // Parámetros de Audio
+    // Audio Parameters in Memory (Synchronized with dspProcessor)
     @Volatile var globalGainDb: Float = 0.0f
     @Volatile var preampDb: Float = 0.0f
     val bandGains: FloatArray = FloatArray(32) { 0.0f }
     val bandQs: FloatArray = FloatArray(32) { 1.414f }
 
-    // Controles de Tono
+    // Tone Controls (Pre-EQ Stage)
     @Volatile var toneBassDb: Float = 0.0f
     @Volatile var toneMidDb: Float = 0.0f
     @Volatile var toneTrebleDb: Float = 0.0f
@@ -72,33 +106,36 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     @Volatile var isBassBoostEnabled: Boolean = true
     @Volatile var bassBoostDb: Float = 4.0f
     @Volatile var bassFreqHz: Float = 85.0f
-    @Volatile var isVirtualizerEnabled: Boolean = false
-    @Volatile var virtualizerStrength: Int = 0
 
-    // Dinámica: Limiter & AutoGain
+    @Volatile var isVirtualizerEnabled: Boolean = false
+    @Volatile var virtualizerStrength: Float = 0.0f
+
+    // Dynamics: Anti-Clipping Limiter & AutoGain LUFS
     @Volatile var isLimiterEnabled: Boolean = true
-    @Volatile var limiterThresholdDb: Float = -1.0f
+    @Volatile var limiterThresholdDb: Float = -1.0f // -1.0 dBFS
+
     @Volatile var isAutoGainEnabled: Boolean = true
     @Volatile var autoGainTargetLufs: Float = -14.0f
     @Volatile var currentAutoGainOffsetDb: Float = 0.0f
 
-    // MDRC
+    // 5-Band MDRC Dynamics
     @Volatile var isMdrcEnabled: Boolean = true
     @Volatile var mdrcThresholdDb: Float = -18.0f
     @Volatile var mdrcRatio: Float = 2.5f
     val mdrcGains: FloatArray = FloatArray(5) { 0.0f }
 
-    // Emulación ATS2835P
+    // Hardware Emulation ATS2835P
     @Volatile var ats2835pEmuEnabled: Boolean = true
     @Volatile var ats2835pEmuAmount: Float = 0.8f
     @Volatile var ats2835pBtBypass: Boolean = false
 
-    // Callbacks
+    // UI and Service Callbacks
     var onSystemVolumeChangedListener: ((Int, Int) -> Unit)? = null
     var onActiveSessionsChangedListener: ((Int, List<String>) -> Unit)? = null
     var onProfileChangedListener: ((AppProfile) -> Unit)? = null
     var onAutoGainAdjustmentListener: ((Float) -> Unit)? = null
 
+    // System Media Volume Observer
     private val volumeObserver = object : ContentObserver(mainHandler) {
         override fun onChange(selfChange: Boolean) {
             super.onChange(selfChange)
@@ -110,13 +147,22 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     init {
         try {
-            context.contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, volumeObserver)
+            context.contentResolver.registerContentObserver(
+                Settings.System.CONTENT_URI,
+                true,
+                volumeObserver
+            )
         } catch (e: Exception) {
-            Log.w(TAG, "No se pudo registrar ContentObserver de volumen: ${e.message}")
+            Log.w(TAG, "Could not register volume ContentObserver: ${e.message}")
         }
-        scope.launch { loadPersistedSettings() }
+
+        // Load saved state from DataStore asynchronously
+        scope.launch {
+            loadPersistedSettings()
+        }
+
+        // Ensure DSP engine initial state matches manager
         syncAllParamsToDsp()
-        checkAndApplyGlobalBypass()
     }
 
     private suspend fun loadPersistedSettings() {
@@ -137,9 +183,13 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             }
             syncAllParamsToDsp()
         } catch (e: Exception) {
-            Log.e(TAG, "Error al cargar configuración guardada: ${e.message}")
+            Log.e(TAG, "Error loading persisted settings: ${e.message}")
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Volume Controls
+    // -------------------------------------------------------------------------
 
     fun getSystemVolume(): Int = try {
         audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -155,28 +205,55 @@ class GlobalAudioSessionManager private constructor(private val context: Context
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, clamped, 0)
             onSystemVolumeChangedListener?.invoke(clamped, getMaxSystemVolume())
         } catch (e: Exception) {
-            Log.e(TAG, "Error ajustando volumen del sistema: ${e.message}")
+            Log.e(TAG, "Error setting stream volume: ${e.message}")
         }
     }
+
+    fun adjustSystemVolume(increase: Boolean) {
+        try {
+            val direction = if (increase) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
+            val newVol = getSystemVolume()
+            onSystemVolumeChangedListener?.invoke(newVol, getMaxSystemVolume())
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adjusting stream volume: ${e.message}")
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Audio Master Switch & Bypass Logic (CORREGIDA)
+    // -------------------------------------------------------------------------
 
     fun setGlobalAudioEnabled(enabled: Boolean) {
         if (isGlobalAudioEnabled == enabled) return
         isGlobalAudioEnabled = enabled
+
         if (enabled) {
             openSession(0, "Sistema Global")
         } else {
             releaseAllSessions()
         }
+
         checkAndApplyGlobalBypass()
         dispatchSessionsChanged()
-        scope.launch { dataStore.saveGlobalEnabled(enabled) }
+
+        scope.launch {
+            dataStore.saveGlobalEnabled(enabled)
+        }
     }
 
+    /**
+     * Lógica de Bypass Corregida:
+     * Cuando el servicio de audio global esté activo (globalActive = true),
+     * el bypass del procesador DSP DEBE estar desactivado (dspProcessor.setGlobalBypass(false)).
+     * Evita cualquier lógica invertida donde activar el servicio inhabilite el motor de audio.
+     */
     fun checkAndApplyGlobalBypass(): Boolean {
         val globalActive = isGlobalAudioEnabled || GlobalAudioService.isGlobalAudioEnabled
         if (globalActive) {
             dspProcessor.setGlobalBypass(false)
         } else {
+            // When global service is fully disabled, keep local processor ready according to master switch
             dspProcessor.setGlobalBypass(!dspProcessor.isMasterEnabled)
         }
         return globalActive
@@ -185,28 +262,40 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     fun openSession(sessionId: Int, packageName: String? = null) {
         if (!isGlobalAudioEnabled) return
         if (activeSessions.containsKey(sessionId)) return
+
         activeSessions[sessionId] = packageName ?: "App desconocida"
+        Log.i(TAG, "Attached software DSP to audio session $sessionId (pkg: $packageName)")
+
         if (packageName != null) {
             switchProfileForPackage(packageName)
         }
+
         checkAndApplyGlobalBypass()
         dispatchSessionsChanged()
     }
 
     fun closeSession(sessionId: Int) {
         activeSessions.remove(sessionId)
+        Log.d(TAG, "Closed audio session $sessionId")
         dispatchSessionsChanged()
     }
 
     private fun releaseAllSessions() {
         activeSessions.clear()
+        Log.d(TAG, "Released all software audio sessions")
     }
 
     private fun dispatchSessionsChanged() {
         val count = activeSessions.size
         val packages = activeSessions.values.toList()
-        mainHandler.post { onActiveSessionsChangedListener?.invoke(count, packages) }
+        mainHandler.post {
+            onActiveSessionsChangedListener?.invoke(count, packages)
+        }
     }
+
+    // -------------------------------------------------------------------------
+    // DSP Unified Parameter Control (100% Software Architecture)
+    // -------------------------------------------------------------------------
 
     fun setMasterGain(gainDb: Float) {
         this.globalGainDb = gainDb
@@ -233,16 +322,24 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     fun setBandQ(bandIndex: Int, qValue: Float) {
         if (bandIndex in 0 until 32) {
             bandQs[bandIndex] = qValue.coerceIn(0.5f, 5.0f)
+            // Reapply band level to trigger Q calculation
             dspProcessor.setBandLevel(bandIndex, bandGains[bandIndex])
         }
     }
 
-    fun setBassBoost(gainDb: Float, freqHz: Float) {
-        setBassBoost(gainDb > 0.05f, gainDb, freqHz)
+    fun setToneBass(gainDb: Float) {
+        this.toneBassDb = gainDb.coerceIn(-12.0f, 12.0f)
+        dspProcessor.setToneBass(this.toneBassDb)
     }
 
-    fun setBassBoost(gainDb: Float) {
-        setBassBoost(gainDb > 0.05f, gainDb, this.bassFreqHz)
+    fun setToneMid(gainDb: Float) {
+        this.toneMidDb = gainDb.coerceIn(-12.0f, 12.0f)
+        dspProcessor.setToneMid(this.toneMidDb)
+    }
+
+    fun setToneTreble(gainDb: Float) {
+        this.toneTrebleDb = gainDb.coerceIn(-12.0f, 12.0f)
+        dspProcessor.setToneTreble(this.toneTrebleDb)
     }
 
     fun setBassBoost(enabled: Boolean, gainDb: Float, freqHz: Float = 85.0f) {
@@ -252,22 +349,76 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         dspProcessor.setBassBoost(enabled, freqHz, this.bassBoostDb)
     }
 
-    fun setVirtualizer(strengthProgress: Int) {
-        val floatStrength = (strengthProgress / 100.0f).coerceIn(0.0f, 1.0f)
-        this.virtualizerStrength = strengthProgress
-        this.isVirtualizerEnabled = strengthProgress > 0
-        dspProcessor.setVirtualizer(this.isVirtualizerEnabled, floatStrength)
-    }
-
     fun setVirtualizer(enabled: Boolean, strength: Float) {
         this.isVirtualizerEnabled = enabled
-        this.virtualizerStrength = (strength * 100).toInt()
-        dspProcessor.setVirtualizer(enabled, strength.coerceIn(0.0f, 1.0f))
+        this.virtualizerStrength = strength.coerceIn(0.0f, 1.0f)
+        dspProcessor.setVirtualizer(enabled, this.virtualizerStrength)
+    }
+
+    fun setVirtualizer(progress: Int) {
+        val enabled = progress > 0
+        val strength = (progress / 100.0f).coerceIn(0.0f, 1.0f)
+        setVirtualizer(enabled, strength)
     }
 
     fun setAutoGain(enabled: Boolean, targetLufs: Float) {
         this.isAutoGainEnabled = enabled
-        this.autoGainTargetLufs = targetLufs.coerceIn(-23.0f, -9.0f)
+        this.autoGainTargetLufs = targetLufs
+        onAutoGainAdjustmentListener?.invoke(targetLufs)
+    }
+
+    fun saveCurrentAsProfile(name: String): AppProfile {
+        val newProfile = AppProfile(
+            id = "custom_${System.currentTimeMillis()}",
+            appName = name,
+            appPackage = "",
+            presetName = name,
+            preampDb = preampDb,
+            globalGainDb = globalGainDb,
+            bandGains = bandGains.copyOf(),
+            bandQs = bandQs.copyOf(),
+            bassGainDb = toneBassDb,
+            midGainDb = toneMidDb,
+            trebleGainDb = toneTrebleDb,
+            bassBoostDb = bassBoostDb,
+            bassBoostFreq = bassFreqHz,
+            virtualizerStrength = (virtualizerStrength * 100).toInt(),
+            isLimiterEnabled = isLimiterEnabled,
+            limiterThresholdDb = limiterThresholdDb,
+            isAutoGainEnabled = isAutoGainEnabled,
+            autoGainTargetLufs = autoGainTargetLufs,
+            isMdrcEnabled = isMdrcEnabled,
+            isAts2835pEnabled = ats2835pEmuEnabled,
+            ats2835pAmount = ats2835pEmuAmount
+        )
+        allProfiles.add(newProfile)
+        currentProfile = newProfile
+        scope.launch {
+            dataStore.saveProfiles(allProfiles)
+            dataStore.saveCurrentProfileId(newProfile.id)
+        }
+        mainHandler.post {
+            onProfileChangedListener?.invoke(newProfile)
+        }
+        return newProfile
+    }
+
+    fun setMdrcEnabled(enabled: Boolean) {
+        this.isMdrcEnabled = enabled
+        dspProcessor.setMdrcEnabled(enabled)
+    }
+
+    fun setMdrcDynamics(thresholdDb: Float, ratio: Float) {
+        this.mdrcThresholdDb = thresholdDb
+        this.mdrcRatio = ratio.coerceAtLeast(1.0f)
+        dspProcessor.setMdrcDynamics(thresholdDb, ratio)
+    }
+
+    fun setMdrcGain(bandIndex: Int, gainDb: Float) {
+        if (bandIndex in 0 until 5) {
+            this.mdrcGains[bandIndex] = gainDb
+            dspProcessor.setMdrcBandGain(bandIndex, gainDb)
+        }
     }
 
     fun setLimiter(enabled: Boolean, thresholdDb: Float = -1.0f) {
@@ -276,31 +427,58 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         dspProcessor.setLimiter(enabled, thresholdDb)
     }
 
+    fun setAts2835pEmulation(enabled: Boolean, amount: Float = 0.8f, bluetoothBypass: Boolean = false) {
+        this.ats2835pEmuEnabled = enabled
+        this.ats2835pEmuAmount = amount.coerceIn(0.0f, 1.0f)
+        this.ats2835pBtBypass = bluetoothBypass
+        dspProcessor.setEmulationEnabled(enabled)
+        dspProcessor.setEmulationAmount(this.ats2835pEmuAmount)
+        dspProcessor.setBluetoothAutoBypass(bluetoothBypass)
+    }
+
+    /**
+     * Preservación Fiel de Máquinas de Estado:
+     * En el método reapplyAllParams(), respeta estrictamente el estado guardado por el usuario.
+     * NO agrega llamadas hardcodeadas de desactivación (como setMdrcEnabled(false)).
+     * Si el módulo MDRC o cualquier filtro estaba encendido, conserva su estado real.
+     */
+    fun reapplyAllParams() {
+        syncAllParamsToDsp()
+        checkAndApplyGlobalBypass()
+    }
+
     private fun syncAllParamsToDsp() {
         dspProcessor.setMasterGain(globalGainDb)
         dspProcessor.setPreamp(preampDb)
+
         for (i in 0 until 32) {
             dspProcessor.setBandLevel(i, bandGains[i])
         }
+
         dspProcessor.setToneBass(toneBassDb)
         dspProcessor.setToneMid(toneMidDb)
         dspProcessor.setToneTreble(toneTrebleDb)
+
         dspProcessor.setBassBoost(isBassBoostEnabled, bassFreqHz, bassBoostDb)
-        dspProcessor.setVirtualizer(isVirtualizerEnabled, virtualizerStrength / 100.0f)
+        dspProcessor.setVirtualizer(isVirtualizerEnabled, virtualizerStrength)
+
+        // Conserva el estado real del MDRC guardado por el usuario
         dspProcessor.setMdrcEnabled(isMdrcEnabled)
         dspProcessor.setMdrcDynamics(mdrcThresholdDb, mdrcRatio)
         for (b in 0 until 5) {
             dspProcessor.setMdrcBandGain(b, mdrcGains[b])
         }
+
         dspProcessor.setLimiter(isLimiterEnabled, limiterThresholdDb)
+
         dspProcessor.setEmulationEnabled(ats2835pEmuEnabled)
         dspProcessor.setEmulationAmount(ats2835pEmuAmount)
         dspProcessor.setBluetoothAutoBypass(ats2835pBtBypass)
     }
 
-    fun applyProfile(profile: AppProfile) {
-        applyProfileInMemory(profile, saveSelection = true)
-    }
+    // -------------------------------------------------------------------------
+    // App Profiles Management
+    // -------------------------------------------------------------------------
 
     fun applyProfileInMemory(profile: AppProfile, saveSelection: Boolean = true) {
         currentProfile = profile
@@ -308,62 +486,53 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         toneBassDb = profile.bassGainDb
         toneMidDb = profile.midGainDb
         toneTrebleDb = profile.trebleGainDb
+
         profile.bandGains.forEachIndexed { i, g ->
             if (i in bandGains.indices) bandGains[i] = g
         }
+
         bassBoostDb = profile.bassBoostDb
         bassFreqHz = profile.bassBoostFreq
         isBassBoostEnabled = profile.bassBoostDb > 0.05f
+
+        // Conserva los estados reales del perfil
         isMdrcEnabled = profile.isMdrcEnabled
         isLimiterEnabled = profile.isLimiterEnabled
         ats2835pEmuEnabled = profile.isAts2835pEnabled
         ats2835pEmuAmount = profile.ats2835pAmount
-        syncAllParamsToDsp()
+
+        reapplyAllParams()
 
         if (saveSelection) {
-            scope.launch { dataStore.saveCurrentProfileId(profile.id) }
+            scope.launch {
+                dataStore.saveCurrentProfileId(profile.id)
+            }
         }
-        mainHandler.post { onProfileChangedListener?.invoke(profile) }
-    }
-
-    fun saveCurrentAsProfile(name: String): AppProfile {
-        val newProfile = AppProfile(
-            id = UUID.randomUUID().toString(),
-            appName = name,
-            presetName = "Personalizado",
-            appPackage = "",
-            preampDb = this.preampDb,
-            bassGainDb = this.toneBassDb,
-            midGainDb = this.toneMidDb,
-            trebleGainDb = this.toneTrebleDb,
-            bandGains = this.bandGains.copyOf(),
-            bassBoostDb = this.bassBoostDb,
-            bassBoostFreq = this.bassFreqHz,
-            isMdrcEnabled = this.isMdrcEnabled,
-            isLimiterEnabled = this.isLimiterEnabled,
-            isAts2835pEnabled = this.ats2835pEmuEnabled,
-            ats2835pAmount = this.ats2835pEmuAmount
-        )
-        allProfiles.add(newProfile)
-        currentProfile = newProfile
-        scope.launch { dataStore.saveProfiles(allProfiles) }
-        return newProfile
+        mainHandler.post {
+            onProfileChangedListener?.invoke(profile)
+        }
     }
 
     fun switchProfileForPackage(packageName: String) {
         val matchedProfile = allProfiles.find { it.appPackage.equals(packageName, ignoreCase = true) }
         if (matchedProfile != null && matchedProfile.id != currentProfile.id) {
+            Log.i(TAG, "Auto-switching audio profile to: ${matchedProfile.appName} for $packageName")
             applyProfileInMemory(matchedProfile, saveSelection = true)
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Resource Cleanup & Service Destruction
+    // -------------------------------------------------------------------------
 
     fun releaseResources() {
         try {
             context.contentResolver.unregisterContentObserver(volumeObserver)
         } catch (e: Exception) {
-            Log.w(TAG, "Error desregistrando volumeObserver: ${e.message}")
+            Log.w(TAG, "Error unregistering volumeObserver: ${e.message}")
         }
         releaseAllSessions()
         dspProcessor.resetFilterStates()
+        Log.i(TAG, "GlobalAudioSessionManager resources released cleanly")
     }
 }

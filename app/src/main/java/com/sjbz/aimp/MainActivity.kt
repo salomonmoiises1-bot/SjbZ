@@ -1,26 +1,23 @@
 package com.sjbz.aimp
 
+import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.SeekBar
-import android.widget.Spinner
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
@@ -39,7 +36,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var audioSessionManager: GlobalAudioSessionManager
     private lateinit var dataStore: AudioSettingsDataStore
     private val scope = CoroutineScope(Dispatchers.Main)
+    private val PERM_CODE = 1001
 
+    //... tus views iguales...
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var btnMenuDrawer: ImageButton
     private lateinit var btnOpenEqualizer: ImageButton
@@ -101,13 +100,67 @@ class MainActivity : AppCompatActivity() {
         build32BandSliders()
         setupDrawerSettings()
         syncAllUiFromManager()
+
+        // FIX 1: PEDIR PERMISOS AL INICIO
+        checkAndRequestAllPermissions()
+
         audioSessionManager.onProfileChangedListener = { runOnUiThread { syncAllUiFromManager() } }
         audioSessionManager.onActiveSessionsChangedListener = { count, pkgs -> runOnUiThread { updateSessionStatusBanner(count, pkgs) } }
-        if (audioSessionManager.isGlobalAudioEnabled) GlobalAudioService.start(this)
+        if (audioSessionManager.isGlobalAudioEnabled && hasAudioPermission()) GlobalAudioService.start(this)
     }
 
     override fun onResume() { super.onResume(); visualizerView.startMockVisualizer(); uiHandler.post(vuMeterRunnable); syncAllUiFromManager() }
     override fun onPause() { super.onPause(); visualizerView.stopMockVisualizer(); uiHandler.removeCallbacks(vuMeterRunnable) }
+
+    // ====== FIX PERMISOS QUE TE FALTABAN ======
+    private fun hasAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun checkAndRequestAllPermissions() {
+        val perms = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)!= PackageManager.PERMISSION_GRANTED) {
+            perms.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)!= PackageManager.PERMISSION_GRANTED) {
+                perms.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        if (perms.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, perms.toTypedArray(), PERM_CODE)
+        }
+    }
+
+    private fun requestUsageStatsPermission() {
+        try {
+            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            })
+        } catch (e: Exception) {
+            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERM_CODE) {
+            val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+            if (granted) {
+                Toast.makeText(this, "Permiso concedido - Ya controla el audio del sistema", Toast.LENGTH_SHORT).show()
+                if (switchMasterDsp.isChecked) {
+                    GlobalAudioService.start(this)
+                    audioSessionManager.setGlobalAudioEnabled(true)
+                }
+            } else {
+                Toast.makeText(this, "Sin RECORD_AUDIO no puede controlar Spotify/YouTube. Actívalo en Ajustes", Toast.LENGTH_LONG).show()
+                switchMasterDsp.isChecked = false
+                audioSessionManager.setGlobalAudioEnabled(false)
+                GlobalAudioService.stop(this)
+            }
+        }
+    }
+    // ====== FIN FIX PERMISOS ======
 
     private fun bindViews() {
         drawerLayout = findViewById(R.id.drawerLayout); btnMenuDrawer = findViewById(R.id.btnMenuDrawer)
@@ -143,10 +196,21 @@ class MainActivity : AppCompatActivity() {
         switchMasterDsp.isChecked = audioSessionManager.isGlobalAudioEnabled
         switchMasterDsp.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUiProgrammatically) return@setOnCheckedChangeListener
+
+            // FIX: Si activa y no tiene permiso, pide permiso y no activa
+            if (isChecked &&!hasAudioPermission()) {
+                Toast.makeText(this, "Necesita permiso de micrófono para EQ global", Toast.LENGTH_SHORT).show()
+                checkAndRequestAllPermissions()
+                isUpdatingUiProgrammatically = true
+                switchMasterDsp.isChecked = false
+                isUpdatingUiProgrammatically = false
+                return@setOnCheckedChangeListener
+            }
+
             audioSessionManager.setGlobalAudioEnabled(isChecked)
             if (isChecked) {
                 GlobalAudioService.start(this); viewDspIndicator.setBackgroundColor(Color.parseColor("#00E5FF"))
-                tvDspActiveStatus.text = "SB-Z Global DSP ACTIVO • Session 0 (Mezcla Global)"; tvDspActiveStatus.setTextColor(Color.parseColor("#00E5FF"))
+                tvDspActiveStatus.text = "SB-Z Global DSP ACTIVO • Controlando sistema"; tvDspActiveStatus.setTextColor(Color.parseColor("#00E5FF"))
             } else {
                 GlobalAudioService.stop(this); viewDspIndicator.setBackgroundColor(Color.parseColor("#64748B"))
                 tvDspActiveStatus.text = "SB-Z Global DSP EN PAUSA (Bypass)"; tvDspActiveStatus.setTextColor(Color.parseColor("#94A3B8"))
@@ -180,9 +244,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSaveProfileDialog() {
-        val input = EditText(this).apply { hint = "Nombre del perfil (ej. Spotify Bass, Podcast YouTube)" }
-        AlertDialog.Builder(this).setTitle("Guardar Nuevo Perfil").setMessage("Guarda la configuración actual de 32 bandas, Gain, Limiter y AutoGain.").setView(input)
-           .setPositiveButton("Guardar") { _, _ ->
+        val input = EditText(this).apply { hint = "Nombre del perfil" }
+        AlertDialog.Builder(this).setTitle("Guardar Nuevo Perfil").setMessage("Guarda la configuración actual.").setView(input)
+          .setPositiveButton("Guardar") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) { audioSessionManager.saveCurrentAsProfile(name); refreshProfilesSpinner(); Toast.makeText(this, "Perfil guardado: $name", Toast.LENGTH_SHORT).show() }
             }.setNegativeButton("Cancelar", null).show()
@@ -248,7 +312,6 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}; override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-        // Virtualizer: 0-100% -> manager espera progress Int
         seekBarVirtualizer.max = 100
         seekBarVirtualizer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -304,13 +367,6 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams((density * 160).toInt(), (density * 36).toInt()); rotation=270f; max=240; progress=120
                 progressTintList = android.content.res.ColorStateList.valueOf(cyanColor); thumbTintList = android.content.res.ColorStateList.valueOf(cyanColor)
             }
-            seekBar.setOnTouchListener { v, event ->
-                when (event.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> v.parent?.requestDisallowInterceptTouchEvent(true)
-                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> v.parent?.requestDisallowInterceptTouchEvent(false)
-                }
-                false
-            }
             val bandIndex = i
             seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -335,13 +391,10 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) { if (fromUser) audioSessionManager.setSystemVolume(progress) }
             override fun onStartTrackingTouch(sb: SeekBar?) {}; override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-        findViewById<View>(R.id.drawerExportM3U8).setOnClickListener {
-            AlertDialog.Builder(this).setTitle("Reiniciar DSP a Valores de Fábrica").setMessage("¿Deseas restaurar todas las 32 bandas, Gain, Limiter y AutoGain?")
-               .setPositiveButton("Restaurar") { _, _ ->
-                    val defaultProfile = AppProfile.createDefaultProfiles().first()
-                    audioSessionManager.applyProfileInMemory(defaultProfile, true); syncAllUiFromManager()
-                    Toast.makeText(this, "DSP Restaurado a Valores de Fábrica", Toast.LENGTH_SHORT).show()
-                }.setNegativeButton("Cancelar", null).show()
+        // Long press en el drawer para pedir Usage Stats
+        findViewById<View>(R.id.drawerExportM3U8)?.setOnLongClickListener {
+            requestUsageStatsPermission()
+            true
         }
     }
 
@@ -361,7 +414,6 @@ class MainActivity : AppCompatActivity() {
         seekBarBassBoost.progress = (audioSessionManager.bassBoostDb * 10).toInt().coerceIn(0, 120)
         tvBassBoostValue.text = String.format("+%.1f dB", audioSessionManager.bassBoostDb)
         spinnerBassFreq.setSelection(when { audioSessionManager.bassFreqHz <= 65f -> 0; audioSessionManager.bassFreqHz <= 95f -> 1; else -> 2 })
-        // FIX: Float -> Int
         seekBarVirtualizer.progress = (audioSessionManager.virtualizerStrength * 100).toInt().coerceIn(0, 100)
         tvVirtualizerValue.text = "${seekBarVirtualizer.progress}%"
         syncBandSlidersOnly(); refreshProfilesSpinner()

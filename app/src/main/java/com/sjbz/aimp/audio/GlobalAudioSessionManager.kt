@@ -23,12 +23,8 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     companion object {
         private const val TAG = "GlobalAudioSession"
-
-        @Volatile
-        private var instance: GlobalAudioSessionManager? = null
-
-        @Volatile
-        private var globalDspProcessor: SjbzDspProcessor? = null
+        @Volatile private var instance: GlobalAudioSessionManager? = null
+        @Volatile private var globalDspProcessor: SjbzDspProcessor? = null
 
         @JvmStatic
         fun getInstance(context: Context): GlobalAudioSessionManager {
@@ -50,15 +46,12 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     private val scope = CoroutineScope(Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Se declara privada para evitar colisión de firmas JVM con el método Companion.getDspProcessor()
     private val dspProcessor: SjbzDspProcessor = Companion.getDspProcessor()
 
-    @Volatile
-    var isGlobalAudioEnabled: Boolean = true // CORREGIDO: Inicia activo por defecto para evitar bypass inicial
+    @Volatile var isGlobalAudioEnabled: Boolean = true
         private set
 
     private val activeSessions = mutableMapOf<Int, String>()
-
     var currentProfile: AppProfile = AppProfile.createDefaultProfiles().first()
         private set
     var allProfiles: MutableList<AppProfile> = AppProfile.createDefaultProfiles().toMutableList()
@@ -100,7 +93,7 @@ class GlobalAudioSessionManager private constructor(private val context: Context
     @Volatile var ats2835pEmuAmount: Float = 0.8f
     @Volatile var ats2835pBtBypass: Boolean = false
 
-    // Callbacks de UI y Servicio
+    // Callbacks
     var onSystemVolumeChangedListener: ((Int, Int) -> Unit)? = null
     var onActiveSessionsChangedListener: ((Int, List<String>) -> Unit)? = null
     var onProfileChangedListener: ((AppProfile) -> Unit)? = null
@@ -117,17 +110,12 @@ class GlobalAudioSessionManager private constructor(private val context: Context
 
     init {
         try {
-            context.contentResolver.registerContentObserver(
-                Settings.System.CONTENT_URI, true, volumeObserver
-            )
+            context.contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, volumeObserver)
         } catch (e: Exception) {
             Log.w(TAG, "No se pudo registrar ContentObserver de volumen: ${e.message}")
         }
-
         scope.launch { loadPersistedSettings() }
         syncAllParamsToDsp()
-        
-        // CORREGIDO: Aplica el estado inicial para evitar que el motor arrancar silenciado o en bypass
         checkAndApplyGlobalBypass()
     }
 
@@ -153,11 +141,13 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Controles de Volumen
-    // -------------------------------------------------------------------------
-    fun getSystemVolume(): Int = try { audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) } catch (_: Exception) { 0 }
-    fun getMaxSystemVolume(): Int = try { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) } catch (_: Exception) { 15 }
+    fun getSystemVolume(): Int = try {
+        audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+    } catch (_: Exception) { 0 }
+
+    fun getMaxSystemVolume(): Int = try {
+        audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+    } catch (_: Exception) { 15 }
 
     fun setSystemVolume(volume: Int) {
         try {
@@ -169,9 +159,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Interruptor Master Global
-    // -------------------------------------------------------------------------
     fun setGlobalAudioEnabled(enabled: Boolean) {
         if (isGlobalAudioEnabled == enabled) return
         isGlobalAudioEnabled = enabled
@@ -221,9 +208,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         mainHandler.post { onActiveSessionsChangedListener?.invoke(count, packages) }
     }
 
-    // -------------------------------------------------------------------------
-    // Control de Parámetros DSP (Métodos compatibles con MainActivity)
-    // -------------------------------------------------------------------------
     fun setMasterGain(gainDb: Float) {
         this.globalGainDb = gainDb
         dspProcessor.setMasterGain(gainDb)
@@ -314,9 +298,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         dspProcessor.setBluetoothAutoBypass(ats2835pBtBypass)
     }
 
-    // -------------------------------------------------------------------------
-    // Gestión de Perfiles
-    // -------------------------------------------------------------------------
     fun applyProfile(profile: AppProfile) {
         applyProfileInMemory(profile, saveSelection = true)
     }
@@ -327,7 +308,9 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         toneBassDb = profile.bassGainDb
         toneMidDb = profile.midGainDb
         toneTrebleDb = profile.trebleGainDb
-        profile.bandGains.forEachIndexed { i, g -> if (i in bandGains.indices) bandGains[i] = g }
+        profile.bandGains.forEachIndexed { i, g ->
+            if (i in bandGains.indices) bandGains[i] = g
+        }
         bassBoostDb = profile.bassBoostDb
         bassFreqHz = profile.bassBoostFreq
         isBassBoostEnabled = profile.bassBoostDb > 0.05f
@@ -335,7 +318,6 @@ class GlobalAudioSessionManager private constructor(private val context: Context
         isLimiterEnabled = profile.isLimiterEnabled
         ats2835pEmuEnabled = profile.isAts2835pEnabled
         ats2835pEmuAmount = profile.ats2835pAmount
-
         syncAllParamsToDsp()
 
         if (saveSelection) {

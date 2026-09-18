@@ -29,13 +29,12 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
-import com.sjbz.aimp.audio.EqualizerProcessor
 import com.sjbz.aimp.audio.GlobalAudioSessionManager
 import com.sjbz.aimp.audio.SjbzDspProcessor
 import com.sjbz.aimp.data.AudioSettingsDataStore
 import com.sjbz.aimp.model.AppProfile
 import com.sjbz.aimp.service.GlobalAudioService
-import com.sjbz.aimp.ui.AudioSpectrumVisualizerView
+import com.sjbz.aimp.ui.EqStudioActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -68,7 +67,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvActiveAppDetection: TextView
 
     // Visualizer & VU Meters
-    private lateinit var visualizerView: AudioSpectrumVisualizerView
+    private lateinit var visualizerView: com.sjbz.aimp.ui.AudioSpectrumVisualizerView
     private lateinit var vuMeterLeftBar: ProgressBar
     private lateinit var vuMeterRightBar: ProgressBar
     private lateinit var tvVuPeakText: TextView
@@ -97,7 +96,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var seekBarToneTreble: SeekBar
     private lateinit var tvToneTrebleValue: TextView
 
-    // 5-Band MDRC (Multi-band Dynamic Range Control)
+    // 5-Band MDRC
     private lateinit var switchMdrc: SwitchCompat
     private lateinit var seekBarMdrcThreshold: SeekBar
     private lateinit var tvMdrcThresholdValue: TextView
@@ -125,7 +124,6 @@ class MainActivity : AppCompatActivity() {
     // Flags
     private var isUpdatingUiProgrammatically = false
 
-    // VU meter and visualizer update loop
     private val uiHandler = Handler(Looper.getMainLooper())
     private val vuMeterRunnable = object : Runnable {
         override fun run() {
@@ -151,12 +149,10 @@ class MainActivity : AppCompatActivity() {
         setupPresetButtons()
         build32BandSliders()
         setupDrawerSettings()
-
         syncAllUiFromManager()
-
         checkAndRequestAudioPermissions()
 
-        audioSessionManager.onProfileChangedListener = { profile ->
+        audioSessionManager.onProfileChangedListener = { _ ->
             runOnUiThread { syncAllUiFromManager() }
         }
 
@@ -175,19 +171,11 @@ class MainActivity : AppCompatActivity() {
             permissionsNeeded.add(Manifest.permission.RECORD_AUDIO)
         }
         if (permissionsNeeded.isNotEmpty()) {
-            ActivityCompat.requestPermissions(
-                this,
-                permissionsNeeded.toTypedArray(),
-                PERMISSION_REQUEST_CODE
-            )
+            ActivityCompat.requestPermissions(this, permissionsNeeded.toTypedArray(), PERMISSION_REQUEST_CODE)
         }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
@@ -229,7 +217,6 @@ class MainActivity : AppCompatActivity() {
         vuMeterLeftBar = findViewById(R.id.vuMeterLeftBar)
         vuMeterRightBar = findViewById(R.id.vuMeterRightBar)
         tvVuPeakText = findViewById(R.id.tvVuPeakText)
-
         seekBarGlobalGain = findViewById(R.id.seekBarGlobalGain)
         tvGlobalGainValue = findViewById(R.id.tvGlobalGainValue)
         switchLimiter = findViewById(R.id.switchLimiter)
@@ -245,7 +232,6 @@ class MainActivity : AppCompatActivity() {
         seekBarVirtualizer = findViewById(R.id.seekBarVirtualizer)
         tvVirtualizerValue = findViewById(R.id.tvVirtualizerValue)
 
-        // Tone Controls
         seekBarToneBass = findViewById(R.id.seekBarToneBass)
         tvToneBassValue = findViewById(R.id.tvToneBassValue)
         seekBarToneMid = findViewById(R.id.seekBarToneMid)
@@ -253,7 +239,6 @@ class MainActivity : AppCompatActivity() {
         seekBarToneTreble = findViewById(R.id.seekBarToneTreble)
         tvToneTrebleValue = findViewById(R.id.tvToneTrebleValue)
 
-        // MDRC Controls
         switchMdrc = findViewById(R.id.switchMdrc)
         seekBarMdrcThreshold = findViewById(R.id.seekBarMdrcThreshold)
         tvMdrcThresholdValue = findViewById(R.id.tvMdrcThresholdValue)
@@ -282,7 +267,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         btnOpenEqualizer.setOnClickListener {
-            Toast.makeText(this, "Ecualizador de 32 Bandas ISO Activo", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, EqStudioActivity::class.java))
         }
         etSearchTracks.hint = "Buscar perfiles (Spotify, YouTube...)"
     }
@@ -320,9 +305,7 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        btnSaveAppProfile.setOnClickListener {
-            showSaveProfileDialog()
-        }
+        btnSaveAppProfile.setOnClickListener { showSaveProfileDialog() }
     }
 
     private fun refreshProfilesSpinner() {
@@ -338,9 +321,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSaveProfileDialog() {
-        val input = EditText(this).apply {
-            hint = "Nombre del perfil (ej. Spotify Bass, Podcast YouTube)"
-        }
+        val input = EditText(this).apply { hint = "Nombre del perfil (ej. Spotify Bass, Podcast YouTube)" }
         AlertDialog.Builder(this)
             .setTitle("Guardar Nuevo Perfil")
             .setMessage("Guarda la configuración actual de 32 bandas, Gain, Limiter y AutoGain.")
@@ -420,11 +401,7 @@ class MainActivity : AppCompatActivity() {
         spinnerBassFreq.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (isUpdatingUiProgrammatically) return
-                val freq = when (position) {
-                    0 -> 60.0f
-                    1 -> 85.0f
-                    else -> 120.0f
-                }
+                val freq = when (position) { 0 -> 60.0f; 1 -> 85.0f; else -> 120.0f }
                 val gain = seekBarBassBoost.progress / 10.0f
                 audioSessionManager.setBassBoost(if (switchBassBoost.isChecked) gain else 0f, freq)
             }
@@ -549,22 +526,25 @@ class MainActivity : AppCompatActivity() {
     private fun setupPresetButtons() {
         btnPresetFlat.setOnClickListener { applyPresetValues(FloatArray(32) { 0.0f }, "Flat") }
         btnPresetBass.setOnClickListener {
-            val bassBands = FloatArray(32) { 0.0f }
-            bassBands[0] = 6.0f; bassBands[1] = 5.5f; bassBands[2] = 5.0f; bassBands[3] = 4.0f
-            bassBands[4] = 3.0f; bassBands[5] = 2.0f; bassBands[6] = 1.0f
+            val bassBands = FloatArray(32) { 0.0f }.apply {
+                this[0] = 6.0f; this[1] = 5.5f; this[2] = 5.0f; this[3] = 4.0f
+                this[4] = 3.0f; this[5] = 2.0f; this[6] = 1.0f
+            }
             applyPresetValues(bassBands, "Bass Boost")
         }
         btnPresetRock.setOnClickListener {
-            val rockBands = FloatArray(32) { 0.0f }
-            rockBands[0] = 4.5f; rockBands[1] = 4.0f; rockBands[2] = 3.5f; rockBands[3] = 2.5f
-            rockBands[14] = -1.5f; rockBands[15] = -2.0f; rockBands[16] = -1.5f
-            rockBands[27] = 3.5f; rockBands[28] = 4.0f; rockBands[29] = 4.5f; rockBands[30] = 5.0f
+            val rockBands = FloatArray(32) { 0.0f }.apply {
+                this[0] = 4.5f; this[1] = 4.0f; this[2] = 3.5f; this[3] = 2.5f
+                this[14] = -1.5f; this[15] = -2.0f; this[16] = -1.5f
+                this[27] = 3.5f; this[28] = 4.0f; this[29] = 4.5f; this[30] = 5.0f
+            }
             applyPresetValues(rockBands, "Rock")
         }
         btnPresetVocal.setOnClickListener {
-            val vocalBands = FloatArray(32) { 0.0f }
-            vocalBands[0] = -2.0f; vocalBands[1] = -1.5f; vocalBands[2] = -1.0f
-            for (i in 12..22) vocalBands[i] = 3.5f
+            val vocalBands = FloatArray(32) { 0.0f }.apply {
+                this[0] = -2.0f; this[1] = -1.5f; this[2] = -1.0f
+                for (i in 12..22) this[i] = 3.5f
+            }
             applyPresetValues(vocalBands, "Vocal")
         }
         btnResetEq.setOnClickListener { applyPresetValues(FloatArray(32) { 0.0f }, "Reset 0 dB") }
@@ -600,26 +580,19 @@ class MainActivity : AppCompatActivity() {
         llEqBandsContainer.removeAllViews()
         bandSeekBars.clear()
         bandValueLabels.clear()
-
         val density = resources.displayMetrics.density
         val cyanColor = Color.parseColor("#00E5FF")
 
         for (i in 0 until 32) {
             val bandCol = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    (density * 52).toInt(),
-                    LinearLayout.LayoutParams.MATCH_PARENT
-                )
+                layoutParams = LinearLayout.LayoutParams((density * 52).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(2, 6, 2, 6)
             }
 
             val tvGain = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 text = "0.0"
                 textSize = 9.5f
                 setTextColor(cyanColor)
@@ -628,19 +601,12 @@ class MainActivity : AppCompatActivity() {
             bandCol.addView(tvGain)
 
             val seekBarContainer = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    0,
-                    1.0f
-                )
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f)
                 gravity = Gravity.CENTER
             }
 
             val seekBar = SeekBar(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    (density * 160).toInt(),
-                    (density * 36).toInt()
-                )
+                layoutParams = LinearLayout.LayoutParams((density * 160).toInt(), (density * 36).toInt())
                 rotation = 270f
                 max = 240
                 progress = 120
@@ -657,30 +623,23 @@ class MainActivity : AppCompatActivity() {
                         audioSessionManager.setBandGain(bandIndex, gain)
                     }
                 }
-                override fun onStartTrackingTouch(sb: SeekBar?) {
-                    sb?.parent?.requestDisallowInterceptTouchEvent(true)
-                }
-                override fun onStopTrackingTouch(sb: SeekBar?) {
-                    sb?.parent?.requestDisallowInterceptTouchEvent(false)
-                }
+                override fun onStartTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(true) }
+                override fun onStopTrackingTouch(sb: SeekBar?) { sb?.parent?.requestDisallowInterceptTouchEvent(false) }
             })
 
             seekBarContainer.addView(seekBar)
             bandCol.addView(seekBarContainer)
 
             val tvFreq = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 text = SjbzDspProcessor.BAND_LABELS[i]
                 textSize = 9.0f
                 setTextColor(Color.parseColor("#94A3B8"))
                 gravity = Gravity.CENTER
             }
             bandCol.addView(tvFreq)
-
             llEqBandsContainer.addView(bandCol)
+
             bandSeekBars.add(seekBar)
             bandValueLabels.add(tvGain)
         }
@@ -691,9 +650,7 @@ class MainActivity : AppCompatActivity() {
             switchAutoStartBoot.isChecked = dataStore.loadAutoStartBoot()
         }
         switchAutoStartBoot.setOnCheckedChangeListener { _, isChecked ->
-            scope.launch {
-                dataStore.saveAutoStartBoot(isChecked)
-            }
+            scope.launch { dataStore.saveAutoStartBoot(isChecked) }
         }
 
         val curVol = audioSessionManager.getSystemVolume()
@@ -728,7 +685,6 @@ class MainActivity : AppCompatActivity() {
     private fun syncAllUiFromManager() {
         isUpdatingUiProgrammatically = true
 
-        val profile = audioSessionManager.currentProfile
         switchMasterDsp.isChecked = audioSessionManager.isGlobalAudioEnabled
 
         val gainProg = ((audioSessionManager.globalGainDb * 10) + 120).toInt().coerceIn(0, 240)
@@ -758,13 +714,10 @@ class MainActivity : AppCompatActivity() {
             else -> 2
         }
         spinnerBassFreq.setSelection(freqIdx)
-
         seekBarVirtualizer.progress = audioSessionManager.virtualizerStrength
         tvVirtualizerValue.text = "${audioSessionManager.virtualizerStrength / 10}%"
 
-        // Sincronizar Tone Controls a través del DSP Processor público
         val dsp = GlobalAudioSessionManager.getDspProcessor()
-        
         val toneBassProg = ((audioSessionManager.toneBassDb * 10) + 120).toInt().coerceIn(0, 240)
         seekBarToneBass.progress = toneBassProg
         tvToneBassValue.text = String.format("%+.1f dB", audioSessionManager.toneBassDb)
@@ -777,7 +730,6 @@ class MainActivity : AppCompatActivity() {
         seekBarToneTreble.progress = toneTrebleProg
         tvToneTrebleValue.text = String.format("%+.1f dB", audioSessionManager.toneTrebleDb)
 
-        // Sincronizar MDRC
         switchMdrc.isChecked = audioSessionManager.isMdrcEnabled
         val threshProg = (-audioSessionManager.mdrcThresholdDb).toInt().coerceIn(0, 40)
         seekBarMdrcThreshold.progress = threshProg
@@ -786,13 +738,11 @@ class MainActivity : AppCompatActivity() {
         val ratioProg = ((audioSessionManager.mdrcRatio - 1.0f) * 10).toInt().coerceIn(0, 90)
         seekBarMdrcRatio.progress = ratioProg
         tvMdrcRatioValue.text = String.format("%.1f:1", audioSessionManager.mdrcRatio)
-
         seekBarMdrcThreshold.isEnabled = audioSessionManager.isMdrcEnabled
         seekBarMdrcRatio.isEnabled = audioSessionManager.isMdrcEnabled
 
         syncBandSlidersOnly()
         refreshProfilesSpinner()
-
         isUpdatingUiProgrammatically = false
     }
 

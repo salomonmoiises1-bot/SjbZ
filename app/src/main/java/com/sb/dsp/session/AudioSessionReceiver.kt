@@ -19,7 +19,9 @@ class AudioSessionReceiver : BroadcastReceiver() {
                 }
             }
             AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION -> {
-                Log.i("SB-SESSION", "close session")
+                val sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR)
+                Log.i("SB-SESSION", "close session=$sessionId")
+                context.stopService(Intent(context, SbDspForegroundService::class.java))
             }
         }
     }

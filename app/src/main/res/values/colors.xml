@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF0A0E17</color>
-    <color name="white">#FFFFFFFF</color>
-    <color name="cyan_accent">#FF00E5FF</color>
-    <color name="amber_accent">#FFFFB300</color>
-    <color name="dark_surface">#FF131B2A</color>
+    <color name="cyan_500">#00E5FF</color>
+    <color name="cyan_700">#00B0FF</color>
+    <color name="slate_900">#0F172A</color>
+    <color name="slate_950">#020617</color>
 </resources>

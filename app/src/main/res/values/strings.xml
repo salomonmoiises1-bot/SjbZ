@@ -1,15 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SB</string>
-    <string name="dsp_service_name">SB Audio DSP Service</string>
-    <string name="channel_name">Procesamiento de Audio SB</string>
-    <string name="channel_description">Mantiene el procesamiento DSP activo en segundo plano</string>
-    <string name="status_off">Desactivado</string>
-    <string name="status_starting">Iniciando…</string>
-    <string name="status_active">Activo</string>
-    <string name="status_degraded">Degradado (Capacidades limitadas)</string>
-    <string name="status_conflict">Conflicto de sesión detectado</string>
-    <string name="status_error">Error de hardware DSP</string>
-    <string name="action_toggle">Alternar DSP</string>
-    <string name="action_stop">Detener Servicio</string>
+    <string name="app_name">SB Audio DSP</string>
 </resources>

@@ -7,8 +7,8 @@ class PcmAudioPipeline(
     val channels: Int = 2
 ) {
     companion object {
-        private const val INV_32768 = 1.0f / 32768.0f
-        private const val SCALE_32767 = 32767.0f
+        private const val INV_32768 = 1f / 32768f
+        private const val SCALE_32767 = 32767f
         private const val DEFAULT_BUFFER_SIZE = 4096
     }
 
@@ -18,109 +18,77 @@ class PcmAudioPipeline(
 
     val graphicEq = ConstantQGraphicEq(sampleRate)
     val bassBoost = BassBoostManager(sampleRate)
-    val mdrc = MdrcProcessor(sampleRate)
     val tone = ToneManager(sampleRate)
+    val mdrc = MdrcProcessor(sampleRate)
     val virtualizer = VirtualizerManager(sampleRate)
     val headroom = HeadroomManager(sampleRate)
     val autoGain = AutoGainManager(sampleRate)
 
     private var scratchCapacity = DEFAULT_BUFFER_SIZE
     private var floatScratch = FloatArray(scratchCapacity)
+    private var pregainLinear = 1f
 
-    @Volatile
-    private var pregainLinear: Float = 1.0f
-
-    init {
-        updateConfig(currentConfig)
-    }
+    init { updateConfig(currentConfig) }
 
     fun updateConfig(newConfig: DspConfig) {
-        this.currentConfig = newConfig
-        pregainLinear = if (newConfig.pregainEnabled) {
-            10.0f.pow(newConfig.pregainDb / 20.0f)
-        } else {
-            1.0f
-        }
-
-        graphicEq.updateConfig(newConfig)
-        bassBoost.updateConfig(newConfig)
-        mdrc.updateConfig(newConfig)
-        tone.updateConfig(newConfig)
-        virtualizer.updateConfig(newConfig)
-        headroom.updateConfig(newConfig)
-        autoGain.updateConfig(newConfig)
+        val config = newConfig.validate()
+        currentConfig = config
+        pregainLinear = if (config.pregainEnabled) 10f.pow(config.pregainDb / 20f) else 1f
+        graphicEq.updateConfig(config)
+        bassBoost.updateConfig(config)
+        tone.updateConfig(config)
+        mdrc.updateConfig(config)
+        virtualizer.updateConfig(config)
+        headroom.updateConfig(config)
+        autoGain.updateConfig(config)
     }
 
     fun process(pcmBuffer: ShortArray, offset: Int, sampleCount: Int) {
         val config = currentConfig
-        if (!config.masterEnabled) return
+        if (!config.masterEnabled || sampleCount <= 0) return
+        require(offset >= 0 && offset + sampleCount <= pcmBuffer.size)
+        require(sampleCount % channels == 0)
 
-        val frameCount = sampleCount / channels
         ensureFloatScratchCapacity(sampleCount)
-
-        // Step 0: Unpack 16-bit Short PCM to 32-bit Normalized Float [-1.0, 1.0] (Zero GC)
         val scratch = floatScratch
-        val inv = INV_32768
-        var sIdx = offset
+
         for (i in 0 until sampleCount) {
-            scratch[i] = pcmBuffer[sIdx] * inv
-            sIdx++
+            scratch[i] = pcmBuffer[offset + i] * INV_32768
         }
 
-        // Step 1: Active Graphic Equalizer (Strict Mutual Exclusion: 10, 20 or 32 Bands)
-        if (config.eqEnabled) {
-            graphicEq.process(scratch, frameCount, channels)
-        }
-
-        // Step 2: Pregain
+        // Método PCM: PreGain -> Bass -> Tone -> EQ -> MDRC -> AutoGain -> Limiter -> Spatial -> Master/Balance.
         if (config.pregainEnabled) {
-            val gain = pregainLinear
-            for (i in 0 until sampleCount) {
-                scratch[i] *= gain
-            }
+            val g = pregainLinear
+            for (i in 0 until sampleCount) scratch[i] *= g
         }
+        if (config.bassBoostEnabled) bassBoost.process(scratch, sampleCount / channels, channels)
+        if (config.toneEnabled) tone.process(scratch, sampleCount / channels, channels)
+        if (config.eqEnabled) graphicEq.process(scratch, sampleCount / channels, channels)
+        if (config.mdrcEnabled) mdrc.process(scratch, sampleCount / channels, channels)
+        if (config.autoGainEnabled) autoGain.process(scratch, sampleCount / channels, channels)
+        if (config.headroomEnabled) headroom.process(scratch, sampleCount / channels, channels)
+        if (config.virtualizerEnabled && channels == 2) virtualizer.process(scratch, sampleCount / channels, channels)
 
-        // Step 3: Bass Boost
-        if (config.bassBoostEnabled) {
-            bassBoost.process(scratch, frameCount, channels)
-        }
+        applyMasterAndBalance(scratch, sampleCount, config)
 
-        // Step 4: MDRC (Multiband Dynamic Range Compression)
-        if (config.mdrcEnabled) {
-            mdrc.process(scratch, frameCount, channels)
-        }
-
-        // Step 5: Tone Controls (Bass & Treble Shelving)
-        if (config.toneEnabled) {
-            tone.process(scratch, frameCount, channels)
-        }
-
-        if (config.virtualizerEnabled && channels == 2) {
-            virtualizer.process(scratch, frameCount, channels)
-        }
-
-        if (config.autoGainEnabled) {
-            autoGain.process(scratch, frameCount, channels)
-        }
-
-        // Step 6: Headroom Manager & Safety Anti-Clipping Soft Limiter
-        if (config.headroomEnabled) {
-            headroom.process(scratch, frameCount, channels)
-        }
-
-        // Step 7: Repack Normalized Float [-1.0, 1.0] to 16-bit Short PCM for DAC Output
-        val scale = SCALE_32767
-        var dIdx = offset
         for (i in 0 until sampleCount) {
-            val fVal = scratch[i] * scale
-            val clamped = when {
-                fVal >= 32767.0f -> 32767
-                fVal <= -32768.0f -> -32768
-                else -> fVal.toInt()
-            }
-            pcmBuffer[dIdx] = clamped.toShort()
-            dIdx++
+            pcmBuffer[offset + i] = (scratch[i] * SCALE_32767)
+                .coerceIn(-32768f, 32767f).toInt().toShort()
         }
+    }
+
+    private fun applyMasterAndBalance(buffer: FloatArray, samples: Int, config: DspConfig) {
+        val master = 10f.pow(config.masterGainDb / 20f)
+        val b = config.balance.coerceIn(-1f, 1f)
+        val left = if (b > 0f) 1f - b else 1f
+        val right = if (b < 0f) 1f + b else 1f
+        var i = 0
+        while (i + 1 < samples && channels == 2) {
+            buffer[i] *= master * left
+            buffer[i + 1] *= master * right
+            i += 2
+        }
+        if (channels == 1) for (j in 0 until samples) buffer[j] *= master
     }
 
     private fun ensureFloatScratchCapacity(needed: Int) {
@@ -133,8 +101,8 @@ class PcmAudioPipeline(
     fun reset() {
         graphicEq.reset()
         bassBoost.reset()
-        mdrc.reset()
         tone.reset()
+        mdrc.reset()
         virtualizer.reset()
         headroom.reset()
         autoGain.reset()

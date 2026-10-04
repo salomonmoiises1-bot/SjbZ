@@ -2,7 +2,7 @@ package com.sb.dsp
 
 class ConstantQGraphicEq(private val sampleRate: Int = 48000) {
     companion object {
-        val FREQUENCIES_10 = floatArrayOf(31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
+        val FREQUENCIES_10 = floatArrayOf(31f, 63f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
         const val Q_10_BAND = 1.4142f
 
         val FREQUENCIES_20 = floatArrayOf(
@@ -12,10 +12,9 @@ class ConstantQGraphicEq(private val sampleRate: Int = 48000) {
         const val Q_20_BAND = 2.871f
 
         val FREQUENCIES_32 = floatArrayOf(
-            20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
+            16f, 20f, 25f, 31f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
             200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
-            2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f,
-            18000f, 20000f
+            2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f, 20000f
         )
         const val Q_32_BAND = 4.318f
     }

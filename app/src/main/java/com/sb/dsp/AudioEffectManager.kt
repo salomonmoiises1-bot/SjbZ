@@ -8,14 +8,16 @@ class AudioEffectManager {
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
     private val dynamics = DynamicsProcessingManager()
+    private val equalizerFallback = ExternalEqualizerFallback()
 
     val postEqBandCount: Int get() = dynamics.postEqBandCount
-    val physicalEqBandCount: Int get() = dynamics.physicalEqBandCount
-    val dynamicsAvailable: Boolean get() = dynamics.isAvailable
+    val physicalEqBandCount: Int get() = if (dynamics.isAvailable) dynamics.physicalEqBandCount else equalizerFallback.bandCount
+    val dynamicsAvailable: Boolean get() = dynamics.isAvailable || equalizerFallback.isAvailable
 
     fun start(sessionId: Int, config: DspConfig): Boolean {
         release()
         val dpOk = dynamics.start(sessionId, config)
+        val eqFallbackOk = if (!dpOk) equalizerFallback.start(sessionId, config) else false
         try {
             bassBoost = BassBoost(Int.MAX_VALUE, sessionId).also {
                 it.setStrength((config.bassBoostStrength.coerceIn(0f, 1f) * 1000f).toInt().toShort())
@@ -32,11 +34,12 @@ class AudioEffectManager {
         } catch (t: Throwable) {
             Log.w("SB-AFX", "Virtualizer no disponible", t)
         }
-        return dpOk || bassBoost != null || virtualizer != null
+        return dpOk || eqFallbackOk || bassBoost != null || virtualizer != null
     }
 
     fun applyConfig(config: DspConfig) {
         dynamics.applyConfig(config)
+        if (!dynamics.isAvailable) equalizerFallback.applyConfig(config)
         try {
             bassBoost?.setStrength((config.bassBoostStrength.coerceIn(0f, 1f) * 1000f).toInt().toShort())
             bassBoost?.enabled = config.bassBoostEnabled && config.masterEnabled
@@ -54,6 +57,7 @@ class AudioEffectManager {
         try { virtualizer?.release() } catch (_: Throwable) {}
         bassBoost = null
         virtualizer = null
+        equalizerFallback.release()
         dynamics.release()
     }
 }

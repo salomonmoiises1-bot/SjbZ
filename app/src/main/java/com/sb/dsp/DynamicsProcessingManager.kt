@@ -164,7 +164,8 @@ class DynamicsProcessingManager {
             val count = mbc.bandCount
             for (i in 0 until count) {
                 val b = bands[min(i, bands.lastIndex)]
-                val cutoff = cuts[min(i, cuts.lastIndex)].coerceIn(20f, 20000f)
+                val nyquist = (config.sampleRate * 0.49f).coerceAtLeast(20f)
+                val cutoff = cuts[min(i, cuts.lastIndex)].coerceIn(20f, nyquist)
                 val band = DynamicsProcessing.MbcBand(
                     config.mdrcEnabled,
                     cutoff,
@@ -256,16 +257,19 @@ class DynamicsProcessingManager {
     }
 
     private fun linearToDb(linear: Float) = (20.0 * log10(linear.coerceIn(0.001f, 1f).toDouble())).toFloat()
-    private fun postPhysicalFrequency(index: Int, count: Int, preCount: Int): Float {
-        if (count <= 1) return 20000f
-        val pre = physicalFrequency(index.coerceAtMost(preCount - 1), preCount)
-        val next = physicalFrequency((index + 1).coerceAtMost(preCount - 1), preCount)
-        return if (index < count - 1) ((pre + next) * 0.5f).coerceIn(pre, 20000f) else 20000f
-    }
+    private fun postPhysicalFrequency(index: Int, count: Int, preCount: Int): Float =
+        physicalFrequency(index, count)
 
+    /**
+     * Map the logical EQ range onto however many physical DP bands the device exposes.
+     * The previous implementation accidentally ended at 1 kHz, leaving the upper
+     * half of the spectrum represented by extrapolated values instead of real bands.
+     */
     private fun physicalFrequency(index: Int, count: Int): Float {
         if (count <= 1) return 1000f
-        return (20.0 * exp(ln(1000.0) * index / (count - 1))).toFloat()
+        val minHz = 20.0
+        val maxHz = 20000.0
+        return exp(ln(minHz) + (ln(maxHz) - ln(minHz)) * index / (count - 1)).toFloat()
     }
     private fun interpolateLog(freqs: FloatArray, gains: FloatArray, target: Float): Float {
         if (freqs.isEmpty() || gains.isEmpty()) return 0f

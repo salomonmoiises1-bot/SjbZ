@@ -11,10 +11,11 @@ class ConstantQGraphicEq(private val sampleRate: Int = 48000) {
         )
         const val Q_20_BAND = 2.871f
 
+        // Must stay exactly aligned with DspConfig's 32 logical bands.
         val FREQUENCIES_32 = floatArrayOf(
-            16f, 20f, 25f, 31f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
-            200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
-            2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f, 20000f
+            20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f, 200f,
+            250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f, 2000f,
+            2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f, 18000f, 20000f
         )
         const val Q_32_BAND = 4.318f
     }

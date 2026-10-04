@@ -28,6 +28,7 @@ class DynamicsProcessingManager {
     private var currentSession = -1
     @Volatile private var autoGainOffsetDb = 0f
     @Volatile private var lastConfig: DspConfig = DspConfig()
+    @Volatile private var controlGranted = false
     @Volatile private var lastReclaimAt = 0L
     private val reclaimHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -63,9 +64,10 @@ class DynamicsProcessingManager {
                     physicalPostBandCount = postActual
                     currentMode = config.eqMode
                     currentSession = audioSession
+                    controlGranted = effect.hasControl()
+                    installControlListeners(effect)
                     applyConfig(config)
                     effect.enabled = config.masterEnabled
-                    installControlListeners(effect)
                     Log.i(TAG, "DP activo session=$audioSession logical=$requested physicalPreEQ=$actual physicalPostEQ=$postActual mbc=${effect.getMbcByChannelIndex(0).bandCount}")
                     return true
                 } catch (t: Throwable) {
@@ -82,6 +84,7 @@ class DynamicsProcessingManager {
         val effect = dp ?: return
         val safe = config.validate()
         lastConfig = safe
+        currentConfigForGain = safe
         try {
             for (ch in 0 until effect.channelCount) {
                 effect.setInputGainbyChannel(ch, inputGainForChannel(safe, ch))
@@ -196,10 +199,17 @@ class DynamicsProcessingManager {
 
     private fun installControlListeners(effect: DynamicsProcessing) {
         effect.setControlStatusListener { _, granted ->
-            if (!granted) scheduleReclaim()
+            controlGranted = granted
+            Log.i(TAG, "DP session=$currentSession controlGranted=$granted")
+            if (granted && dp === effect) {
+                applyConfig(lastConfig)
+                try { effect.enabled = lastConfig.masterEnabled } catch (_: Throwable) {}
+            } else if (!granted) {
+                scheduleReclaim()
+            }
         }
         effect.setEnableStatusListener { _, enabled ->
-            if (!enabled && dp === effect) scheduleReclaim()
+            if (!enabled && dp === effect && lastConfig.masterEnabled) scheduleReclaim()
         }
     }
 
@@ -271,6 +281,6 @@ class DynamicsProcessingManager {
 
     fun release() {
         try { dp?.release() } catch (_: Throwable) {}
-        dp = null; physicalBandCount = 0; physicalPostBandCount = 0; currentSession = -1
+        dp = null; physicalBandCount = 0; physicalPostBandCount = 0; currentSession = -1; controlGranted = false
     }
 }

@@ -17,7 +17,7 @@ class AudioEffectManager {
         release()
         val dpOk = dynamics.start(sessionId, config)
         try {
-            bassBoost = BassBoost(100, sessionId).also {
+            bassBoost = BassBoost(Int.MAX_VALUE, sessionId).also {
                 it.setStrength((config.bassBoostStrength.coerceIn(0f, 1f) * 1000f).toInt().toShort())
                 it.enabled = config.bassBoostEnabled && config.masterEnabled
             }
@@ -25,7 +25,7 @@ class AudioEffectManager {
             Log.w("SB-AFX", "BassBoost no disponible", t)
         }
         try {
-            virtualizer = Virtualizer(100, sessionId).also {
+            virtualizer = Virtualizer(Int.MAX_VALUE, sessionId).also {
                 it.setStrength((config.virtualizerStrength.coerceIn(0f, 1f) * 1000f).toInt().toShort())
                 it.enabled = config.virtualizerEnabled && config.masterEnabled
             }

@@ -2,8 +2,6 @@ package com.sb.dsp
 
 import android.media.audiofx.Visualizer
 import android.util.Log
-import kotlin.math.abs
-import kotlin.math.sqrt
 
 /** Metering for the same session-0 system audio path used by DynamicsProcessing. */
 class ExternalVisualizerManager {
@@ -18,25 +16,14 @@ class ExternalVisualizerManager {
         return try {
             val v = Visualizer(sessionId)
             v.captureSize = Visualizer.getCaptureSizeRange()[1]
+            v.setMeasurementMode(Visualizer.MEASUREMENT_MODE_PEAK_RMS)
             v.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-                override fun onWaveFormDataCapture(v: Visualizer, waveform: ByteArray, samplingRate: Int) {
-                    if (waveform.isEmpty()) return
-                    var sum = 0.0
-                    var peak = 0.0
-                    for (b in waveform) {
-                        val x = ((b.toInt() and 0xFF) - 128) / 128.0
-                        val a = abs(x)
-                        sum += x * x
-                        if (a > peak) peak = a
-                    }
-                    val rms = sqrt(sum / waveform.size).coerceAtLeast(1e-6)
-                    rmsDb = (20.0 * kotlin.math.log10(rms)).toFloat().coerceIn(-60f, 0f)
-                    peakDb = (20.0 * kotlin.math.log10(peak.coerceAtLeast(1e-6))).toFloat().coerceIn(-60f, 0f)
-                }
+                override fun onWaveFormDataCapture(v: Visualizer, waveform: ByteArray, samplingRate: Int) = Unit
                 override fun onFftDataCapture(v: Visualizer, fft: ByteArray, samplingRate: Int) = Unit
-            }, Visualizer.getMaxCaptureRate(), true, false)
+            }, Visualizer.getMaxCaptureRate(), false, false)
             v.enabled = true
             visualizer = v
+            updateMeasurement()
             true
         } catch (t: Throwable) {
             Log.w(TAG, "Visualizer session=$sessionId unavailable", t)
@@ -44,5 +31,25 @@ class ExternalVisualizerManager {
         }
     }
 
-    fun release() { try { visualizer?.release() } catch (_: Throwable) {}; visualizer = null }
+    /** Refreshes the framework's native peak/RMS measurement for the output mix. */
+    fun updateMeasurement() {
+        val v = visualizer ?: return
+        try {
+            val m = Visualizer.MeasurementPeakRms()
+            if (v.getMeasurementPeakRms(m) == Visualizer.SUCCESS) {
+                peakDb = (m.mPeak / 1000f).coerceIn(-60f, 6f)
+                rmsDb = (m.mRms / 1000f).coerceIn(-60f, 6f)
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Visualizer measurement failed", t)
+        }
+    }
+
+    fun release() {
+        try { visualizer?.enabled = false } catch (_: Throwable) {}
+        try { visualizer?.release() } catch (_: Throwable) {}
+        visualizer = null
+        peakDb = -60f
+        rmsDb = -60f
+    }
 }

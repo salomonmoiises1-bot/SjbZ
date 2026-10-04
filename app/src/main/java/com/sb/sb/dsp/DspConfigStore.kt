@@ -17,7 +17,7 @@ object DspConfigStore {
             eqMode=runCatching{DspConfig.EqMode.valueOf(prefs.getString("eqMode",base.eqMode.name)!!)}.getOrDefault(base.eqMode),
             gains10BandDb=array("eq10",10),gains20BandDb=array("eq20",20),gains32BandDb=array("eq32",32),
             pregainEnabled=prefs.getBoolean("pregainEnabled",base.pregainEnabled),pregainDb=prefs.getFloat("pregainDb",base.pregainDb),
-            bassBoostEnabled=prefs.getBoolean("bassBoostEnabled",base.bassBoostEnabled),bassBoostStrength=prefs.getFloat("bassBoostStrength",base.bassBoostStrength),
+            bassBoostEnabled=prefs.getBoolean("bassBoostEnabled",base.bassBoostEnabled),bassBoostStrength=prefs.getFloat("bassBoostStrength",base.bassBoostStrength),bassBoostFrequencyHz=prefs.getFloat("bassBoostFrequencyHz",base.bassBoostFrequencyHz),
             mdrcEnabled=prefs.getBoolean("mdrcEnabled",base.mdrcEnabled),mdrcLowCrossoverHz=prefs.getFloat("mdrcLowCrossoverHz",base.mdrcLowCrossoverHz),mdrcMidCrossoverHz=prefs.getFloat("mdrcMidCrossoverHz",base.mdrcMidCrossoverHz),mdrcHighCrossoverHz=prefs.getFloat("mdrcHighCrossoverHz",base.mdrcHighCrossoverHz),
             mdrcLowBand=band("mdrcLow",base.mdrcLowBand),mdrcMidBand=band("mdrcMid",base.mdrcMidBand),mdrcHighBand=band("mdrcHigh",base.mdrcHighBand),mdrcUltraBand=band("mdrcUltra",base.mdrcUltraBand),
             toneEnabled=prefs.getBoolean("toneEnabled",base.toneEnabled),bassToneDb=prefs.getFloat("bassToneDb",base.bassToneDb),midToneDb=prefs.getFloat("midToneDb",base.midToneDb),trebleToneDb=prefs.getFloat("trebleToneDb",base.trebleToneDb),
@@ -30,7 +30,7 @@ object DspConfigStore {
 
     fun save(context: Context, config: DspConfig) {
         val c=config.validate(); val e=p(context).edit().putBoolean("masterEnabled",c.masterEnabled).putBoolean("eqEnabled",c.eqEnabled).putString("eqMode",c.eqMode.name)
-            .putBoolean("pregainEnabled",c.pregainEnabled).putFloat("pregainDb",c.pregainDb).putBoolean("bassBoostEnabled",c.bassBoostEnabled).putFloat("bassBoostStrength",c.bassBoostStrength)
+            .putBoolean("pregainEnabled",c.pregainEnabled).putFloat("pregainDb",c.pregainDb).putBoolean("bassBoostEnabled",c.bassBoostEnabled).putFloat("bassBoostStrength",c.bassBoostStrength).putFloat("bassBoostFrequencyHz",c.bassBoostFrequencyHz)
             .putBoolean("mdrcEnabled",c.mdrcEnabled).putFloat("mdrcLowCrossoverHz",c.mdrcLowCrossoverHz).putFloat("mdrcMidCrossoverHz",c.mdrcMidCrossoverHz).putFloat("mdrcHighCrossoverHz",c.mdrcHighCrossoverHz)
             .putBoolean("toneEnabled",c.toneEnabled).putFloat("bassToneDb",c.bassToneDb).putFloat("midToneDb",c.midToneDb).putFloat("trebleToneDb",c.trebleToneDb)
             .putBoolean("limiterEnabled",c.limiterEnabled).putFloat("headroomDb",c.headroomDb).putFloat("limiterThresholdDb",c.limiterThresholdDb).putFloat("limiterRatio",c.limiterRatio).putFloat("limiterAttackMs",c.limiterAttackMs).putFloat("limiterReleaseMs",c.limiterReleaseMs).putFloat("limiterPostGainDb",c.limiterPostGainDb)

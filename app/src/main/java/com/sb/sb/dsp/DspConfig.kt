@@ -16,6 +16,7 @@ data class DspConfig(
 
     val bassBoostEnabled: Boolean = false,
     val bassBoostStrength: Float = 0.0f,
+    val bassBoostFrequencyHz: Float = 85.0f,
 
     val mdrcEnabled: Boolean = false,
     val mdrcLowCrossoverHz: Float = 160.0f,
@@ -51,7 +52,7 @@ data class DspConfig(
     companion object {
         val FREQUENCIES_10 = floatArrayOf(31f, 63f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
         val FREQUENCIES_20 = floatArrayOf(31.5f,45f,63f,90f,125f,180f,250f,355f,500f,710f,1000f,1400f,2000f,2800f,4000f,5600f,8000f,11200f,16000f,20000f)
-        val FREQUENCIES_32 = floatArrayOf(20f,25f,31.5f,40f,50f,63f,80f,100f,125f,160f,200f,250f,315f,400f,500f,630f,800f,1000f,1250f,1600f,2000f,2500f,3150f,4000f,5000f,6300f,8000f,10000f,12500f,16000f,18000f,20000f)
+        val FREQUENCIES_32 = floatArrayOf(20f,25f,31f,40f,50f,63f,80f,100f,125f,160f,200f,250f,315f,400f,500f,630f,800f,1000f,1250f,1600f,2000f,2500f,3150f,4000f,5000f,6300f,8000f,10000f,12500f,14000f,16000f,20000f)
     }
 
     enum class EqMode(val bandCount: Int) { BANDS_10(10), BANDS_20(20), BANDS_32(32) }
@@ -74,9 +75,14 @@ data class DspConfig(
         fun cleanArray(source: FloatArray, count: Int) =
             FloatArray(count) { i -> source.getOrElse(i) { 0f }.coerceIn(-24f, 24f) }
         val sr = sampleRate.coerceIn(8000, 192000)
-        val low = mdrcLowCrossoverHz.coerceIn(20f, sr * 0.49f)
-        val mid = mdrcMidCrossoverHz.coerceIn(low, sr * 0.49f)
-        val high = mdrcHighCrossoverHz.coerceIn(mid, sr * 0.49f)
+        val maxCrossover = minOf(22000f, sr * 0.49f).coerceAtLeast(80f)
+        val lowMax = (maxCrossover - 40f).coerceAtLeast(20f)
+        val low = mdrcLowCrossoverHz.coerceIn(20f, lowMax)
+        val midMin = low + 20f
+        val midMax = (maxCrossover - 20f).coerceAtLeast(midMin)
+        val mid = mdrcMidCrossoverHz.coerceIn(midMin, midMax)
+        val highMin = mid + 20f
+        val high = mdrcHighCrossoverHz.coerceIn(highMin, maxCrossover)
         fun band(b: BandCompressorConfig) = b.copy(
             thresholdDb = b.thresholdDb.coerceIn(-60f, 0f),
             ratio = b.ratio.coerceIn(1f, 50f),
@@ -89,6 +95,7 @@ data class DspConfig(
             channels = channels.coerceIn(1, 2),
             pregainDb = pregainDb.coerceIn(-24f, 12f),
             bassBoostStrength = bassBoostStrength.coerceIn(0f, 1f),
+            bassBoostFrequencyHz = bassBoostFrequencyHz.coerceIn(40f, 160f),
             mdrcLowCrossoverHz = low,
             mdrcMidCrossoverHz = mid,
             mdrcHighCrossoverHz = high,

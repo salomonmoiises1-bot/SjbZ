@@ -18,10 +18,10 @@ import kotlin.math.*
 class DynamicsProcessingManager {
     companion object {
         private const val TAG = "SB-DP"
-        private val PHYSICAL_CANDIDATES = intArrayOf(32, 20, 10, 5)
+        private val PHYSICAL_CANDIDATES = intArrayOf(128, 127, 64, 32, 20, 10, 5)
         private val EQ10 = floatArrayOf(31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
         private val EQ20 = floatArrayOf(31.5f,45f,63f,90f,125f,180f,250f,355f,500f,710f,1000f,1400f,2000f,2800f,4000f,5600f,8000f,11200f,16000f,20000f)
-        private val EQ32 = floatArrayOf(20f,25f,31.5f,40f,50f,63f,80f,100f,125f,160f,200f,250f,315f,400f,500f,630f,800f,1000f,1250f,1600f,2000f,2500f,3150f,4000f,5000f,6300f,8000f,10000f,12500f,16000f,18000f,20000f)
+        private val EQ32 = floatArrayOf(20f,25f,31f,40f,50f,63f,80f,100f,125f,160f,200f,250f,315f,400f,500f,630f,800f,1000f,1250f,1600f,2000f,2500f,3150f,4000f,5000f,6300f,8000f,10000f,12500f,14000f,16000f,20000f)
         private const val GRID_POINTS = 192
         private const val MIN_FREQ = 20f
         private const val MAX_FREQ = 20000f
@@ -51,9 +51,17 @@ class DynamicsProcessingManager {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || audioSession < 0) return false
         release()
         val requested = config.eqMode.bandCount
-        val candidates = PHYSICAL_CANDIDATES.filter { it <= requested }.ifEmpty { listOf(5) }
+        // Equalizer314's important implementation detail: do not cap the physical DP
+        // topology to the number of visible graphic-EQ controls.  When the HAL
+        // accepts it, use the public DynamicsProcessing ceiling (128 bands) and
+        // use the logical 10/20/32 curve only as the target response.
+        val candidates = PHYSICAL_CANDIDATES.toList()
         for (candidate in candidates) {
-            for (usePostEq in booleanArrayOf(true, false)) {
+            // EQ32 must have exactly one physical representation. Keep it in
+            // Pre-EQ so the graphic EQ is applied once before MDRC/MBC.
+            // Post-EQ is reserved/disabled here; applying the same mapped curve
+            // to both stages would double the requested gain.
+            for (usePostEq in booleanArrayOf(false)) {
                 try {
                     val builder = DynamicsProcessing.Config.Builder(
                         DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
@@ -78,7 +86,15 @@ class DynamicsProcessingManager {
                     installControlListeners(effect)
                     applyConfigNow(lastConfig, effect)
                     effect.enabled = lastConfig.masterEnabled
-                    Log.i(TAG, "DP activo session=$audioSession logical=$requested physicalPreEQ=$actual physicalPostEQ=$postActual mbc=${effect.getMbcByChannelIndex(0).bandCount} control=$controlGranted")
+                    val actualConfig = try { effect.config } catch (_: Throwable) { null }
+                    Log.i(
+                        TAG,
+                        "DP activo session=$audioSession logical=$requested " +
+                            "physicalPreEQ=$actual physicalPostEQ=$postActual " +
+                            "mbc=${effect.getMbcByChannelIndex(0).bandCount} " +
+                            "frame=${actualConfig?.preferredFrameDuration}ms " +
+                            "variant=${actualConfig?.variant} control=$controlGranted"
+                    )
                     return true
                 } catch (t: Throwable) {
                     Log.w(TAG, "DP candidate=$candidate post=$usePostEq rejected", t)
@@ -163,22 +179,38 @@ class DynamicsProcessingManager {
         val gains = config.activeGains()
         val sr = config.sampleRate.toFloat()
         val useEq = config.eqEnabled || config.toneEnabled
-        val preMap = mapLogicalCurve(freqs, gains, config, physicalBandCount, sr)
-        val postMap = if (physicalPostBandCount > 0) {
-            mapLogicalCurve(freqs, gains, config, physicalPostBandCount, sr, preMap.cutoffs)
-        } else null
+
+        // One logical EQ curve -> one physical DP EQ bank.
+        // The 128/127/64/... bands are only the physical representation of
+        // the same logical curve; they must never be stacked in Pre-EQ and
+        // Post-EQ with the same gains.
+        val mapped = mapLogicalCurve(freqs, gains, config, physicalBandCount, sr)
 
         for (ch in 0 until effect.channelCount) {
-            val pre = DynamicsProcessing.Eq(true, useEq, preMap.cutoffs.size)
-            for (i in preMap.cutoffs.indices) {
-                pre.setBand(i, DynamicsProcessing.EqBand(useEq, preMap.cutoffs[i], preMap.gains[i]))
+            val pre = DynamicsProcessing.Eq(true, useEq, mapped.cutoffs.size)
+            for (i in mapped.cutoffs.indices) {
+                pre.setBand(
+                    i,
+                    DynamicsProcessing.EqBand(
+                        useEq,
+                        mapped.cutoffs[i],
+                        mapped.gains[i]
+                    )
+                )
             }
             effect.setPreEqByChannelIndex(ch, pre)
 
-            if (postMap != null) {
-                val post = DynamicsProcessing.Eq(true, useEq, postMap.cutoffs.size)
-                for (i in postMap.cutoffs.indices) {
-                    post.setBand(i, DynamicsProcessing.EqBand(useEq, postMap.cutoffs[i], postMap.gains[i]))
+            // The backend is created without Post-EQ. Do not write a second
+            // copy of the logical curve even if a future OEM reports one.
+            if (physicalPostBandCount > 0) {
+                val post = DynamicsProcessing.Eq(true, false, physicalPostBandCount)
+                for (i in 0 until physicalPostBandCount) {
+                    val cutoff = if (i < mapped.cutoffs.size) {
+                        mapped.cutoffs[i]
+                    } else {
+                        mapped.cutoffs.last()
+                    }
+                    post.setBand(i, DynamicsProcessing.EqBand(false, cutoff, 0f))
                 }
                 effect.setPostEqByChannelIndex(ch, post)
             }
@@ -200,7 +232,6 @@ class DynamicsProcessingManager {
         config: DspConfig,
         bandCount: Int,
         sampleRate: Float,
-        preCutoffs: FloatArray? = null,
     ): EqMap {
         val n = bandCount.coerceAtLeast(1)
         val maxFreq = min(MAX_FREQ, sampleRate * 0.49f)
@@ -211,16 +242,24 @@ class DynamicsProcessingManager {
             targetGainAt(gridFreq[i], freqs, gains, config, sampleRate)
         }
 
-        if (n == 1) return EqMap(floatArrayOf(maxFreq), floatArrayOf(target.average().toFloat().coerceIn(-24f, 24f)))
-
-        // Pre/post interleave: offset the second staircase. The first map is
-        // optimised normally; the post map can reuse those boundaries as seeds.
-        if (preCutoffs != null && preCutoffs.size == n) {
-            val cut = FloatArray(n)
-            for (i in 0 until n - 1) cut[i] = ((preCutoffs[i] + preCutoffs[i + 1]) * 0.5f).coerceAtLeast(MIN_FREQ)
-            cut[n - 1] = maxFreq
-            return EqMap(cut, segmentMeans(gridFreq, target, cut).map { it * 0.5f }.toFloatArray())
+        // With 64/127/128 physical bands there is enough resolution to represent
+        // the logical curve directly.  Avoid the O(N*grid^2) segmentation pass
+        // used for small OEM topologies; this also keeps live fader updates cheap.
+        if (n >= 64) {
+            val cuts = FloatArray(n) { i ->
+                exp(
+                    ln(MIN_FREQ.toDouble()) +
+                        (ln(maxFreq.toDouble()) - ln(MIN_FREQ.toDouble())) * (i + 1) / n
+                ).toFloat().coerceAtMost(maxFreq)
+            }
+            val mapped = FloatArray(n) { i ->
+                val f = cuts[i]
+                targetGainAt(f, freqs, gains, config, sampleRate).coerceIn(-24f, 24f)
+            }
+            return EqMap(cuts, mapped)
         }
+
+        if (n == 1) return EqMap(floatArrayOf(maxFreq), floatArrayOf(target.average().toFloat().coerceIn(-24f, 24f)))
 
         val minPoints = 3
         val cost = Array(n + 1) { DoubleArray(GRID_POINTS) { Double.POSITIVE_INFINITY } }
@@ -280,8 +319,7 @@ class DynamicsProcessingManager {
             cuts[n - 1] = maxFreq
         }
         val means = segmentMeans(gridFreq, target, cuts)
-        val scale = if (physicalPostBandCount > 0) 0.5f else 1f
-        return EqMap(cuts, means.map { it * scale }.toFloatArray())
+        return EqMap(cuts, means.toFloatArray())
     }
 
     private fun segmentMeans(freqs: FloatArray, target: FloatArray, cuts: FloatArray): List<Float> {
@@ -303,9 +341,16 @@ class DynamicsProcessingManager {
     private fun targetGainAt(f: Float, freqs: FloatArray, gains: FloatArray, config: DspConfig, sr: Float): Float {
         var gain = if (config.eqEnabled) interpolateLog(freqs, gains, f) else 0f
         if (config.toneEnabled) {
-            gain += biquadMagnitudeDb(BiquadKind.LOW_SHELF, f, 100f, .707f, config.bassToneDb, sr)
+            gain += biquadMagnitudeDb(BiquadKind.LOW_SHELF, f, 200f, .707f, config.bassToneDb, sr)
             gain += biquadMagnitudeDb(BiquadKind.PEAKING, f, 1000f, 1f, config.midToneDb, sr)
-            gain += biquadMagnitudeDb(BiquadKind.HIGH_SHELF, f, 10000f, .707f, config.trebleToneDb, sr)
+            gain += biquadMagnitudeDb(BiquadKind.HIGH_SHELF, f, 6000f, .707f, config.trebleToneDb, sr)
+        }
+        if (config.bassBoostEnabled && config.bassBoostStrength > 0f) {
+            // Bass Boost is deliberately represented in the same physical DP
+            // pre-EQ bank, so it cannot run after the limiter and reintroduce
+            // clipping.  0..100% maps to a bounded low-shelf boost.
+            val bassBoostDb = config.bassBoostStrength.coerceIn(0f, 1f) * 12f
+            gain += biquadMagnitudeDb(BiquadKind.LOW_SHELF, f, config.bassBoostFrequencyHz, .707f, bassBoostDb, sr)
         }
         return gain.coerceIn(-24f, 24f)
     }

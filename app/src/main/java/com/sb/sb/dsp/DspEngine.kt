@@ -17,6 +17,8 @@ class DspEngine(private val context: Context) {
         const val GLOBAL_SESSION_ID = 0
         @Volatile var lastPeakDb: Float = -60f
         @Volatile var lastRmsDb: Float = -60f
+        @Volatile var lastBackendActive: Boolean = false
+        @Volatile var lastDynamicsAvailable: Boolean = false
     }
 
     private val effects = AudioEffectManager()
@@ -42,7 +44,9 @@ class DspEngine(private val context: Context) {
         visualizer.start(target)
         restartAutoGainTask()
         started = ok
-        Log.i(TAG, "start globalSession=$target requestedSession=$sessionId externalBackend=$ok physicalPreEq=${effects.physicalEqBandCount} postEq=${effects.postEqBandCount}")
+        lastBackendActive = ok && config.masterEnabled
+        lastDynamicsAvailable = effects.dynamicsAvailable
+        Log.i(TAG, "start globalSession=$target requestedSession=$sessionId externalBackend=$ok dynamics=${effects.dynamicsAvailable} physicalPreEq=${effects.physicalEqBandCount} postEq=${effects.postEqBandCount}")
         return ok
     }
 
@@ -55,6 +59,8 @@ class DspEngine(private val context: Context) {
             return
         }
         effects.applyConfig(runtimeConfig(next))
+        lastBackendActive = started && next.masterEnabled && effects.dynamicsAvailable
+        lastDynamicsAvailable = effects.dynamicsAvailable
         restartAutoGainTask()
     }
 
@@ -65,6 +71,7 @@ class DspEngine(private val context: Context) {
         controlTask = scheduler.scheduleAtFixedRate({
             // Metering is independent of AutoGain; the dashboard must keep working
             // when AutoGain is disabled.
+            visualizer.updateMeasurement()
             lastPeakDb = visualizer.peakDb
             lastRmsDb = visualizer.rmsDb
             if (config.autoGainEnabled) {
@@ -94,6 +101,8 @@ class DspEngine(private val context: Context) {
         effects.release()
         started = false
         currentSession = -1
+        lastBackendActive = false
+        lastDynamicsAvailable = false
     }
 
     fun getConfig(): DspConfig = config

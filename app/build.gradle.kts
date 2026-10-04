@@ -7,7 +7,6 @@ plugins {
 android {
     namespace = "com.sb.dsp"
     compileSdk = 35
-    ndkVersion = "26.1.10909125"
 
     defaultConfig {
         applicationId = "com.sb.dsp"
@@ -16,16 +15,9 @@ android {
         versionCode = 3
         versionName = "2.0.0-eq314"
 
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++20"
-                arguments += "-DANDROID_STL=c++_shared"
-            }
-        }
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 
-    buildFeatures { compose = true; prefab = true }
+    buildFeatures { compose = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -33,7 +25,6 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
-    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
 }
 
 dependencies {
@@ -45,5 +36,4 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.google.oboe:oboe:1.9.0")
 }

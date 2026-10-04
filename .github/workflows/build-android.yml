@@ -25,6 +25,10 @@ jobs:
       - name: Setup Android SDK & NDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK Licenses Automatically
+        run: |
+          yes | sdkmanager --licenses || true
+
       - name: Install Android NDK & CMake
         run: |
           yes | sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"

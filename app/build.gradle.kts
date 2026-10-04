@@ -11,8 +11,8 @@ android {
         applicationId = "com.sb.dsp"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0-PRO"
+        versionCode = 2
+        versionName = "1.1.0-method"
 
         externalNativeBuild {
             cmake {
@@ -27,6 +27,13 @@ android {
 
     buildFeatures {
         prefab = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 }
 

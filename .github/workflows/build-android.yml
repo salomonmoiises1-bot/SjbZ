@@ -24,6 +24,9 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Do not let setup-android attempt to install the obsolete "tools" package.
+          packages: platform-tools
 
       - name: Accept Android SDK licenses
         run: |
@@ -33,8 +36,8 @@ jobs:
         run: |
           yes | sdkmanager \
             "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
             "ndk;26.1.10909125" \
             "cmake;3.22.1"
 
@@ -45,7 +48,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew --no-daemon assembleDebug --stacktrace
 
       - name: Upload Compiled APK
         uses: actions/upload-artifact@v4

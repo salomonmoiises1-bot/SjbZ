@@ -23,7 +23,7 @@ fun SignalChainBar(config: DspConfig, onNavigate: (String) -> Unit) {
         "EQ32" to config.eqEnabled,
         "MDRC" to config.mdrcEnabled,
         "AG" to config.autoGainEnabled,
-        "LIMIT" to config.headroomEnabled,
+        "LIMIT" to config.limiterEnabled,
         "SPATIAL" to config.virtualizerEnabled
     )
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

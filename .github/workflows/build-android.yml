@@ -1,0 +1,56 @@
+name: Build SB Audio DSP (Android APK & NDK)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Compile Android App & Oboe Native Library
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java Development Kit (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK & NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK & CMake
+        run: |
+          yes | sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: Ensure Gradle Wrapper & JAR Exist
+        run: |
+          mkdir -p gradle/wrapper
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "gradle-wrapper.jar not found, downloading official binary..."
+            curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+          fi
+          if [ ! -f "gradlew" ]; then
+            echo "gradlew script not found, downloading..."
+            curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradlew -o gradlew
+          fi
+          chmod +x ./gradlew
+
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build Debug APK & Native Oboe Library
+        run: |
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload Compiled APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SB-DSP-Debug-APK
+          path: app/build/outputs/apk/debug/app-debug.apk

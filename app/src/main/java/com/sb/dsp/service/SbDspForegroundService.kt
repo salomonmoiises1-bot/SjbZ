@@ -19,6 +19,7 @@ class SbDspForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "com.sb.dsp.ACTION_START"
         const val ACTION_STOP = "com.sb.dsp.ACTION_STOP"
+        const val ACTION_UPDATE_CONFIG = "com.sb.dsp.ACTION_UPDATE_CONFIG"
         const val EXTRA_SESSION_ID = "session_id"
 
         fun startService(context: Context, sessionId: Int = 0) {
@@ -41,10 +42,16 @@ class SbDspForegroundService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 val session = intent.getIntExtra(EXTRA_SESSION_ID, 0)
+                engine.updateConfig(com.sb.dsp.DspConfigStore.load(this))
                 engine.start(session)
+                com.sb.dsp.DspConfigStore.setServiceActive(this, true)
+            }
+            ACTION_UPDATE_CONFIG -> {
+                engine.updateConfig(com.sb.dsp.DspConfigStore.load(this))
             }
             ACTION_STOP -> {
                 engine.release()
+                com.sb.dsp.DspConfigStore.setServiceActive(this, false)
                 stopSelf()
             }
         }
@@ -53,6 +60,7 @@ class SbDspForegroundService : Service() {
 
     override fun onDestroy() {
         engine.release()
+        com.sb.dsp.DspConfigStore.setServiceActive(this, false)
         super.onDestroy()
     }
 

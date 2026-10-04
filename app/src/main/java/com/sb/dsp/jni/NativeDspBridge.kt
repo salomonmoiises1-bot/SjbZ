@@ -29,7 +29,8 @@ object NativeDspBridge {
         toneBassDb: Float,
         toneMidDb: Float,
         toneTrebleDb: Float,
-        headroomMarginLinear: Float
+        headroomMarginLinear: Float,
+        masterLinear: Float
     )
     external fun processDirectBuffer(enginePtr: Long, directBuffer: ByteBuffer, frameCount: Int)
     external fun processShortArray(enginePtr: Long, inputOutput: ShortArray, offset: Int, count: Int)

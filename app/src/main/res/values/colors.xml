@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="black">#000000</color>
     <color name="cyan_500">#00E5FF</color>
     <color name="cyan_700">#00B0FF</color>
     <color name="slate_900">#0F172A</color>

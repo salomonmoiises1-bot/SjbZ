@@ -1,13 +1,16 @@
 package com.sb.dsp.service
 
-import android.app.*
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.sb.dsp.DspConfig
-import com.sb.dsp.PcmAudioPipeline
+import androidx.core.content.ContextCompat
+import com.sb.dsp.DspEngine
 import com.sb.dsp.R
 
 class SbDspForegroundService : Service() {
@@ -16,42 +19,58 @@ class SbDspForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "com.sb.dsp.ACTION_START"
         const val ACTION_STOP = "com.sb.dsp.ACTION_STOP"
-        const val ACTION_TOGGLE_MASTER = "com.sb.dsp.ACTION_TOGGLE_MASTER"
+        const val EXTRA_SESSION_ID = "session_id"
 
-        @Volatile
-        var activePipeline: PcmAudioPipeline? = null
-            private set
+        fun startService(context: Context, sessionId: Int = 0) {
+            val intent = Intent(context, SbDspForegroundService::class.java)
+                .setAction(ACTION_START)
+                .putExtra(EXTRA_SESSION_ID, sessionId)
+            ContextCompat.startForegroundService(context, intent)
+        }
     }
 
-    private var pipeline = PcmAudioPipeline(48000, 2)
+    private val engine = DspEngine()
 
     override fun onCreate() {
         super.onCreate()
-        activePipeline = pipeline
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundWithNotification()
+        startForeground(NOTIFICATION_ID, notification())
+        when (intent?.action) {
+            ACTION_START -> {
+                val session = intent.getIntExtra(EXTRA_SESSION_ID, 0)
+                engine.start(session)
+            }
+            ACTION_STOP -> {
+                engine.release()
+                stopSelf()
+            }
+        }
         return START_STICKY
     }
 
-    private fun startForegroundWithNotification() {
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("SB Audio DSP Engine")
-            .setContentText("Motor DSP Activo • 10/20/32 Bandas Constant-Q")
-            .setSmallIcon(R.drawable.ic_dsp_notification)
-            .setOngoing(true)
-            .build()
-        startForeground(NOTIFICATION_ID, notification)
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "SB DSP Engine", NotificationManager.IMPORTANCE_LOW)
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
+    override fun onDestroy() {
+        engine.release()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun notification(): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText("DSP externo + Oboe PCM")
+            .setSmallIcon(R.drawable.ic_dsp_notification)
+            .setOngoing(true)
+            .build()
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "SB DSP", NotificationManager.IMPORTANCE_LOW)
+            )
+        }
+    }
 }

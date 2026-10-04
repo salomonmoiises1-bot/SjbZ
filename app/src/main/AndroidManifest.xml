@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"  />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"  />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"  />
-    <application android:allowBackup="true" android:label="@string/app_name" android:supportsRtl="true" android:theme="@style/Theme.SbDsp" android:icon="@drawable/ic_dsp_notification">
+    <application android:allowBackup="true" android:label="@string/app_name" android:supportsRtl="true" android:theme="@style/Theme.SbDsp" android:icon="@mipmap/ic_launcher">
         <activity android:name="com.sb.ui.MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <intent-filter>

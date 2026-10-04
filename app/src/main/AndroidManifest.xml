@@ -1,47 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- Audio DSP Permissions strictly conforming to SB specification -->
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <application
-        android:name="com.sb.SbApplication"
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.SB">
-
-        <activity
-            android:name="com.sb.MainActivity"
-            android:exported="true"
-            android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.SB">
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"  />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"  />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"  />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"  />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"  />
+    <application android:allowBackup="true" android:label="@string/app_name" android:supportsRtl="true" android:theme="@style/Theme.SbDsp" android:icon="@drawable/ic_dsp_notification">
+        <activity android:name="com.sb.ui.MainActivity" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
-
-        <service
-            android:name="com.sb.audio.SbAudioService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
-
-        <receiver
-            android:name="com.sb.audio.AudioSessionReceiver"
-            android:exported="true">
+        <service android:name=".service.SbDspForegroundService" android:enabled="true" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <receiver android:name=".session.AudioSessionReceiver" android:enabled="true" android:exported="true">
             <intent-filter>
                 <action android:name="android.media.action.OPEN_AUDIO_EFFECT_CONTROL_SESSION" />
                 <action android:name="android.media.action.CLOSE_AUDIO_EFFECT_CONTROL_SESSION" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
-
     </application>
-
 </manifest>

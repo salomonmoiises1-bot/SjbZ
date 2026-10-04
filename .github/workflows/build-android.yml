@@ -44,6 +44,9 @@ jobs:
       - name: Setup Gradle Cache
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
       - name: Build Debug APK
         run: ./gradlew --no-daemon assembleDebug --stacktrace
 

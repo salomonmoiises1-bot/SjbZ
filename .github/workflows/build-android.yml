@@ -24,29 +24,17 @@ jobs:
 
       - name: Setup Android SDK & NDK
         uses: android-actions/setup-android@v3
-
-      - name: Pre-accept Android SDK Licenses
-        run: |
-          mkdir -p $ANDROID_SDK_ROOT/licenses
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a64810" >> $ANDROID_SDK_ROOT/licenses/android-sdk-license
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fb8" > $ANDROID_SDK_ROOT/licenses/google-gdk-license
-          echo "e9ac7c35d4b801034c8d4fc1051b045e58cef440" > $ANDROID_SDK_ROOT/licenses/android-googletv-license
-
-      - name: Install Android NDK & CMake
-        run: |
-          yes | sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
+        with:
+          accept-android-sdk-licenses: true
+          packages: 'ndk;26.1.10909125 cmake;3.22.1'
 
       - name: Ensure Gradle Wrapper & JAR Exist
         run: |
           mkdir -p gradle/wrapper
           if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "gradle-wrapper.jar not found, downloading official binary..."
             curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
           fi
           if [ ! -f "gradlew" ]; then
-            echo "gradlew script not found, downloading..."
             curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradlew -o gradlew
           fi
           chmod +x ./gradlew

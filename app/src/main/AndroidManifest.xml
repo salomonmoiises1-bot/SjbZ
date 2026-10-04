@@ -1,40 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.sb.dsp">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Audio & System DSP Permissions -->
+    <!-- Audio DSP Permissions strictly conforming to SB specification -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
+        android:name="com.sb.SbApplication"
         android:allowBackup="true"
-        android:hasCode="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SbDsp">
+        android:theme="@style/Theme.SB">
 
-        <!-- Foreground Service for Continuous Audio Pipeline Processing -->
+        <activity
+            android:name="com.sb.MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.SB">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <service
-            android:name="com.sb.dsp.service.SbDspForegroundService"
-            android:enabled="true"
+            android:name="com.sb.audio.SbAudioService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- Broadcast Receiver for System-wide Audio Session Detection -->
         <receiver
-            android:name="com.sb.dsp.session.AudioSessionReceiver"
-            android:enabled="true"
+            android:name="com.sb.audio.AudioSessionReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.media.action.OPEN_AUDIO_EFFECT_CONTROL_SESSION" />
                 <action android:name="android.media.action.CLOSE_AUDIO_EFFECT_CONTROL_SESSION" />
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 

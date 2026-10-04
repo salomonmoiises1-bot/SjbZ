@@ -74,7 +74,7 @@ fun DashboardScreen(
         }
 
         // Medidor de señal & espectro
-        VisualizerMeter(peakDb = peakDb, rmsDb = rmsDb, isDspActive = config.masterEnabled)
+        VisualizerMeter(peakDb = peakDb, rmsDb = rmsDb, isDspActive = config.masterEnabled && viewModel.dspBackendActive)
 
         // Resumen EQ32
         Button(

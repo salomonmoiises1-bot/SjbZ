@@ -20,6 +20,7 @@ fun OutputScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         Text("Ganancia global, protección y espacialidad", color=Color(0xFF94A3B8), fontSize=12.sp)
         DspSlider("Pre-Gain",c.pregainDb,-24f..12f,"%.1f dB",false,viewModel::setPregain)
         DspSlider("Bass Boost",c.bassBoostStrength,0f..1f,"%.0f %%",true){viewModel.setBassBoost(it)}
+        DspSlider("Frecuencia Bass Boost",c.bassBoostFrequencyHz,60f..120f,"%.0f Hz",false,viewModel::setBassBoostFrequency)
         Text("TONE",color=Color(0xFF94A3B8),fontSize=11.sp)
         DspSlider("Graves",c.bassToneDb,-12f..12f,"%.1f dB",false,viewModel::setBassTone)
         DspSlider("Medios",c.midToneDb,-12f..12f,"%.1f dB",false,viewModel::setMidTone)

@@ -18,7 +18,7 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         Info("Sample rate", "Detectada del sistema al iniciar")
         Info("Canales", "Estéreo del backend de sesión 0")
         Info("Ecualizador", "10 / 20 / 32 bandas lógicas → bandas físicas disponibles")
-        Info("Procesamiento", "Pre-Gain → Bass → Tone/EQ → MDRC → Limiter → Virtualizer → salida")
+        Info("Procesamiento", "Pre-Gain → Bass/Tone/EQ → MDRC → Limiter → salida; Virtualizer usa el stack AudioEffect del sistema")
         Info("Backend", "DynamicsProcessing / AudioEffect session 0")
     }
 }

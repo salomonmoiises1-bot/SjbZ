@@ -1,6 +1,7 @@
 package com.sb.ui
 
 import android.app.Application
+import android.media.AudioManager
 import androidx.lifecycle.AndroidViewModel
 import com.sb.dsp.DspConfig
 import com.sb.dsp.DspConfigStore
@@ -14,7 +15,7 @@ import kotlinx.coroutines.launch
 import com.sb.dsp.DspEngine
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
-    private val _config = MutableStateFlow(DspConfigStore.load(app))
+    private val _config = MutableStateFlow(loadRuntimeConfig(app))
     val config: StateFlow<DspConfig> = _config.asStateFlow()
     private val presets = com.sb.dsp.PresetRepository(app)
     private val _currentPreset = MutableStateFlow("Plano SB")
@@ -23,6 +24,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val peakDb: StateFlow<Float> = _peakDb.asStateFlow()
     private val _rmsDb = MutableStateFlow(-60f)
     val rmsDb: StateFlow<Float> = _rmsDb.asStateFlow()
+    val dspBackendActive: Boolean get() = DspEngine.lastBackendActive
+    val dynamicsBackendAvailable: Boolean get() = DspEngine.lastDynamicsAvailable
+
+    private fun loadRuntimeConfig(app: Application): DspConfig {
+        val base = DspConfigStore.load(app)
+        val audioManager = app.getSystemService(AudioManager::class.java)
+        val rate = audioManager?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
+            ?.takeIf { it > 0 }?.coerceIn(8000, 192000) ?: base.sampleRate
+        return base.copy(sampleRate = rate).validate()
+    }
 
     init {
         SbDspForegroundService.startService(app)
@@ -52,6 +63,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun setPregain(db: Float) = update { it.copy(pregainEnabled = true, pregainDb = db) }
     fun setBassBoost(v: Float) = update { it.copy(bassBoostEnabled = v > .01f, bassBoostStrength = v) }
+    fun setBassBoostFrequency(v: Float) = update { it.copy(bassBoostFrequencyHz = v) }
     fun setTone(bass: Float, mid: Float, treble: Float) = update { it.copy(toneEnabled = true, bassToneDb = bass, midToneDb = mid, trebleToneDb = treble) }
     fun setBassTone(v: Float) = update { it.copy(toneEnabled = true, bassToneDb = v) }
     fun setMidTone(v: Float) = update { it.copy(toneEnabled = true, midToneDb = v) }
@@ -60,6 +72,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setMdrcLow(v: Float) = update { it.copy(mdrcLowCrossoverHz = v) }
     fun setMdrcMid(v: Float) = update { it.copy(mdrcMidCrossoverHz = v) }
     fun setMdrcHigh(v: Float) = update { it.copy(mdrcHighCrossoverHz = v) }
+    fun setMdrcLowBand(v: DspConfig.BandCompressorConfig) = update { it.copy(mdrcLowBand = v) }
+    fun setMdrcMidBand(v: DspConfig.BandCompressorConfig) = update { it.copy(mdrcMidBand = v) }
+    fun setMdrcHighBand(v: DspConfig.BandCompressorConfig) = update { it.copy(mdrcHighBand = v) }
+    fun setMdrcUltraBand(v: DspConfig.BandCompressorConfig) = update { it.copy(mdrcUltraBand = v) }
     fun setAutoGain(v: Boolean) = update { it.copy(autoGainEnabled = v) }
     fun setAutoGainTarget(v: Float) = update { it.copy(autoGainTargetRmsDb = v) }
     fun setLimiter(v: Boolean) = update { it.copy(limiterEnabled = v) }

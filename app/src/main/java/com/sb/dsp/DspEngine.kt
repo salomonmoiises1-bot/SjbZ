@@ -9,7 +9,7 @@ class DspEngine {
     }
 
     private val effects = AudioEffectManager()
-    private val pcmPipeline = PcmAudioPipeline()
+    private var pcmPipeline = PcmAudioPipeline()
     private var config = DspConfig().validate()
     private var nativeEnginePtr = 0L
     private var currentSession = -1
@@ -25,10 +25,15 @@ class DspEngine {
     @Synchronized
     fun updateConfig(newConfig: DspConfig) {
         config = newConfig.validate()
-        pcmPipeline.updateConfig(config)
+        if (pcmPipeline.sampleRate != config.sampleRate || pcmPipeline.channels != config.channels) {
+            pcmPipeline = PcmAudioPipeline(config.sampleRate, config.channels)
+            pcmPipeline.updateConfig(config)
+        } else {
+            pcmPipeline.updateConfig(config)
+        }
         effects.applyConfig(config)
 
-        if (nativeEnginePtr != 0L) {
+        if (nativeEnginePtr != 0L && NativeDspBridge.isLoaded()) {
             NativeDspBridge.updateEngineConfig(
                 nativeEnginePtr,
                 config.masterEnabled,
@@ -41,16 +46,40 @@ class DspEngine {
                 config.bassToneDb,
                 config.midToneDb,
                 config.trebleToneDb,
-                10f.powDb(config.headroomDb)
+                10f.powDb(config.headroomDb),
+                10f.powDb(config.masterGainDb)
             )
         }
     }
 
     @Synchronized
     fun startOboe(sampleRate: Int = 48000, channels: Int = 2): Boolean {
+        if (!NativeDspBridge.isLoaded()) return false
         if (nativeEnginePtr != 0L) return true
         nativeEnginePtr = NativeDspBridge.initEngine(sampleRate, channels, 1920)
-        return nativeEnginePtr != 0L && NativeDspBridge.startOboeStream(nativeEnginePtr)
+        if (nativeEnginePtr == 0L) return false
+        val effective = config.copy(sampleRate = sampleRate, channels = channels).validate()
+        NativeDspBridge.updateEngineConfig(
+            nativeEnginePtr,
+            effective.masterEnabled,
+            effective.eqEnabled,
+            effective.eqMode.bandCount,
+            effective.activeGains(),
+            if (effective.pregainEnabled) 10f.powDb(effective.pregainDb) else 1f,
+            effective.bassBoostStrength,
+            effective.mdrcEnabled,
+            effective.bassToneDb,
+            effective.midToneDb,
+            effective.trebleToneDb,
+            10f.powDb(effective.headroomDb),
+            10f.powDb(effective.masterGainDb)
+        )
+        val started = NativeDspBridge.startOboeStream(nativeEnginePtr)
+        if (!started) {
+            NativeDspBridge.destroyEngine(nativeEnginePtr)
+            nativeEnginePtr = 0L
+        }
+        return started
     }
 
     @Synchronized

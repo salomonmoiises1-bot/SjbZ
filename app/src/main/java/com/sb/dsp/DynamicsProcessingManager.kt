@@ -80,8 +80,11 @@ class DynamicsProcessingManager {
                 val auto = if (safe.autoGainEnabled) 0f else 0f
                 val base = (if (safe.pregainEnabled) safe.pregainDb else 0f) +
                     safe.masterGainDb + auto
-                val balanceDb = safe.balance.coerceIn(-1f, 1f) * 60f
-                effect.setInputGainbyChannel(ch, (base + if (ch == 0) min(0f, balanceDb) else max(0f, balanceDb)).coerceIn(-60f, 12f))
+                val balance = safe.balance.coerceIn(-1f, 1f)
+                val leftBalanceDb = if (balance > 0f) linearToDb(1f - balance) else 0f
+                val rightBalanceDb = if (balance < 0f) linearToDb(1f + balance) else 0f
+                val channelBalanceDb = if (ch == 0) leftBalanceDb else rightBalanceDb
+                effect.setInputGainbyChannel(ch, (base + channelBalanceDb).coerceIn(-60f, 12f))
             }
 
             applyEq(effect, safe)
@@ -146,6 +149,11 @@ class DynamicsProcessingManager {
             val limiter = effect.getLimiterByChannelIndex(ch)
             limiter.setEnabled(config.headroomEnabled || config.masterEnabled)
         }
+    }
+
+
+    private fun linearToDb(linear: Float): Float {
+        return (20.0 * kotlin.math.log10(linear.coerceIn(0.001f, 1f).toDouble())).toFloat()
     }
 
     private fun physicalFrequency(index: Int, count: Int): Float {

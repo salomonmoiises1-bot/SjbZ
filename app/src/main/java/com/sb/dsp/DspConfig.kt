@@ -63,15 +63,19 @@ data class DspConfig(
     fun validate(): DspConfig {
         fun cleanArray(source: FloatArray, count: Int) =
             FloatArray(count) { i -> source.getOrElse(i) { 0f }.coerceIn(-24f, 24f) }
+        val safeSampleRate = sampleRate.coerceIn(8000, 192000)
+        val safeLow = mdrcLowCrossoverHz.coerceIn(20f, safeSampleRate * 0.49f)
+        val safeMid = mdrcMidCrossoverHz.coerceIn(safeLow, safeSampleRate * 0.49f)
+        val safeHigh = mdrcHighCrossoverHz.coerceIn(safeMid, safeSampleRate * 0.49f)
         return copy(
-            sampleRate = sampleRate.coerceIn(8000, 192000),
+            sampleRate = safeSampleRate,
             channels = channels.coerceIn(1, 2),
             pregainDb = pregainDb.coerceIn(-24f, 12f),
             bassBoostStrength = bassBoostStrength.coerceIn(0f, 1f),
             bassBoostCenterFreq = bassBoostCenterFreq.coerceIn(30f, 160f),
-            mdrcLowCrossoverHz = mdrcLowCrossoverHz.coerceIn(20f, 10000f),
-            mdrcMidCrossoverHz = mdrcMidCrossoverHz.coerceIn(40f, 16000f),
-            mdrcHighCrossoverHz = mdrcHighCrossoverHz.coerceIn(100f, 22000f),
+            mdrcLowCrossoverHz = safeLow,
+            mdrcMidCrossoverHz = safeMid,
+            mdrcHighCrossoverHz = safeHigh,
             headroomDb = headroomDb.coerceIn(-12f, 0f),
             autoGainTargetRmsDb = autoGainTargetRmsDb.coerceIn(-60f, 0f),
             masterGainDb = masterGainDb.coerceIn(-60f, 12f),

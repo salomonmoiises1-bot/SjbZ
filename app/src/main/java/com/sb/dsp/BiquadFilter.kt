@@ -7,9 +7,9 @@ class BiquadFilter {
         PEAKING_EQ, LOW_SHELF, HIGH_SHELF, LOW_PASS, HIGH_PASS, BAND_PASS
     }
 
-    private var b0 = 1.0f; private var b1 = 0.0f; private var b2 = 0.0f
-    private var a1 = 0.0f; private var a2 = 0.0f
-    private var s1L = 0.0f; private var s2L = 0.0f
+    @PublishedApi internal var b0 = 1.0f; @PublishedApi internal var b1 = 0.0f; @PublishedApi internal var b2 = 0.0f
+    @PublishedApi internal var a1 = 0.0f; @PublishedApi internal var a2 = 0.0f
+    @PublishedApi internal var s1L = 0.0f; @PublishedApi internal var s2L = 0.0f
     private var s1R = 0.0f; private var s2R = 0.0f
 
     fun configure(type: Type, sampleRate: Float, centerFreq: Float, q: Float, gainDb: Float = 0.0f) {

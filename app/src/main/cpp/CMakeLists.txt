@@ -22,22 +22,20 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(oboe)
 
-# Creamos la librería compartida utilizando tu archivo de cabecera o creando un .cpp de implementación
-# (Si toda la lógica está en oboe_dsp_engine.h, puedes crear un oboe_dsp_engine.cpp mínimo que lo incluya)
+# Declaración de la librería compartida nativa
 add_library(
     sb_dsp_engine
     SHARED
     oboe_dsp_engine.h
 )
 
-# Directorios de inclusión locales
 target_include_directories(
     sb_dsp_engine
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# Enlazar Oboe, el registro de Android y las librerías nativas
+# Enlazar Oboe, el registro del sistema Android y las librerías nativas
 target_link_libraries(
     sb_dsp_engine
     PRIVATE

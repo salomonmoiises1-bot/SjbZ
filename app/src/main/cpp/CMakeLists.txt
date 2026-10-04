@@ -22,11 +22,12 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(oboe)
 
-# Crear tu librería compartida del motor DSP
+# Creamos la librería compartida utilizando tu archivo de cabecera o creando un .cpp de implementación
+# (Si toda la lógica está en oboe_dsp_engine.h, puedes crear un oboe_dsp_engine.cpp mínimo que lo incluya)
 add_library(
     sb_dsp_engine
     SHARED
-    oboe_dsp_engine.cpp
+    oboe_dsp_engine.h
 )
 
 # Directorios de inclusión locales

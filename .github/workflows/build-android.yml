@@ -1,4 +1,4 @@
-name: Build SB Audio DSP (Android APK & NDK)
+name: Build SB Audio DSP (Android APK)
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Compile Android App & Oboe Native Library
+    name: Compile Android App
     runs-on: ubuntu-latest
 
     steps:
@@ -32,14 +32,12 @@ jobs:
         run: |
           yes | sdkmanager --licenses || true
 
-      - name: Install Android SDK, NDK & CMake
+      - name: Install Android SDK
         run: |
           yes | sdkmanager \
             "platform-tools" \
             "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "ndk;26.1.10909125" \
-            "cmake;3.22.1"
+            "build-tools;35.0.0"
 
       - name: Setup Gradle Cache
         uses: gradle/actions/setup-gradle@v3

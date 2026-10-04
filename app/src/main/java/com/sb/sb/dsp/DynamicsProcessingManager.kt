@@ -40,6 +40,7 @@ class DynamicsProcessingManager {
     private val workerThread = HandlerThread("SB-DP-Worker").apply { start() }
     private val worker = Handler(workerThread.looper)
     @Volatile private var pendingApply: Runnable? = null
+    @Volatile private var appliedConfig: DspConfig? = null
 
     val isAvailable: Boolean get() = dp != null
     val postEqBandCount: Int get() = physicalPostBandCount
@@ -84,8 +85,8 @@ class DynamicsProcessingManager {
                     currentConfigForGain = lastConfig
                     controlGranted = effect.hasControl()
                     installControlListeners(effect)
+                    appliedConfig = null
                     applyConfigNow(lastConfig, effect)
-                    effect.enabled = lastConfig.masterEnabled
                     val actualConfig = try { effect.config } catch (_: Throwable) { null }
                     Log.i(
                         TAG,
@@ -145,18 +146,86 @@ class DynamicsProcessingManager {
                 scheduleReclaim()
                 return
             }
+
             controlGranted = true
-            for (ch in 0 until effect.channelCount) {
-                effect.setInputGainbyChannel(ch, inputGainForChannel(config, ch))
+            val previous = appliedConfig
+
+            // Do not rewrite unrelated native stages when a single control changes.
+            // In particular, Tone must never rebuild the whole Pre-EQ + MBC + Limiter
+            // chain while the user is moving a fader; some vendor HALs produce
+            // quantization noise/clicks when those stages are replaced repeatedly.
+            if (previous == null || inputStageChanged(previous, config)) {
+                for (ch in 0 until effect.channelCount) {
+                    effect.setInputGainbyChannel(ch, inputGainForChannel(config, ch))
+                }
             }
-            applyEq(effect, config)
-            applyMdrc(effect, config)
-            applyLimiter(effect, config)
-            effect.enabled = config.masterEnabled
+
+            if (previous == null) {
+                applyEq(effect, config)
+            } else if (eqStageChanged(previous, config)) {
+                // Keep the physical DP cutoffs frozen after the first installation.
+                // Tone/EQ/BassBoost changes update only the gains at those existing
+                // cutoffs, avoiding repeated topology replacement and the resulting
+                // digital noise on vendor implementations.
+                applyEqGainsOnly(effect, config)
+            }
+
+            if (previous == null || mdrcStageChanged(previous, config)) {
+                applyMdrc(effect, config)
+            }
+
+            if (previous == null || limiterStageChanged(previous, config)) {
+                applyLimiter(effect, config)
+            }
+
+            if (previous == null || previous.masterEnabled != config.masterEnabled) {
+                effect.enabled = config.masterEnabled
+            }
+
+            appliedConfig = config
         } catch (t: Throwable) {
             Log.e(TAG, "applyConfig failed", t)
         }
     }
+
+    private fun inputStageChanged(a: DspConfig, b: DspConfig): Boolean =
+        a.pregainEnabled != b.pregainEnabled ||
+            a.pregainDb != b.pregainDb ||
+            a.masterGainDb != b.masterGainDb ||
+            a.balance != b.balance ||
+            a.autoGainEnabled != b.autoGainEnabled
+
+    private fun eqStageChanged(a: DspConfig, b: DspConfig): Boolean =
+        a.eqEnabled != b.eqEnabled ||
+            a.eqMode != b.eqMode ||
+            !a.activeGains().contentEquals(b.activeGains()) ||
+            a.toneEnabled != b.toneEnabled ||
+            a.bassToneDb != b.bassToneDb ||
+            a.midToneDb != b.midToneDb ||
+            a.trebleToneDb != b.trebleToneDb ||
+            a.bassBoostEnabled != b.bassBoostEnabled ||
+            a.bassBoostStrength != b.bassBoostStrength ||
+            a.bassBoostFrequencyHz != b.bassBoostFrequencyHz ||
+            a.sampleRate != b.sampleRate
+
+    private fun mdrcStageChanged(a: DspConfig, b: DspConfig): Boolean =
+        a.mdrcEnabled != b.mdrcEnabled ||
+            a.mdrcLowCrossoverHz != b.mdrcLowCrossoverHz ||
+            a.mdrcMidCrossoverHz != b.mdrcMidCrossoverHz ||
+            a.mdrcHighCrossoverHz != b.mdrcHighCrossoverHz ||
+            a.mdrcLowBand != b.mdrcLowBand ||
+            a.mdrcMidBand != b.mdrcMidBand ||
+            a.mdrcHighBand != b.mdrcHighBand ||
+            a.mdrcUltraBand != b.mdrcUltraBand
+
+    private fun limiterStageChanged(a: DspConfig, b: DspConfig): Boolean =
+        a.limiterEnabled != b.limiterEnabled ||
+            a.headroomDb != b.headroomDb ||
+            a.limiterThresholdDb != b.limiterThresholdDb ||
+            a.limiterRatio != b.limiterRatio ||
+            a.limiterAttackMs != b.limiterAttackMs ||
+            a.limiterReleaseMs != b.limiterReleaseMs ||
+            a.limiterPostGainDb != b.limiterPostGainDb
 
     private fun inputGainForChannel(config: DspConfig, ch: Int): Float {
         val base = (if (config.pregainEnabled) config.pregainDb else 0f) +
@@ -178,7 +247,8 @@ class DynamicsProcessingManager {
         }
         val gains = config.activeGains()
         val sr = config.sampleRate.toFloat()
-        val useEq = config.eqEnabled || config.toneEnabled
+        val useEq = config.eqEnabled || config.toneEnabled ||
+            (config.bassBoostEnabled && config.bassBoostStrength > 0f)
 
         // One logical EQ curve -> one physical DP EQ bank.
         // The 128/127/64/... bands are only the physical representation of
@@ -214,6 +284,41 @@ class DynamicsProcessingManager {
                 }
                 effect.setPostEqByChannelIndex(ch, post)
             }
+        }
+    }
+
+    /**
+     * Live EQ/Tone update with a frozen physical layout.
+     *
+     * The first configuration installs the complete DP Eq topology. Subsequent
+     * changes only replace the gains of the already accepted physical bands.
+     * This is deliberately used for Tone as well as the graphic EQ so dragging
+     * Bass/Mid/Treble cannot repeatedly replace the native filter topology.
+     */
+    private fun applyEqGainsOnly(effect: DynamicsProcessing, config: DspConfig) {
+        val useEq = config.eqEnabled || config.toneEnabled ||
+            (config.bassBoostEnabled && config.bassBoostStrength > 0f)
+        val sr = config.sampleRate.toFloat()
+
+        for (ch in 0 until effect.channelCount) {
+            val pre = effect.getPreEqByChannelIndex(ch)
+            for (i in 0 until pre.bandCount) {
+                val cutoff = pre.getBand(i).getCutoffFrequency()
+                    .coerceIn(MIN_FREQ, min(MAX_FREQ, sr * 0.49f))
+                val gain = if (useEq) {
+                    targetGainAt(cutoff,
+                        when (config.eqMode) {
+                            DspConfig.EqMode.BANDS_10 -> EQ10
+                            DspConfig.EqMode.BANDS_20 -> EQ20
+                            DspConfig.EqMode.BANDS_32 -> EQ32
+                        },
+                        config.activeGains(), config, sr)
+                        .coerceIn(-24f, 24f)
+                } else 0f
+
+                pre.setBand(i, DynamicsProcessing.EqBand(useEq, cutoff, gain))
+            }
+            effect.setPreEqByChannelIndex(ch, pre)
         }
     }
 

@@ -12,16 +12,9 @@ class AudioSessionReceiver : BroadcastReceiver() {
         when (intent?.action) {
             AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION -> {
                 val sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR)
-                if (sessionId >= 0) {
-                    val pkg = intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME) ?: "unknown"
-                    Log.i("SB-SESSION", "open session=$sessionId package=$pkg")
-                    SbDspForegroundService.startService(context, sessionId)
-                }
-            }
-            AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION -> {
-                val sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR)
-                Log.i("SB-SESSION", "close session=$sessionId")
-                context.stopService(Intent(context, SbDspForegroundService::class.java))
+                val pkg = intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME) ?: "Unknown"
+                Log.i("AudioSessionReceiver", "Nueva sesión detectada ID=$sessionId pkg=$pkg")
+                SbDspForegroundService.startService(context)
             }
         }
     }

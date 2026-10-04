@@ -27,7 +27,7 @@ fun OutputScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         Divider(color=Color(0xFF1E293B))
         DspSwitch("AutoGain",c.autoGainEnabled,viewModel::setAutoGain)
         DspSlider("Objetivo AutoGain",c.autoGainTargetRmsDb,-30f..-6f,"%.1f dB",false,viewModel::setAutoGainTarget)
-        DspSwitch("Limiter",c.headroomEnabled,viewModel::setLimiter)
+        DspSwitch("Limiter",c.limiterEnabled,viewModel::setLimiter)
         DspSlider("Threshold",c.limiterThresholdDb,-30f..0f,"%.1f dB",false,viewModel::setLimiterThreshold)
         DspSlider("Ratio",c.limiterRatio,1f..20f,"%.1f : 1",false,viewModel::setLimiterRatio)
         DspSlider("Attack",c.limiterAttackMs,0.1f..20f,"%.1f ms",false,viewModel::setLimiterAttack)

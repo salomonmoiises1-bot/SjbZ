@@ -13,14 +13,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
-import com.sb.dsp.ConstantQGraphicEq
 import com.sb.dsp.DspConfig
 
 @Composable
 fun EqualizerScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val config by viewModel.config.collectAsState()
     val scroll = rememberScrollState()
-    val frequencies = when(config.eqMode){DspConfig.EqMode.BANDS_10->ConstantQGraphicEq.FREQUENCIES_10;DspConfig.EqMode.BANDS_20->ConstantQGraphicEq.FREQUENCIES_20;DspConfig.EqMode.BANDS_32->ConstantQGraphicEq.FREQUENCIES_32}
+    val frequencies = when(config.eqMode){DspConfig.EqMode.BANDS_10->DspConfig.FREQUENCIES_10;DspConfig.EqMode.BANDS_20->DspConfig.FREQUENCIES_20;DspConfig.EqMode.BANDS_32->DspConfig.FREQUENCIES_32}
     val gains = config.activeGains()
     Column(modifier.fillMaxSize().background(Color(0xFF020617)).padding(14.dp)) {
         Text("ECUALIZADOR", color=Color.White, style=MaterialTheme.typography.headlineSmall)

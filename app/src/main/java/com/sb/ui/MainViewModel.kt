@@ -62,7 +62,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setMdrcHigh(v: Float) = update { it.copy(mdrcHighCrossoverHz = v) }
     fun setAutoGain(v: Boolean) = update { it.copy(autoGainEnabled = v) }
     fun setAutoGainTarget(v: Float) = update { it.copy(autoGainTargetRmsDb = v) }
-    fun setLimiter(v: Boolean) = update { it.copy(headroomEnabled = v) }
+    fun setLimiter(v: Boolean) = update { it.copy(limiterEnabled = v) }
     fun setLimiterThreshold(v: Float) = update { it.copy(limiterThresholdDb = v) }
     fun setLimiterRatio(v: Float) = update { it.copy(limiterRatio = v) }
     fun setLimiterAttack(v: Float) = update { it.copy(limiterAttackMs = v) }

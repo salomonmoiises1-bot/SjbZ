@@ -48,7 +48,7 @@ fun DashboardScreen(
         ) {
             Column {
                 Text(text = "SB AUDIO DSP", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
-                Text(text = "Target SDK 35 • Google Oboe NDK • Zero GC", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF64748B))
+                Text(text = "Target SDK 35 • Android DynamicsProcessing • Session 0", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF64748B))
             }
             Button(
                 onClick = { viewModel.toggleMaster() },

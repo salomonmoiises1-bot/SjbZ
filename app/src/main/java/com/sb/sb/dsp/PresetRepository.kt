@@ -6,6 +6,31 @@ import org.json.JSONObject
 
 class PresetRepository(private val context: Context) {
     private val prefs get() = context.getSharedPreferences("sb_presets", Context.MODE_PRIVATE)
+    fun eqNames(): List<String> = runCatching { JSONArray(prefs.getString("eq_names", "[]")!!).let { a -> (0 until a.length()).map(a::getString) } }.getOrDefault(emptyList())
+
+    fun saveEq(name: String, c: DspConfig) {
+        val n = name.trim(); if (n.isEmpty()) return
+        val names = eqNames().toMutableList().apply { if (!contains(n)) add(n) }
+        val o = JSONObject().put("eqMode", c.eqMode.name)
+            .put("eq10", JSONArray(c.gains10BandDb.toList()))
+            .put("eq20", JSONArray(c.gains20BandDb.toList()))
+            .put("eq32", JSONArray(c.gains32BandDb.toList()))
+        prefs.edit().putString("eq_names", JSONArray(names).toString()).putString("eq_preset_$n", o.toString()).apply()
+    }
+
+    fun loadEq(name: String, fallback: DspConfig): DspConfig = runCatching {
+        val o = JSONObject(prefs.getString("eq_preset_$name", "{}")!!)
+        fun arr(k: String, source: FloatArray) = FloatArray(source.size) { i ->
+            o.optJSONArray(k)?.optDouble(i, source.getOrElse(i) { 0f }.toDouble())?.toFloat() ?: source.getOrElse(i) { 0f }
+        }
+        fallback.copy(
+            eqMode = runCatching { DspConfig.EqMode.valueOf(o.optString("eqMode", fallback.eqMode.name)) }.getOrDefault(fallback.eqMode),
+            gains10BandDb = arr("eq10", fallback.gains10BandDb),
+            gains20BandDb = arr("eq20", fallback.gains20BandDb),
+            gains32BandDb = arr("eq32", fallback.gains32BandDb)
+        ).validate()
+    }.getOrDefault(fallback)
+
     fun names(): List<String> = runCatching { JSONArray(prefs.getString("names", "[]")!!).let { a -> (0 until a.length()).map(a::getString) } }.getOrDefault(emptyList())
 
     fun save(name: String, c: DspConfig) {

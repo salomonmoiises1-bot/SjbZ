@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "SB-AudioDSP"
+rootProject.name = "SB"
 include(":app")

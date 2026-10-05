@@ -20,9 +20,12 @@ class AudioEffectManager {
         release()
         val dpOk = dynamics.start(sessionId, config)
         try {
-            virtualizer = Virtualizer(Int.MAX_VALUE, sessionId).also {
-                it.setStrength((config.virtualizerStrength.coerceIn(0f, 1f) * 1000f).toInt().toShort())
-                it.enabled = config.virtualizerEnabled && config.masterEnabled
+            virtualizer = Virtualizer(100, sessionId).also {
+                it.setStrength((config.virtualizerStrength.coerceIn(0f, 1f) * 1000f).toInt().coerceIn(0, 1000).toShort())
+                // Do not enable a zero-strength Virtualizer. Some vendor effects
+                // mis-handle an enabled instance on global session 0 and can mute
+                // the output. Strength is always written before enabling.
+                it.enabled = config.virtualizerEnabled && config.masterEnabled && config.virtualizerStrength > 0.01f
             }
         } catch (t: Throwable) {
             Log.w("SB-AFX", "Virtualizer no disponible", t)
@@ -34,8 +37,9 @@ class AudioEffectManager {
         worker.post {
             dynamics.applyConfig(config)
             try {
-                virtualizer?.setStrength((config.virtualizerStrength.coerceIn(0f, 1f) * 1000f).toInt().toShort())
-                virtualizer?.enabled = config.virtualizerEnabled && config.masterEnabled
+                val strength = (config.virtualizerStrength.coerceIn(0f, 1f) * 1000f).toInt().coerceIn(0, 1000).toShort()
+                virtualizer?.setStrength(strength)
+                virtualizer?.enabled = config.virtualizerEnabled && config.masterEnabled && config.virtualizerStrength > 0.01f
             } catch (_: Throwable) {}
         }
     }

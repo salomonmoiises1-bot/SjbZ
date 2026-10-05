@@ -56,7 +56,15 @@ class DynamicsProcessingManager {
         // topology to the number of visible graphic-EQ controls.  When the HAL
         // accepts it, use the public DynamicsProcessing ceiling (128 bands) and
         // use the logical 10/20/32 curve only as the target response.
-        val candidates = PHYSICAL_CANDIDATES.toList()
+        // Prefer the physical topology requested by the active graphic-EQ mode.
+        // The previous implementation always tried 128 first, which could leave
+        // an OEM accepting a very large topology while not actually applying the
+        // expected response.  Only fall back when the requested topology is not
+        // accepted by the device implementation.
+        val candidates = buildList {
+            add(requested)
+            for (candidate in PHYSICAL_CANDIDATES) if (candidate != requested) add(candidate)
+        }
         for (candidate in candidates) {
             // EQ32 must have exactly one physical representation. Keep it in
             // Pre-EQ so the graphic EQ is applied once before MDRC/MBC.
@@ -162,6 +170,13 @@ class DynamicsProcessingManager {
 
             if (previous == null) {
                 applyEq(effect, config)
+            } else if (previous.eqMode != config.eqMode) {
+                // Android fixes the number of EQ bands when the DP topology is
+                // created.  A 10 -> 20 -> 32 switch therefore must recreate DP;
+                // merely changing gains on the old physical cutoffs does not
+                // produce the selected band's curve.
+                restartForEqTopology(config)
+                return
             } else if (eqStageChanged(previous, config)) {
                 // Keep the physical DP cutoffs frozen after the first installation.
                 // Tone/EQ/BassBoost changes update only the gains at those existing
@@ -186,6 +201,13 @@ class DynamicsProcessingManager {
         } catch (t: Throwable) {
             Log.e(TAG, "applyConfig failed", t)
         }
+    }
+
+    private fun restartForEqTopology(config: DspConfig) {
+        val session = currentSession
+        if (session < 0) return
+        Log.i(TAG, "Rebuilding DP for EQ topology ${config.eqMode.bandCount} bands")
+        start(session, config)
     }
 
     private fun inputStageChanged(a: DspConfig, b: DspConfig): Boolean =
@@ -534,19 +556,59 @@ class DynamicsProcessingManager {
 
     private fun biquadMagnitudeDb(kind: BiquadKind, f: Float, fc: Float, q: Float, gainDb: Float, sr: Float): Float {
         if (abs(gainDb) < 0.001f) return 0f
-        val w = 2.0 * Math.PI * f.coerceIn(10f, sr * .49f) / sr
-        val wc = 2.0 * Math.PI * fc.coerceIn(10f, sr * .49f) / sr
-        val cosW = cos(w); val cos2W = cos(2*w); val cosC = cos(wc); val sinC = sin(wc)
+        val safeF = f.coerceIn(10f, sr * .49f)
+        val safeFc = fc.coerceIn(10f, sr * .49f)
+        val w = 2.0 * Math.PI * safeF / sr
+        val wc = 2.0 * Math.PI * safeFc / sr
+        val cosW = cos(w)
+        val cos2W = cos(2.0 * w)
+        val cosC = cos(wc)
+        val sinC = sin(wc)
         val A = 10.0.pow(gainDb / 40.0)
-        val alpha = sinC / (2.0 * q.coerceAtLeast(.1f))
+
         val c = when (kind) {
-            BiquadKind.PEAKING -> Coeffs(1+A*alpha, -2*cosC, 1-A*alpha, 1+alpha/A, -2*cosC, 1-alpha/A)
-            BiquadKind.LOW_SHELF -> { val sA=sqrt(A); val t=2*sA*alpha; Coeffs(A*((A+1)-(A-1)*cosC+t), 2*A*((A-1)-(A+1)*cosC), A*((A+1)-(A-1)*cosC-t), (A+1)+(A-1)*cosC+t, -2*((A-1)+(A+1)*cosC), (A+1)-(A-1)*cosC-t) }
-            BiquadKind.HIGH_SHELF -> { val sA=sqrt(A); val t=2*sA*alpha; Coeffs(A*((A+1)+(A-1)*cosC+t), -2*A*((A-1)+(A+1)*cosC), A*((A+1)-(A-1)*cosC-t), (A+1)-(A-1)*cosC+t, 2*((A-1)-(A+1)*cosC), (A+1)-(A-1)*cosC-t) }
+            BiquadKind.PEAKING -> {
+                val alpha = sinC / (2.0 * q.coerceAtLeast(.1f))
+                Coeffs(
+                    1.0 + alpha * A, -2.0 * cosC, 1.0 - alpha * A,
+                    1.0 + alpha / A, -2.0 * cosC, 1.0 - alpha / A
+                )
+            }
+            BiquadKind.LOW_SHELF -> {
+                // RBJ shelf with slope S=1.  The previous implementation used
+                // the peaking-Q alpha and had a sign error in a2, which produced
+                // large unintended attenuation instead of the requested boost.
+                val S = 1.0
+                val alpha = sinC / 2.0 * sqrt((A + 1.0 / A) * (1.0 / S - 1.0) + 2.0)
+                val beta = 2.0 * sqrt(A) * alpha
+                Coeffs(
+                    A * ((A + 1.0) - (A - 1.0) * cosC + beta),
+                    2.0 * A * ((A - 1.0) - (A + 1.0) * cosC),
+                    A * ((A + 1.0) - (A - 1.0) * cosC - beta),
+                    (A + 1.0) + (A - 1.0) * cosC + beta,
+                    -2.0 * ((A - 1.0) + (A + 1.0) * cosC),
+                    (A + 1.0) + (A - 1.0) * cosC - beta
+                )
+            }
+            BiquadKind.HIGH_SHELF -> {
+                val S = 1.0
+                val alpha = sinC / 2.0 * sqrt((A + 1.0 / A) * (1.0 / S - 1.0) + 2.0)
+                val beta = 2.0 * sqrt(A) * alpha
+                Coeffs(
+                    A * ((A + 1.0) + (A - 1.0) * cosC + beta),
+                    -2.0 * A * ((A - 1.0) + (A + 1.0) * cosC),
+                    A * ((A + 1.0) + (A - 1.0) * cosC - beta),
+                    (A + 1.0) - (A - 1.0) * cosC + beta,
+                    2.0 * ((A - 1.0) - (A + 1.0) * cosC),
+                    (A + 1.0) - (A - 1.0) * cosC - beta
+                )
+            }
         }
-        val nr=c.b0*c.b0+c.b1*c.b1+c.b2*c.b2+2*(c.b0*c.b1+c.b1*c.b2)*cosW+2*c.b0*c.b2*cos2W
-        val dr=c.a0*c.a0+c.a1*c.a1+c.a2*c.a2+2*(c.a0*c.a1+c.a1*c.a2)*cosW+2*c.a0*c.a2*cos2W
-        return (20.0*log10(sqrt((nr/dr).coerceAtLeast(1e-12)))).toFloat()
+        val nr = c.b0*c.b0 + c.b1*c.b1 + c.b2*c.b2 +
+            2.0*(c.b0*c.b1 + c.b1*c.b2)*cosW + 2.0*c.b0*c.b2*cos2W
+        val dr = c.a0*c.a0 + c.a1*c.a1 + c.a2*c.a2 +
+            2.0*(c.a0*c.a1 + c.a1*c.a2)*cosW + 2.0*c.a0*c.a2*cos2W
+        return (20.0 * log10(sqrt((nr / dr).coerceAtLeast(1e-12)))).toFloat()
     }
 
     private fun linearToDb(linear: Float) = (20.0 * log10(linear.coerceIn(0.001f, 1f).toDouble())).toFloat()

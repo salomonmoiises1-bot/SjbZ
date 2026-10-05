@@ -43,13 +43,7 @@ fun DashboardScreen(
         // Cadena DSP visual
         SignalChainBar(config = config, onNavigate = onNavigate)
 
-        val presets = viewModel.availablePresets()
-        if (presets.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("PRESETS", color = Color(0xFF94A3B8), fontSize = 11.sp, modifier = Modifier.weight(1f))
-                presets.take(3).forEach { name -> OutlinedButton(onClick = { viewModel.loadPreset(name) }) { Text(name, fontSize = 10.sp) } }
-            }
-        }
+        PresetManagerCard(viewModel = viewModel)
 
         // Medidor de señal & espectro
         VisualizerMeter(peakDb = peakDb, rmsDb = rmsDb, isDspActive = config.masterEnabled && viewModel.dspBackendActive)

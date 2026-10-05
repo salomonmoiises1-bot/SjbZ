@@ -19,7 +19,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _config = MutableStateFlow(loadRuntimeConfig(app))
     val config: StateFlow<DspConfig> = _config.asStateFlow()
     private val presets = com.sb.dsp.PresetRepository(app)
-    private val _currentPreset = MutableStateFlow("Plano SB")
+    private val _currentPreset = MutableStateFlow(presets.selectedPresetName())
     private val _currentEqPreset = MutableStateFlow("EQ actual")
     val currentEqPreset: StateFlow<String> = _currentEqPreset.asStateFlow()
     private var pendingServiceUpdate: Job? = null
@@ -58,11 +58,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun availablePresets(): List<String> = presets.names()
-    fun savePreset(name: String) { presets.save(name, _config.value); _currentPreset.value = name }
+    fun isFactoryPreset(name: String): Boolean = presets.isFactory(name)
+    fun savePreset(name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty() || presets.isFactory(clean)) return
+        presets.save(clean, _config.value)
+        presets.setSelectedPresetName(clean)
+        _currentPreset.value = clean
+    }
+    fun deletePreset(name: String) {
+        presets.deleteCustom(name)
+        if (_currentPreset.value == name) {
+            _currentPreset.value = "Plano SB"
+            presets.setSelectedPresetName("Plano SB")
+        }
+    }
     fun availableEqPresets(): List<String> = presets.eqNames()
     fun saveEqPreset(name: String) { presets.saveEq(name, _config.value); _currentEqPreset.value = name }
     fun loadEqPreset(name: String) = update { presets.loadEq(name, it).also { _currentEqPreset.value = name } }
-    fun loadPreset(name: String) = update { presets.load(name, it).also { _currentPreset.value = name } }
+    fun loadPreset(name: String) = update { presets.load(name, it).also { _currentPreset.value = name; presets.setSelectedPresetName(name) } }
 
     fun toggleMaster() = update { it.copy(masterEnabled = !it.masterEnabled) }
     fun setEqEnabled(v: Boolean) = update { it.copy(eqEnabled = v) }

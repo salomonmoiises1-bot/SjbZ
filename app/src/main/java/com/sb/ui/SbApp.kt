@@ -20,6 +20,8 @@ fun SbApp(
 ) {
     var selectedScreen by remember { mutableStateOf("INICIO") }
 
+    val config by viewModel.config.collectAsState()
+
     val navItems = listOf(
         NavigationItem("INICIO", "Inicio", Icons.Default.Dashboard),
         NavigationItem("EQ32", "EQ32", Icons.Default.GraphicEq),
@@ -31,6 +33,22 @@ fun SbApp(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = Color(0xFF020617),
+        topBar = {
+            Surface(color = Color(0xFF0B1220), tonalElevation = 4.dp) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("MOTOR DSP", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(if (config.masterEnabled) "PROCESAMIENTO ACTIVO" else "BYPASS / MOTOR DESACTIVADO",
+                            color = if (config.masterEnabled) Color(0xFF67E8F9) else Color(0xFFF59E0B), fontSize = 9.sp)
+                    }
+                    Switch(checked = config.masterEnabled, onCheckedChange = viewModel::toggleMaster)
+                }
+            }
+        },
         bottomBar = {
             NavigationBar(
                 containerColor = Color(0xFF0F172A),

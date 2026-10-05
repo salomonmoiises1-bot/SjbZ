@@ -40,28 +40,6 @@ fun DashboardScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // DSP Status & Master Toggle
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(text = "SB AUDIO DSP", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
-                Text(text = "Target SDK 35 • Android DynamicsProcessing • Session 0", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF64748B))
-            }
-            Button(
-                onClick = { viewModel.toggleMaster() },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (config.masterEnabled) Color(0xFF06B6D4) else Color(0xFF334155),
-                    contentColor = if (config.masterEnabled) Color(0xFF020617) else Color(0xFFE2E8F0)
-                ),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(text = if (config.masterEnabled) "DSP ACTIVO" else "BYPASS", fontWeight = FontWeight.Bold)
-            }
-        }
-
         // Cadena DSP visual
         SignalChainBar(config = config, onNavigate = onNavigate)
 

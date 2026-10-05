@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import com.sb.dsp.DspEngine
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -19,6 +20,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val config: StateFlow<DspConfig> = _config.asStateFlow()
     private val presets = com.sb.dsp.PresetRepository(app)
     private val _currentPreset = MutableStateFlow("Plano SB")
+    private val _currentEqPreset = MutableStateFlow("EQ actual")
+    val currentEqPreset: StateFlow<String> = _currentEqPreset.asStateFlow()
+    private var pendingServiceUpdate: Job? = null
     val currentPreset: StateFlow<String> = _currentPreset.asStateFlow()
     private val _peakDb = MutableStateFlow(-60f)
     val peakDb: StateFlow<Float> = _peakDb.asStateFlow()
@@ -43,12 +47,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun update(transform: (DspConfig) -> DspConfig) {
         val next = transform(_config.value).validate()
         _config.value = next
+        // SharedPreferences.apply() is non-blocking. Persist immediately, but
+        // coalesce service commands while a fader is being dragged.
         DspConfigStore.save(getApplication(), next)
-        SbDspForegroundService.updateConfig(getApplication(), next)
+        pendingServiceUpdate?.cancel()
+        pendingServiceUpdate = viewModelScope.launch {
+            delay(45)
+            SbDspForegroundService.updateConfig(getApplication(), _config.value)
+        }
     }
 
     fun availablePresets(): List<String> = presets.names()
     fun savePreset(name: String) { presets.save(name, _config.value); _currentPreset.value = name }
+    fun availableEqPresets(): List<String> = presets.eqNames()
+    fun saveEqPreset(name: String) { presets.saveEq(name, _config.value); _currentEqPreset.value = name }
+    fun loadEqPreset(name: String) = update { presets.loadEq(name, it).also { _currentEqPreset.value = name } }
     fun loadPreset(name: String) = update { presets.load(name, it).also { _currentPreset.value = name } }
 
     fun toggleMaster() = update { it.copy(masterEnabled = !it.masterEnabled) }

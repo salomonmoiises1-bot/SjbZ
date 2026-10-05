@@ -45,7 +45,7 @@ fun SbApp(
                         Text(if (config.masterEnabled) "PROCESAMIENTO ACTIVO" else "BYPASS / MOTOR DESACTIVADO",
                             color = if (config.masterEnabled) Color(0xFF67E8F9) else Color(0xFFF59E0B), fontSize = 9.sp)
                     }
-                    Switch(checked = config.masterEnabled, onCheckedChange = viewModel::toggleMaster)
+                    Switch(checked = config.masterEnabled, onCheckedChange = { viewModel.toggleMaster() })
                 }
             }
         },

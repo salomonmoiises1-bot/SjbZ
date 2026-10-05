@@ -375,8 +375,20 @@ class DynamicsProcessingManager {
         // If the device sample rate cannot represent the highest requested cutoff,
         // fall back to the approximation path instead of creating duplicate or
         // non-monotonic native cutoffs.
+        val frequenciesStrictlyIncreasing = if (freqs.size < 2) {
+            true
+        } else {
+            var increasing = true
+            for (i in 0 until freqs.size - 1) {
+                if (freqs[i] >= freqs[i + 1]) {
+                    increasing = false
+                    break
+                }
+            }
+            increasing
+        }
         if (n == freqs.size && freqs.all { it >= MIN_FREQ && it <= maxFreq } &&
-            freqs.indices.dropLast(1).all { i -> freqs[i] < freqs[i + 1] }) {
+            frequenciesStrictlyIncreasing) {
             return EqMap(
                 freqs.copyOf(),
                 FloatArray(freqs.size) { i ->

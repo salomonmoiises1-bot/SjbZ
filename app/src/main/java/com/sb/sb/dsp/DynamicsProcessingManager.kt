@@ -376,7 +376,7 @@ class DynamicsProcessingManager {
         // fall back to the approximation path instead of creating duplicate or
         // non-monotonic native cutoffs.
         if (n == freqs.size && freqs.all { it >= MIN_FREQ && it <= maxFreq } &&
-            freqs.zipWithNext().all { it.first < it.second }) {
+            freqs.indices.dropLast(1).all { i -> freqs[i] < freqs[i + 1] }) {
             return EqMap(
                 freqs.copyOf(),
                 FloatArray(freqs.size) { i ->

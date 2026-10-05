@@ -1,0 +1,4 @@
+<!-- Merge this fragment into the TARGET audio_effects.xml only when the
+     platform/vendor build is configured to load SB as a native effect. -->
+<library name="sb_eq32" path="libsb_eq32.so"/>
+<effect name="sb_eq32" library="sb_eq32" uuid="53b7e032-5b5a-4e51-9a21-53425a455133"/>

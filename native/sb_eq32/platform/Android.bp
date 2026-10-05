@@ -1,0 +1,11 @@
+cc_library_shared {
+    name: "libsb_eq32",
+    vendor: true,
+    srcs: [
+        "../src/sb_eq32.cpp",
+        "sb_eq32_effect.cpp",
+    ],
+    local_include_dirs: ["../include"],
+    shared_libs: ["liblog"],
+    cflags: ["-Wall", "-Wextra", "-Werror", "-ffast-math"],
+}

@@ -19,9 +19,9 @@ class DynamicsProcessingManager {
     companion object {
         private const val TAG = "SB-DP"
         private val PHYSICAL_CANDIDATES = intArrayOf(128, 127, 64, 32, 20, 10, 5)
-        private val EQ10 = floatArrayOf(31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
-        private val EQ20 = floatArrayOf(31.5f,45f,63f,90f,125f,180f,250f,355f,500f,710f,1000f,1400f,2000f,2800f,4000f,5600f,8000f,11200f,16000f,20000f)
-        private val EQ32 = floatArrayOf(20f,25f,31f,40f,50f,63f,80f,100f,125f,160f,200f,250f,315f,400f,500f,630f,800f,1000f,1250f,1600f,2000f,2500f,3150f,4000f,5000f,6300f,8000f,10000f,12500f,14000f,16000f,20000f)
+        private val EQ10 = DspConfig.FREQUENCIES_10
+        private val EQ20 = DspConfig.FREQUENCIES_20
+        private val EQ32 = DspConfig.FREQUENCIES_32
         private const val GRID_POINTS = 192
         private const val MIN_FREQ = 20f
         private const val MAX_FREQ = 20000f
@@ -367,6 +367,22 @@ class DynamicsProcessingManager {
         }
         val target = FloatArray(GRID_POINTS) { i ->
             targetGainAt(gridFreq[i], freqs, gains, config, sampleRate)
+        }
+
+        // When the native topology has exactly the same number of bands as the
+        // selected logical EQ, preserve every requested cutoff verbatim. This is
+        // the only way to guarantee true 1:1 behaviour for 10/20/32-band modes.
+        // If the device sample rate cannot represent the highest requested cutoff,
+        // fall back to the approximation path instead of creating duplicate or
+        // non-monotonic native cutoffs.
+        if (n == freqs.size && freqs.all { it >= MIN_FREQ && it <= maxFreq } &&
+            freqs.zipWithNext().all { it.first < it.second }) {
+            return EqMap(
+                freqs.copyOf(),
+                FloatArray(freqs.size) { i ->
+                    targetGainAt(freqs[i], freqs, gains, config, sampleRate).coerceIn(-24f, 24f)
+                }
+            )
         }
 
         // With 64/127/128 physical bands there is enough resolution to represent
